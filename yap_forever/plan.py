@@ -2,7 +2,7 @@
 from datetime import date
 from pathlib import Path
 
-from yap_forever import gamedata
+from yap_forever import gamedata, trainer_text
 from yap_forever.compare import ROUTE_NAMES, compare, settle_routes
 from yap_forever.config import load_stock
 from yap_forever.costmodel import Valuer
@@ -73,9 +73,12 @@ def candidates(gd, market, stock, favor, caps, craft_once, quests) -> list:
     return out
 
 
-def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict) -> tuple[str, dict[str, Path]]:
-    """Plan both routes from the player's prices and stock; return (comparison, written files)."""
-    gamedata.fetch_all(dest=paths.gamedata)
+def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict,
+                  faction: str = "") -> tuple[str, dict[str, Path]]:
+    """Plan both routes from the player's prices and stock; return (comparison, written files).
+    faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none."""
+    gamedata.fetch_all(dest=paths.gamedata, skip=gamedata.TRAINER_FILES)
+    trainer_info, trainer_note = trainer_text.load_info(paths.gamedata, faction)
     gd = gamedata.load_gamedata(paths.gamedata, professions=goals)
     stock = load_stock(stock_path)
     favor = load_favor(standing)
@@ -93,7 +96,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict) ->
         full = paths.reports / f"{today}-plan-{m}.md"
         full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps), encoding="utf-8")
         guide = paths.reports / f"{today}-guide-{m}.md"
-        guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts),
+        guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
+                                     trainer_info, trainer_note),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
     return table, files

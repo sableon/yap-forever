@@ -1,7 +1,8 @@
 """Trips away from home: rank trainers in set towns, vendor patterns, the Favor vendor.
 
-Trainer recipes are not trips (every trainer teaches the same list), nor is the rank to 150
-(Expert trainers are in the main cities), nor AH patterns (they come by mail).
+Trainer recipes are not trips (every trainer teaches the same list), nor are the ranks below 225
+(Expert and Journeyman trainers are in the main cities: `city_ranks` lists those stops), nor AH
+patterns (they come by mail).
 """
 from dataclasses import dataclass
 
@@ -15,14 +16,15 @@ MAX_TRIP_ALTS = 3
 class Trip:
     skill: int
     profession: int
-    kind: str  # "rank", "vendor" or "favor"
+    kind: str  # "rank", "vendor" or "favor" (and "city" from city_ranks: a rank trained in a capital)
     what: str
     spell: int | None = None
     cost: float = 0
+    cap: int = 0  # the skill cap a rank stop trains to
 
 
 def trips(plan, gd) -> list["Trip"]:
-    out = [Trip(s, prof, "rank", f"{PROFESSIONS.get(prof, prof)} rank to {cap}", None, fee)
+    out = [Trip(s, prof, "rank", f"{PROFESSIONS.get(prof, prof)} rank to {cap}", None, fee, cap)
            for prof, s, cap, fee in plan.ranks if cap >= REMOTE_RANK]
     for prof, s, spell, how in plan.learn_log:
         if how in ("vendor", "favor"):
@@ -31,6 +33,12 @@ def trips(plan, gd) -> list["Trip"]:
             cost = gd.vendor_prices.get(r.scroll_item, 0) if r and how == "vendor" and r.scroll_item else 0
             out.append(Trip(s, prof, how, name, spell, cost))
     return sorted(out, key=lambda t: (t.skill, t.kind != "vendor" and t.kind != "favor", t.profession))
+
+
+def city_ranks(plan) -> list["Trip"]:
+    """The ranks below REMOTE_RANK, trained at any trainer of that rank in a capital: stops, not trips."""
+    return [Trip(s, prof, "city", f"{PROFESSIONS.get(prof, prof)} rank to {cap}", None, fee, cap)
+            for prof, s, cap, fee in plan.ranks if cap < REMOTE_RANK]
 
 
 def trip_alternatives(base, gd, market, stock, favor, caps, craft_once, mode, quests) -> dict[int, float | None]:

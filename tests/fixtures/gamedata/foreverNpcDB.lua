@@ -19,4 +19,5 @@ QuestieDB.npcData = [[return {
 [90017] = {'Wandering Smith',2000,2000,50,50,0,{[1519]={{10,10}},[1537]={{20,20}}},nil,1537,nil,nil,12,"A","Artisan Blacksmith",19},
 [90018] = {'Odd Leatherworker',2000,2000,50,50,0,{[1637]={{70,30}}},nil,1637,nil,nil,29,"H","Expert Leathercrafter",19},
 [90019] = {'Journey Alchemist',2000,2000,25,25,0,{[1637]={{75,35}}},nil,1637,nil,nil,29,"H","Journeyman Alchemist Trainer",19},
+[90020] = {'Dorn Deepdelver',3000,3000,54,54,0,{[9001]={{-1,-1}}},nil,9001,nil,nil,35,"AH","Master Alchemist",17},
 }]]

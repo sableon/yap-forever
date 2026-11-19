@@ -3,7 +3,7 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from yap_forever import gamedata, settings, trainers
+from yap_forever import gamedata, settings, trainer_text, trainers
 from yap_forever.trainers import Services, Trainer
 
 FIX = Path(__file__).parent / "fixtures" / "gamedata"
@@ -237,9 +237,25 @@ class ZoneNameTests(unittest.TestCase):
                                                           encoding="utf-8")
             self.assertEqual(trainers.zone_name(1519), "Stormwind City")
 
+    def test_parent_zone_only_when_it_is_a_zone(self):
+        data = fixture_data()
+        self.assertEqual(data.parent_zone(9001), 9000)  # Hollow Depths lies inside Misty Vale
+        self.assertIsNone(data.parent_zone(1337))  # no parent in the data
+        self.assertIsNone(data.parent_zone(9000))
+        data.parents[9002] = 9001  # a parent that is itself a sub-area is not a zone
+        data.zones[9002] = "Deep Hollow"
+        self.assertIsNone(data.parent_zone(9002))
+
     def test_zone_names_ship_in_the_pinned_sources(self):
         self.assertIn("AreaTable.csv", gamedata.SOURCES)
         self.assertIn(gamedata.WAGO_BUILD, gamedata.SOURCES["AreaTable.csv"])
+
+
+class CapitalTests(unittest.TestCase):
+    def test_capitals_by_faction(self):
+        self.assertTrue({1519, 1537, 1657} <= set(trainers.CAPITALS["alliance"]))
+        self.assertTrue({1637, 1638, 1497} <= set(trainers.CAPITALS["horde"]))
+        self.assertFalse(set(trainers.CAPITALS["alliance"]) & set(trainers.CAPITALS["horde"]))
 
 
 class SourcesTests(unittest.TestCase):
@@ -272,6 +288,136 @@ class InferredSkillTests(unittest.TestCase):
             (Path(d) / "Trainer.lua").write_text(text.split("ns.TrainerInferred")[0], encoding="utf-8")
             gd = gamedata.load_gamedata(Path(d))
         self.assertIsNone(gd.recipes[2661].inferred_skill)
+
+
+class TextTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.data = fixture_data()
+
+    def info(self, faction):
+        return trainer_text.TrainerInfo(faction, self.data)
+
+    def test_services_wording(self):
+        f = trainer_text.services_text
+        self.assertEqual(f(Services(True, False, True)), "Nearby: bank, mailbox; no auction house.")
+        self.assertEqual(f(Services(True, True, True)), "Nearby: bank, auction house, mailbox.")
+        self.assertEqual(f(Services(False, True, False)), "Nearby: auction house; no bank or mailbox.")
+        self.assertEqual(f(Services(False, False, False)), "Nearby: none (no bank, auction house or mailbox).")
+
+    def test_remote_stop_with_coordinates(self):
+        text = trainer_text.remote_stop(self.info("alliance"), BS, 300)
+        self.assertEqual(text, "Brakka Ironfold, Stranglethorn Vale (30.0, 70.0). "
+                               "Nearby: bank, auction house, mailbox.")
+
+    def test_remote_stop_several_trainers(self):
+        text = trainer_text.remote_stop(self.info("alliance"), BS, 225)
+        self.assertEqual(text, "Thessa Hammerlow, Stormwind City (60.5, 40.2). Nearby: bank; no auction house or "
+                               "mailbox. Or Wandering Smith, Ironforge (20.0, 20.0). "
+                               "Nearby: none (no bank, auction house or mailbox).")
+
+    def test_instance_trainer_says_inside(self):
+        self.assertEqual(trainer_text.remote_stop(self.info("horde"), ENCH, 300), "Zarn Runeweaver, inside Uldaman.")
+        self.assertEqual(trainer_text.remote_stop(self.info("alliance"), ALCH, 300),
+                         "Dorn Deepdelver, inside Hollow Depths (Misty Vale).")
+
+    def test_no_trainer_for_the_faction(self):
+        self.assertEqual(trainer_text.remote_stop(self.info("horde"), BS, 225),
+                         "the planner has no Artisan Blacksmith trainer for your faction in its data.")
+
+    def test_city_row_names_capital_trainers(self):
+        text = trainer_text.city_row(self.info("horde"), BS, 150)
+        self.assertEqual(text, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                               "(for example Grom Anvilhand, Orgrimmar).")
+
+    def test_city_row_without_a_capital_trainer_drops_the_parenthesis(self):
+        data = trainers.TrainerData([Trainer(1, "Far Smith", BS, "Expert", "A", 33, (1, 1), True)], {}, [], {})
+        text = trainer_text.city_row(trainer_text.TrainerInfo("alliance", data), BS, 150)
+        self.assertEqual(text, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital.")
+
+    def test_city_row_names_at_most_two(self):
+        ts = [Trainer(i, f"Smith {i}", BS, "Expert", "A", z, (1, 1), True)
+              for i, z in ((1, 1519), (2, 1537), (3, 1657))]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge", 1657: "Darnassus"})
+        text = trainer_text.city_row(trainer_text.TrainerInfo("alliance", data), BS, 150)
+        self.assertEqual(text, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                               "(for example Smith 1, Stormwind City or Smith 2, Ironforge).")
+
+    def test_city_row_no_trainer_for_faction(self):
+        self.assertEqual(trainer_text.city_row(self.info("alliance"), BS, 150),
+                         "Train Blacksmithing to 150: the planner has no Expert Blacksmith trainer for your faction in its data.")
+
+    def test_no_faction_or_no_data_names_nothing(self):
+        self.assertIsNone(trainer_text.remote_stop(trainer_text.TrainerInfo("", self.data), BS, 300))
+        self.assertIsNone(trainer_text.remote_stop(None, BS, 300))
+        self.assertIsNone(trainer_text.city_row(trainer_text.TrainerInfo("alliance", None), BS, 150))
+        self.assertIsNone(trainer_text.remote_stop(self.info("alliance"), BS, 100))  # no such rank
+
+
+class LoadInfoTests(unittest.TestCase):
+    def folder(self, d):
+        for p in FIX.iterdir():
+            (Path(d) / p.name).write_bytes(p.read_bytes())
+        return Path(d)
+
+    def test_loads_after_fetching_only_the_trainer_files(self):
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(gamedata, "fetch_all") as fetch:
+            info, note = trainer_text.load_info(self.folder(d), "horde")
+        fetch.assert_called_once_with(dest=Path(d), only=gamedata.TRAINER_FILES)
+        self.assertEqual((info.faction, note), ("horde", ""))
+        self.assertTrue(info.data.trainers)
+
+    def test_no_faction_downloads_nothing(self):
+        with unittest.mock.patch.object(gamedata, "fetch_all") as fetch:
+            self.assertEqual(trainer_text.load_info(Path("x"), ""), (None, ""))
+        fetch.assert_not_called()
+
+    def test_damaged_file_gives_a_note_not_a_traceback(self):
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(gamedata, "fetch_all"):
+            (self.folder(d) / "foreverNpcDB.lua").write_text("QuestieDB.npcData = [[return {", encoding="utf-8")
+            info, note = trainer_text.load_info(Path(d), "alliance")
+        self.assertIsNone(info)
+        self.assertIn("Trainer names are left out", note)
+        self.assertIn("foreverNpcDB.lua is damaged", note)
+
+    def test_missing_files_and_no_network_give_a_note(self):
+        import urllib.error
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(
+                gamedata, "fetch_all", side_effect=urllib.error.URLError("offline")):
+            info, note = trainer_text.load_info(Path(d), "alliance")
+        self.assertIsNone(info)
+        self.assertIn("Trainer names are left out", note)
+        self.assertIn("offline", note)
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(gamedata, "fetch_all"):
+            info, note = trainer_text.load_info(Path(d), "alliance")
+        self.assertIsNone(info)
+        self.assertIn("missing", note)
+
+
+class TripKindTests(unittest.TestCase):
+    def plan(self):
+        from yap_forever.planner import Plan
+        return Plan(ranks=[(BS, 60, 150, 450), (BS, 200, 225, 4500), (BS, 275, 300, 9000)])
+
+    def test_expert_rank_is_not_a_trip(self):
+        from yap_forever.trips import trips
+        from tests import toy
+        got = trips(self.plan(), toy.gamedata([]))
+        self.assertEqual([(t.kind, t.skill, t.cap) for t in got], [("rank", 200, 225), ("rank", 275, 300)])
+
+    def test_city_ranks_are_the_ranks_below_the_remote_ones(self):
+        from yap_forever.trips import city_ranks
+        got = city_ranks(self.plan())
+        self.assertEqual([(t.kind, t.skill, t.cap, t.profession) for t in got], [("city", 60, 150, BS)])
+
+
+class InferredTextTests(unittest.TestCase):
+    def test_inferred_note_with_next_recipe_and_without(self):
+        f = trainer_text.inferred_note
+        self.assertEqual(f(35, "Heavy Mithril Gauntlet"),
+                         " (inferred: the trainer may ask up to 35; if it isn't offered, craft Heavy Mithril Gauntlet instead)")
+        self.assertEqual(f(35, None),
+                         " (inferred: the trainer may ask up to 35; if it isn't offered, come back at 35)")
 
 
 if __name__ == "__main__":

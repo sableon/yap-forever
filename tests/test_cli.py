@@ -135,6 +135,40 @@ class CliTests(unittest.TestCase):
         for name in ("guide-gold", "guide-value", "plan-gold", "plan-value"):
             self.assertTrue(list(self.paths.reports.glob(f"*-{name}.md")), name)
 
+    def guide_text(self):
+        (path,) = self.paths.reports.glob("*-guide-gold.md")
+        return path.read_text(encoding="utf-8")
+
+    def test_plan_with_damaged_trainer_file_still_renders_and_says_why(self):
+        self.ready_home()
+        (self.paths.gamedata / "foreverNpcDB.lua").write_text("QuestieDB.npcData = [[return {", encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("Traceback", out)
+        text = self.guide_text()
+        self.assertEqual(text.count("Trainer names are left out"), 1)
+        self.assertIn("foreverNpcDB.lua is damaged", text)
+
+    def test_plan_offline_with_trainer_files_missing_still_renders(self):
+        import urllib.error
+        from unittest import mock
+        self.ready_home()
+        for name in ("foreverNpcDB.lua", "foreverObjectDB.lua", "AreaTable.csv"):
+            (self.paths.gamedata / name).unlink()
+        with mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
+            code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0, out)
+        self.assertIn("Trainer names are left out", self.guide_text())
+
+    def test_plan_passes_the_profile_faction_to_the_guide(self):
+        from unittest import mock
+        self.ready_home()
+        with mock.patch("yap_forever.plan.render_guide", return_value="guide") as guide:
+            code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0, out)
+        info = guide.call_args.args[7 + 1]  # trainer_info follows alts
+        self.assertEqual(info.faction, "alliance")
+
     def test_plan_uses_saved_goals(self):
         stock = self.ready_home()
         stock.write_text("level = 20\n[items]\n\n[goals]\nblacksmithing = 20\n", encoding="utf-8")

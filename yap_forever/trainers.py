@@ -9,7 +9,7 @@ Coordinates are map percentages (0-100) inside a zone; (-1, -1) means "inside an
 import csv
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -25,6 +25,10 @@ TRAINER_FLAG, BANKER_FLAG, AUCTIONEER_FLAG = 0x10, 0x100, 0x1000  # mangos-class
 # Booty Bay's and Gadgetzan's bank, auction house and mailbox all sit within 3 of their masters,
 # while a capital's bank is 10 or more away from its trainers.
 NEARBY_RADIUS = 5.0
+
+# AreaTable IDs of each faction's capital cities, where any Expert or Journeyman trainer will do
+# (the Exodar and Silvermoon only exist in later data).
+CAPITALS = {"alliance": (1519, 1537, 1657, 3557), "horde": (1637, 1638, 1497, 3487)}
 
 _PROFESSION_BY_WORD = {
     "Alchemist": 171, "Alchemy": 171,
@@ -67,9 +71,15 @@ class TrainerData:
     npc_rows: dict[int, list]
     mailboxes: list[tuple[int, float, float]]
     zones: dict[int, str]
+    parents: dict[int, int] = field(default_factory=dict)  # AreaTable ParentAreaID (0: none)
 
     def zone_name(self, zone: int) -> str:
         return zone_name(zone, self.zones)
+
+    def parent_zone(self, zone: int) -> int | None:
+        """The zone an instance or sub-area lies in, when the data gives one that is itself a zone."""
+        parent = self.parents.get(zone, 0)
+        return parent if parent in self.zones and not self.parents.get(parent, 0) else None
 
 
 def rank_for_cap(cap: int) -> str:
@@ -184,10 +194,18 @@ def nearby(trainer: Trainer, npc_lua_rows: dict[int, list], mailboxes: list[tupl
                     mail=close(m for m in mailboxes if m[0] == trainer.zone))
 
 
-def load_zone_names(path: Path) -> dict[int, str]:
-    """Area names by AreaTable ID (Questie's zone IDs are AreaTable IDs)."""
+def load_areas(path: Path) -> tuple[dict[int, str], dict[int, int]]:
+    """(names, parents) by AreaTable ID (Questie's zone IDs are AreaTable IDs)."""
+    names, parents = {}, {}
     with open(path, newline="", encoding="utf-8") as f:
-        return {int(r["ID"]): r["AreaName_lang"] or r["ZoneName"] for r in csv.DictReader(f)}
+        for r in csv.DictReader(f):
+            names[int(r["ID"])] = r["AreaName_lang"] or r["ZoneName"]
+            parents[int(r["ID"])] = int(r.get("ParentAreaID") or 0)
+    return names, parents
+
+
+def load_zone_names(path: Path) -> dict[int, str]:
+    return load_areas(path)[0]
 
 
 @lru_cache(maxsize=4)
@@ -218,7 +236,7 @@ def load_trainer_data(d: Path | None = None) -> TrainerData:
     rows = parse_npc_rows(_read(d / "foreverNpcDB.lua"))
     boxes = load_mailboxes(_read(d / "foreverObjectDB.lua"))
     try:
-        zones = load_zone_names(d / "AreaTable.csv")
+        zones, parents = load_areas(d / "AreaTable.csv")
     except (KeyError, ValueError) as e:  # includes a UnicodeDecodeError
         raise _damaged("AreaTable.csv", e) from None
-    return TrainerData(load_trainers(rows), rows, boxes, zones)
+    return TrainerData(load_trainers(rows), rows, boxes, zones, parents)

@@ -182,7 +182,8 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
 
     from yap_forever import plan  # heavy imports only when planning
     try:
-        table, files = plan.write_reports(paths, stock, prof.characters[character].favor_standing, goals)
+        table, files = plan.write_reports(paths, stock, prof.characters[character].favor_standing, goals,
+                                         faction=prof.faction)
     except (urllib.error.URLError, TimeoutError) as e:
         print(f"could not download game data ({getattr(e, 'reason', e)}): check your network or VPN, "
               f"then run {command_hint('plan --character ' + character)} again")

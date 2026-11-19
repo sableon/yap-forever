@@ -241,6 +241,118 @@ class AnyProfessionGuideTests(unittest.TestCase):
         self.assertIn("or skip it: +30s", vendor)
 
 
+class TrainerRowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        from yap_forever import trainer_text, trainers
+        cls.data = trainers.load_trainer_data(Path(__file__).parent / "fixtures" / "gamedata")
+        cls.info = lambda self, faction: trainer_text.TrainerInfo(faction, self.data)
+
+    def route(self, ranks, faction="alliance", events=(), learn_log=(), recipes=None, steps=None, **kw):
+        from yap_forever.planner import Plan, Step
+        rs = recipes or base_recipes()
+        p = Plan(steps=steps or [Step(BS, 1, 300, 1, "BS basic", 299, 0, 0, {toy.COPPER_BAR: 299})],
+                 ranks=[(BS, s, cap, 450) for s, cap in ranks], learn_log=list(learn_log),
+                 events=[f"Blacksmithing {s}: train rank up to {cap} (4s 50c)" for s, cap in ranks] + list(events),
+                 final_skill={BS: 300})
+        info = self.info(faction) if faction else None
+        return render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: 1}), caps={BS: 300},
+                            trainer_info=info, **kw)
+
+    def lines(self, text, start):
+        return [l for l in text.splitlines() if l.startswith(start)]
+
+    def test_master_row_has_place_and_services(self):
+        text = self.route([(60, 150), (200, 225), (275, 300)])
+        (row,) = [l for l in self.lines(text, "- **Trip:**") if "rank to 300" in l]
+        self.assertTrue(row.startswith("- **Trip:** Blacksmithing rank to 300: Brakka Ironfold, Stranglethorn Vale "
+                                       "(30.0, 70.0). Nearby: bank, auction house, mailbox. "), row)
+        self.assertIn("While there, learn the trainer recipes your skill allows.", row)
+        self.assertNotIn("set town", row)
+
+    def test_artisan_row_names_both_alliance_trainers(self):
+        text = self.route([(60, 150), (200, 225)])
+        (row,) = [l for l in self.lines(text, "- **Trip:**") if "rank to 225" in l]
+        self.assertIn("Thessa Hammerlow, Stormwind City (60.5, 40.2). Nearby: bank; no auction house or mailbox. "
+                      "Or Wandering Smith, Ironforge (20.0, 20.0).", row)
+
+    def test_instance_trainer_row(self):
+        from yap_forever.planner import Plan, Step
+        p = Plan(steps=[Step(333, 1, 300, 2, "Ench basic", 299, 0, 0, {toy.ROD: 299})], ranks=[(333, 250, 300, 450)],
+                 events=["Enchanting 250: train rank up to 300 (4s 50c)"], final_skill={333: 300})
+        text = render_guide(p, toy.gamedata(base_recipes()), toy.market(BARS), toy.stock(skills={333: 1}),
+                            caps={333: 300}, trainer_info=self.info("horde"))
+        (row,) = self.lines(text, "- **Trip:**")
+        self.assertTrue(row.startswith("- **Trip:** Enchanting rank to 300: Zarn Runeweaver, inside Uldaman."), row)
+        self.assertNotIn("(-1", text)
+
+    def test_no_trainer_for_the_faction_says_so(self):
+        text = self.route([(60, 150), (200, 225)], faction="horde")
+        (row,) = [l for l in self.lines(text, "- **Trip:**") if "rank to 225" in l]
+        self.assertIn("the planner has no Artisan Blacksmith trainer for your faction in its data.", row)
+        self.assertNotIn("(-1", text)
+
+    def test_expert_row_is_in_city_and_not_a_trip(self):
+        text = self.route([(60, 150)], faction="horde")
+        (row,) = self.lines(text, "- Train ")
+        self.assertEqual(row, "- Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                              "(for example Grom Anvilhand, Orgrimmar).")
+        self.assertEqual(self.lines(text, "- **Trip:**"), [])
+        self.assertLess(text.index("At 60: train rank up to 150"), text.index(row))
+
+    def test_expert_row_without_a_trainer_for_the_faction(self):
+        text = self.route([(60, 150)], faction="alliance")
+        (row,) = self.lines(text, "- Train ")
+        self.assertIn("the planner has no Expert Blacksmith trainer for your faction in its data.", row)
+
+    def test_no_faction_is_todays_text(self):
+        with_none = self.route([(60, 150), (200, 225), (275, 300)], faction="")
+        self.assertEqual(self.lines(with_none, "- Train "), [])
+        for row in self.lines(with_none, "- **Trip:**"):
+            self.assertIn("the trainer is in a set town (the planner doesn't say where yet)", row)
+        self.assertNotIn("Nearby", with_none)
+
+    def test_missing_data_note_comes_once_near_the_top(self):
+        from yap_forever import trainer_text
+        text = self.route([(60, 150), (200, 225)], faction="", trainer_note="Trainer names are left out of this "
+                                                                           "guide: the trainer data files are missing.")
+        self.assertEqual(text.count("Trainer names are left out"), 1)
+        self.assertLess(text.index("Trainer names are left out"), text.index("## Keep while levelling"))
+        self.assertIn("set town", text)
+
+    def test_inferred_recipe_on_a_learn_row(self):
+        from yap_forever.planner import Plan, Step
+        rs = base_recipes() + [toy.recipe(40, "BS inferred", BS, {toy.COPPER_BAR: 1}),
+                               toy.recipe(41, "BS later", BS, {toy.COPPER_BAR: 1})]
+        gd = toy.gamedata(rs)
+        gd.recipes[40].inferred_skill = 35
+        gd.recipes[41].inferred_skill = 10  # below the skill it is learned at: no note
+        steps = [Step(BS, 30, 40, 40, "BS inferred", 10, 0, 0, {toy.COPPER_BAR: 10}),
+                 Step(BS, 40, 50, 1, "BS basic", 10, 0, 0, {toy.COPPER_BAR: 10}),
+                 Step(BS, 50, 60, 41, "BS later", 10, 0, 0, {toy.COPPER_BAR: 10})]
+        p = Plan(steps=steps, learn_log=[(BS, 30, 40, "trainer"), (BS, 50, 41, "trainer")],
+                 events=["Blacksmithing 30: Learn BS inferred (trainer 45s 0c)",
+                         "Blacksmithing 50: Learn BS later (trainer 45s 0c)"], final_skill={BS: 60})
+        text = render_guide(p, gd, toy.market(BARS), toy.stock(skills={BS: 30}), caps={BS: 60})
+        (row,) = self.lines(text, "- *At 30: Learn BS inferred")
+        self.assertTrue(row.endswith("(trainer 45s 0c) (inferred: the trainer may ask up to 35; if it isn't "
+                                     "offered, craft BS basic instead)*"), row)
+        (later,) = self.lines(text, "- *At 50: Learn BS later")
+        self.assertNotIn("inferred", later)
+
+    def test_inferred_recipe_with_no_later_row_says_come_back(self):
+        from yap_forever.planner import Plan, Step
+        rs = base_recipes() + [toy.recipe(40, "BS inferred", BS, {toy.COPPER_BAR: 1})]
+        gd = toy.gamedata(rs)
+        gd.recipes[40].inferred_skill = 35
+        p = Plan(steps=[Step(BS, 30, 40, 40, "BS inferred", 10, 0, 0, {toy.COPPER_BAR: 10})],
+                 learn_log=[(BS, 30, 40, "trainer")],
+                 events=["Blacksmithing 30: Learn BS inferred (trainer 45s 0c)"], final_skill={BS: 40})
+        text = render_guide(p, gd, toy.market(BARS), toy.stock(skills={BS: 30}), caps={BS: 40})
+        self.assertIn("(inferred: the trainer may ask up to 35; if it isn't offered, come back at 35)", text)
+
+
 class KeepGreensGuideTests(unittest.TestCase):
     def test_kept_green_row_says_keep_for_disenchanting(self):
         import dataclasses

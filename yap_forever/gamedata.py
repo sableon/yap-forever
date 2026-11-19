@@ -28,6 +28,7 @@ SOURCES = {
     **{f"{t}.csv": f"https://wago.tools/db2/{t}/csv?build={WAGO_BUILD}"
        for t in ("ItemSparse", "Item", "SpellTotems", "TotemCategory", "SkillLineAbility", "AreaTable")},
 }
+TRAINER_FILES = ("foreverNpcDB.lua", "foreverObjectDB.lua", "AreaTable.csv")  # guide extras, not planning data
 
 
 @dataclass(frozen=True)
@@ -92,10 +93,14 @@ class GameData:
         return i.name if i else f"item {item_id}"
 
 
-def fetch_all(force: bool = False, dest: Path | None = None) -> None:
+def fetch_all(force: bool = False, dest: Path | None = None, only: Iterable[str] | None = None,
+              skip: Iterable[str] = ()) -> None:
+    """Download what is not cached yet: every source, or just `only`, or all but `skip`."""
     dest = Path(dest) if dest is not None else settings.paths().gamedata
     dest.mkdir(parents=True, exist_ok=True)
     for name, url in SOURCES.items():
+        if (only is not None and name not in only) or name in skip:
+            continue
         p = dest / name
         if p.exists() and not force:
             continue
