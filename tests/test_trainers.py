@@ -450,10 +450,10 @@ class TextTests(unittest.TestCase):
                                "(for example Smith 1, Stormwind City or Smith 2, Ironforge).")
 
     def test_add_note_joins_into_one_parenthesis(self):
-        note = trainer_text.inferred_note(35, None)
+        note = trainer_text.listed_note(35)
         self.assertEqual(trainer_text.add_note("Learn X (trainer 1s 0c)", note),
-                         "Learn X (trainer 1s 0c; inferred: the trainer may ask up to 35; if it isn't offered, "
-                         "come back at 35)")
+                         "Learn X (trainer 1s 0c; listed from 35 in the Forever data: "
+                         "if the trainer offers it then, you can start it earlier)")
         self.assertEqual(trainer_text.add_note("Learn X", note), "Learn X" + note)
         self.assertEqual(trainer_text.add_note("Learn X (a)", ""), "Learn X (a)")
 
@@ -525,13 +525,10 @@ class TripKindTests(unittest.TestCase):
         self.assertEqual([(t.kind, t.skill, t.cap, t.profession) for t in got], [("city", 60, 150, BS)])
 
 
-class InferredTextTests(unittest.TestCase):
-    def test_inferred_note_with_next_recipe_and_without(self):
-        f = trainer_text.inferred_note
-        self.assertEqual(f(35, "Heavy Mithril Gauntlet"),
-                         " (inferred: the trainer may ask up to 35; if it isn't offered, craft Heavy Mithril Gauntlet instead)")
-        self.assertEqual(f(35, None),
-                         " (inferred: the trainer may ask up to 35; if it isn't offered, come back at 35)")
+class ListedNoteTests(unittest.TestCase):
+    def test_listed_note_names_the_forever_skill(self):
+        self.assertEqual(trainer_text.listed_note(180),
+                         " (listed from 180 in the Forever data: if the trainer offers it then, you can start it earlier)")
 
 
 if __name__ == "__main__":

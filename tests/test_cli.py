@@ -289,6 +289,19 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args[4].working_overtime, 3)
         self.assertEqual(args[5], "points")
 
+    def test_plan_passes_the_profile_study_hint_threshold(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        self.ready_home()
+        with mock.patch.object(plan_mod, "write_reports", return_value=("table", {})) as w:
+            run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+            self.assertEqual(w.call_args.kwargs["study_hint_gold_per_point"], 100)
+            text = self.paths.profile.read_text(encoding="utf-8")
+            self.paths.profile.write_text("study_hint_gold_per_point = 7.5\n" + text, encoding="utf-8")
+            run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+            self.assertEqual(w.call_args.kwargs["study_hint_gold_per_point"], 7.5)
+
     def test_plan_overtime_rank_zero_leaves_the_guide_unchanged(self):
         self.ready_home()
         run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)

@@ -32,6 +32,11 @@ Fill in `profile.toml` with the player:
   chance per rank, `points` adds 4 percentage points per rank. `plan` uses the rank for every
   skill-up (disenchanting too) and names the rank and reading in the guide header; a character with
   `dedicated_study` gets one guide line about the free daily point.
+- Optional, once at the top of the file: `study_hint_gold_per_point = 100` (default; a number of gold
+  above 0). It is an example threshold you can change: on the lowest profession's route, a row that
+  costs this much gold a point or more gets a note that Dedicated Study (one free point a day) would
+  cover its points, with "(a legacy talent you haven't taken)" if the character lacks it. A lower
+  number shows more hints.
 
 ```toml
 working_overtime_reading = "relative"

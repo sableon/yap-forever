@@ -2,6 +2,7 @@
 import math
 import re
 import tomllib
+from dataclasses import dataclass
 
 from yap_forever.config import STATIC_DIR
 from yap_forever.costmodel import BARS, ORES, STONES
@@ -9,7 +10,7 @@ from yap_forever.gamedata import BS, ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
 from yap_forever import trainer_text
 from yap_forever.prices import source_line
-from yap_forever.talents import talent_lines
+from yap_forever.talents import lowest_profession, talent_lines
 from yap_forever.trips import city_ranks, trips
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
@@ -18,6 +19,7 @@ with open(STATIC_DIR / "disenchant.toml", "rb") as _f:
     DE_MATS = {m[0] for band in tomllib.load(_f)["band"]
                for m in (band.get("dust"), band.get("essence"), band.get("shard")) if m}
 
+COPPER_PER_GOLD = 10000
 GROUPS = ["Mining", "Skinning", "Cloth", "Enchanting materials", "Drops and AH"]
 EVENT = re.compile(r"^(" + "|".join(PROFESSIONS.values()) + r") (\d+): (.*)$")
 BY_NAME = {v: k for k, v in PROFESSIONS.items()}
@@ -93,13 +95,17 @@ def _title(caps, route) -> str:
 
 
 def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None,
-                 character=None, reading="relative", today=None, trainer_info=None, trainer_note="") -> str:
+                 character=None, reading="relative", today=None, trainer_info=None, trainer_note="",
+                 saving_line="", mode="gold", study_hint_gold_per_point=100) -> str:
     """caps: profession -> target (default Blacksmithing and Enchanting to the stock's target).
     alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
     character, reading: the profile.Character and Working Overtime reading, for the talent lines.
     today: the date the staleness of imported prices is judged against (default: today).
     trainer_info: trainer_text.TrainerInfo, to name trainers on rank rows (None: say a set town);
-    trainer_note: why trainers are left out, said once at the top."""
+    trainer_note: why trainers are left out, said once at the top.
+    saving_line: what a route planned at the Forever listing could cost less ("": none).
+    mode: "gold" or "value", the measure the route was planned for (a row's cost per point is in it).
+    study_hint_gold_per_point: a row of the lowest profession at this many gold a point gets a Dedicated Study hint."""
     caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
@@ -116,10 +122,11 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
         out += [" ".join(intro), ""]
     if trainer_note:
         out += [trainer_note, ""]
-    for line in talent_lines(character, reading, plan, caps, stock):
+    for line in talent_lines(character, reading, plan, caps, stock) + ([saving_line] if saving_line else []):
         out += [line, ""]
     _keep(out, plan, gd, market)
-    _route(out, plan, gd, caps, stock, alts or {}, trainer_info)
+    hint = _StudyHint(lowest_profession(caps, stock), mode, study_hint_gold_per_point, character)
+    _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint)
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)
@@ -252,7 +259,28 @@ def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_
     return line + "."
 
 
-def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
+@dataclass(frozen=True)
+class _StudyHint:
+    """Where a route row is priced high enough, per point, to point at Dedicated Study."""
+    profession: int
+    mode: str  # "gold" or "value": the measure the route was planned for
+    gold_per_point: float
+    character: object  # profile.Character or None
+
+    def note(self, prof: int, r: dict) -> str:
+        points = r["to"] - r["from"]
+        cost = r["cash"] if self.mode == "gold" else r["economic"]
+        if prof != self.profession or points < 1 or cost / points < self.gold_per_point * COPPER_PER_GOLD - 1e-9:
+            return ""
+        days = f"{points} day" + ("" if points == 1 else "s")
+        cover = "this point" if points == 1 else f"these {points} points"
+        text = f" — about {gold(cost / points)} a point here: Dedicated Study (one free point a day) would cover {cover} in {days}"
+        if not (self.character and self.character.dedicated_study):
+            text += " (a legacy talent you haven't taken)"
+        return text
+
+
+def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None) -> None:
     quest_limit = stock.quest_item_sales
     used_by: dict[int, list[str]] = {}
     for s in plan.steps:
@@ -285,8 +313,8 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
             groups.setdefault(stage(p, s.skill_from, False), []).append(s)
         for k, group in groups.items():
             for r in _ranges(group, gd, whole):
-                lines.setdefault((k, p), []).append(
-                    (r["from"], 1, _range_line(r, gd, used_by, disenchanted | held, quest_limit, plan.kept_greens)))
+                line = _range_line(r, gd, used_by, disenchanted | held, quest_limit, plan.kept_greens)
+                lines.setdefault((k, p), []).append((r["from"], 1, line + (hint.note(p, r) if hint else "")))
         for s in plan.steps:
             if s.profession == p and s.skill_from == s.skill_to:  # the goal recipe, crafted once
                 row = whole.get(id(s))
@@ -295,7 +323,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
                                  + [f"{count(q)} {gd.name(i)} (made earlier)" for i, q in made.items()])
                 text = f"- **Craft {recipe_name(s.spell_id, s.name, gd)} once**" + (f" — {mats}" if mats else "")
                 lines.setdefault((stage(p, s.skill_from, True), p), []).append((s.skill_from, 3, text))
-    inferred = _inferred_notes(plan, gd)
+    listed = _listed_notes(plan, gd)
     de: dict[str, list] = {}  # item name -> [first skill, last skill, count]
     for e in plan.events:
         m = EVENT.match(e)
@@ -309,7 +337,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
             first_at, _last, n = de.get(d.group(2), [at, at, 0])
             de[d.group(2)] = [first_at, at, n + float(d.group(1))]
             continue
-        note = inferred.get((p, at, text.split(" (", 1)[0].removeprefix("Learn ")), "")
+        note = listed.get((p, at, text.split(" (", 1)[0].removeprefix("Learn ")), "")
         lines.setdefault((stage(p, at, True), p), []).append(
             (at, 0, f"- *At {at}: {trainer_text.add_note(_fix_names(text, gd), note)}*"))
     for item, (first_at, last, n) in de.items():
@@ -339,28 +367,14 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
             out += [f"**{PROFESSIONS.get(p, p)} {lo}–{hi}**", ""] + [t for _, _, t in part] + [""]
 
 
-def _usable_at(r, at: int) -> bool:
-    """A recipe the player can craft at skill `at` without relying on a trainer who may still say no:
-    its requirement is met, and it isn't a trainer recipe whose inferred requirement is above `at`."""
-    if r is None or r.required_skill > at:
-        return False
-    return not (r.source == "trainer" and r.inferred_skill and r.inferred_skill > at)
-
-
-def _inferred_notes(plan, gd) -> dict[tuple[int, int, str], str]:
-    """(profession, skill, recipe name) -> the note for a trainer recipe the trainer may not offer yet:
-    its requirement is inferred from Classic and is above the skill the route learns it at. The fallback is
-    the first later route recipe of the profession that the player can craft at that skill (_usable_at)."""
+def _listed_notes(plan, gd) -> dict[tuple[int, int, str], str]:
+    """(profession, skill, recipe name) -> the note for a trainer recipe the route learns above the skill
+    the Forever data lists it from (gamedata.safe_requirements raised it)."""
     out = {}
     for prof, at, spell, how in plan.learn_log:
         r = gd.recipes.get(spell)
-        if how != "trainer" or not r or not r.inferred_skill or r.inferred_skill <= at:
-            continue
-        later = sorted((s for s in plan.steps if s.profession == prof and s.spell_id != spell
-                        and s.skill_from >= at), key=lambda s: s.skill_from)
-        nxt = next((s for s in later if _usable_at(gd.recipes.get(s.spell_id), at)), None)
-        out[(prof, at, r.name)] = trainer_text.inferred_note(
-            r.inferred_skill, recipe_name(nxt.spell_id, nxt.name, gd) if nxt else None)
+        if how == "trainer" and r and r.listed_skill is not None and r.listed_skill < at:
+            out[(prof, at, r.name)] = trainer_text.listed_note(r.listed_skill)
     return out
 
 
@@ -386,12 +400,15 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
         if last and last["spell"] == s.spell_id and last["to"] == s.skill_from:
             last["to"] = s.skill_to
             last["crafts"] += crafts
+            last["cash"] += s.cash
+            last["economic"] += s.economic
             _add(last["mats"], mats)
             _add(last["own"], own)
             _add(last["here"], here)
         else:
             out.append({"spell": s.spell_id, "name": recipe_name(s.spell_id, s.name, gd), "from": s.skill_from,
-                        "to": s.skill_to, "crafts": crafts, "mats": mats, "own": own, "here": here})
+                        "to": s.skill_to, "crafts": crafts, "mats": mats, "own": own, "here": here,
+                        "cash": s.cash, "economic": s.economic})
     return out
 
 
