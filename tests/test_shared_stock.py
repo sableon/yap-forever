@@ -233,5 +233,255 @@ class SourceTextTests(unittest.TestCase):
                          "2 Copper Bar (mail from Bob), 3 Copper Bar (mail from Cyd), 1 Iron Bar (mail from Ann)")
 
 
+PROFILE = """region = "eu"
+ruleset = 2
+faction = "alliance"
+[characters.Me]
+[characters.Ann]
+[characters.Bob]
+faction = "horde"
+[characters.Cyd]
+ruleset = 3
+[characters.Dee]
+"""
+
+
+class GroupTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.paths = settings.paths(Path(self._tmp.name) / "home")
+        self.paths.root.mkdir(parents=True)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def prof(self, extra=""):
+        self.paths.profile.write_text(PROFILE + extra, encoding="utf-8")
+        return profile.load_profile(self.paths.profile)
+
+    def stock(self, name, text):
+        f = self.paths.character(name) / "stock.toml"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+
+    def test_only_the_same_ruleset_and_faction_contribute(self):
+        for name in ("Me", "Ann", "Bob", "Cyd"):
+            self.stock(name, f"cash_gold = 10\n[items]\n{S} = 5\n")
+        g = shared.load_group(self.paths, self.prof(), "Me")
+        self.assertEqual(sorted(g.others), ["Ann"])  # Bob is a horde, Cyd plays another ruleset
+        self.assertEqual((g.ruleset, g.faction, g.label), (2, "alliance", "2/alliance"))
+
+    def test_a_character_without_a_stock_file_contributes_nothing(self):
+        self.stock("Me", "[items]\n")
+        self.stock("Ann", f"[items]\n{S} = 5\n")
+        g = shared.load_group(self.paths, self.prof(), "Me")  # Dee has no file
+        self.assertEqual(sorted(g.others), ["Ann"])
+
+    def test_the_character_itself_is_not_its_own_source(self):
+        self.stock("Me", f"[items]\n{S} = 5\n")
+        self.assertEqual(shared.load_group(self.paths, self.prof(), "Me").others, {})
+
+    def test_a_damaged_stock_file_of_another_character_is_named(self):
+        self.stock("Me", "[items]\n")
+        self.stock("Ann", "[items\n")
+        with self.assertRaises(ValueError) as cm:
+            shared.load_group(self.paths, self.prof(), "Me")
+        self.assertIn(str(self.paths.character("Ann") / "stock.toml"), str(cm.exception))
+
+    def test_a_character_on_another_ruleset_has_its_own_group(self):
+        for name in ("Me", "Ann", "Cyd"):
+            self.stock(name, "[items]\n")
+        prof = self.prof('[characters.Eve]\nruleset = 3\n')
+        self.stock("Eve", "[items]\n")
+        self.assertEqual(sorted(shared.load_group(self.paths, prof, "Cyd").others), ["Eve"])
+
+    def test_budget_from_the_gold_table(self):
+        self.stock("Me", "cash_gold = 12\n[items]\n")
+        self.stock("Ann", "cash_gold = 30\n[items]\n")
+        prof = self.prof('[gold]\n"2/alliance" = 45\n')
+        g = shared.load_group(self.paths, prof, "Me")
+        self.assertEqual(g.budget(self.load("Me")), shared.Budget(450000, "2/alliance", False))
+
+    def test_budget_falls_back_to_the_sum_of_cash_gold(self):
+        self.stock("Me", "cash_gold = 12\n[items]\n")
+        self.stock("Ann", "cash_gold = 30.5\n[items]\n")
+        self.stock("Bob", "cash_gold = 1000\n[items]\n")  # another faction: not counted
+        g = shared.load_group(self.paths, self.prof(), "Me")
+        self.assertEqual(g.budget(self.load("Me")), shared.Budget(425000, "2/alliance", True))
+
+    def test_a_single_stock_file_is_not_called_a_sum(self):
+        self.stock("Me", "cash_gold = 12\n[items]\n")
+        g = shared.load_group(self.paths, self.prof(), "Me")
+        self.assertEqual(g.budget(self.load("Me")), shared.Budget(120000, "2/alliance", False))
+
+    def test_a_zero_gold_entry_is_a_budget_of_zero_not_a_missing_one(self):
+        self.stock("Me", "cash_gold = 12\n[items]\n")
+        g = shared.load_group(self.paths, self.prof('[gold]\n"2/alliance" = 0\n'), "Me")
+        self.assertEqual(g.budget(self.load("Me")).copper, 0)
+
+    def test_a_gold_entry_for_another_group_is_ignored(self):
+        self.stock("Me", "cash_gold = 12\n[items]\n")
+        g = shared.load_group(self.paths, self.prof('[gold]\n"3/alliance" = 45\n'), "Me")
+        self.assertEqual(g.budget(self.load("Me")).copper, 120000)
+
+    def load(self, name):
+        from yap_forever.config import load_stock
+        return load_stock(self.paths.character(name) / "stock.toml")
+
+    def test_cash_gold_stays_readable_in_a_stock_file(self):
+        self.stock("Me", "cash_gold = 1.5\n[items]\n")
+        self.assertEqual(self.load("Me").cash, 15000)
+
+
+class BudgetLineTests(unittest.TestCase):
+    def render(self, budget, items=None, shared_items=None):
+        from yap_forever.planner import Plan
+        from yap_forever.report import render, verdict
+        gd = toy.gamedata(recipes())
+        st = toy.stock(items, shared=shared_items)
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, budget=budget)
+        return p, text
+
+    def cash_line(self, text):
+        return next(l for l in text.splitlines() if l.startswith("- **Cash needed:**"))
+
+    def test_within_the_shared_gold(self):
+        p, text = self.render(shared.Budget(10**9, "2/alliance"))
+        self.assertIn("within the 100000g 0s 0c shared by your 2/alliance characters", self.cash_line(text))
+        self.assertNotIn("your own", text)
+
+    def test_over_the_shared_gold(self):
+        p, _ = self.render(shared.Budget(0, "2/alliance"))
+        _p, text = self.render(shared.Budget(p.cash_total - 5000, "3/horde"))
+        line = self.cash_line(text)
+        self.assertIn("over the", line)
+        self.assertIn("shared by your 3/horde characters by 50s 0c", line)
+
+    def test_exactly_the_gold_is_within(self):
+        p, _ = self.render(None)
+        _p, text = self.render(shared.Budget(int(p.cash_total), "2/alliance"))
+        self.assertIn("within the", self.cash_line(text))
+
+    def test_without_a_group_the_stock_budget_reads_as_before(self):
+        _p, text = self.render(None)
+        self.assertIn("within your 12g 0s 0c budget", self.cash_line(text))
+
+    def test_a_sum_is_said_once_in_the_notes(self):
+        _p, text = self.render(shared.Budget(10**9, "2/alliance", True))
+        self.assertEqual(text.count("sum of `cash_gold`"), 1)
+        self.assertIn("[gold]", text)
+        _p, text = self.render(shared.Budget(10**9, "2/alliance", False))
+        self.assertNotIn("sum of `cash_gold`", text)
+
+    def test_shared_items_are_said_once_when_used(self):
+        p, text = self.render(None, shared_items={"Ann": {S: 10}})
+        self.assertEqual(text.count(shared.SHARED_NOTE), 1)
+        self.assertIn("From your other characters, by mail: 10 Copper Bar (mail from Ann).", text)
+        _p, text = self.render(None)
+        self.assertNotIn(shared.SHARED_NOTE, text)
+        self.assertNotIn("by mail", text)
+        _p, text = self.render(None, shared_items={"Ann": {T: 10}})  # present but not needed
+        self.assertNotIn(shared.SHARED_NOTE, text)
+
+
+class GuideTests(unittest.TestCase):
+    def guide(self, shared_items):
+        from yap_forever.guide import render_guide
+        gd = toy.gamedata(recipes())
+        st = dataclasses.replace(toy.stock(shared=shared_items), bag_slots=200)
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
+        return render_guide(p, gd, toy.market(BARS), st, caps={BS: 30})
+
+    def test_the_guide_names_the_sources_and_the_caveat_once(self):
+        text = self.guide({"Ann": {S: 10}})
+        self.assertIn("Mailed by your other characters: 10 Copper Bar (mail from Ann)", text)
+        self.assertIn("- From your other characters, by mail: 10 Copper Bar (mail from Ann).", text)
+        self.assertEqual(text.count(shared.SHARED_NOTE), 1)
+
+    def test_the_keep_table_counts_mailed_items_as_not_to_get(self):
+        text = self.guide({"Ann": {S: 10}})
+        self.assertIn("| Item | Keep | In bank | By mail | Still to get | Buy later |", text)
+        self.assertNotIn("By mail", self.guide({}))
+
+    def test_without_other_characters_the_guide_is_unchanged(self):
+        text = self.guide({})
+        self.assertNotIn("other characters", text)
+        self.assertNotIn(shared.SHARED_NOTE, text)
+
+
+class PlanCommandTests(unittest.TestCase):
+    """`plan` end to end on the fixture game data: Rough Stone is the reagent of the starter recipe."""
+    STONE = 2835
+
+    def setUp(self):
+        import shutil
+
+        from tests.test_cli import run
+        self.run_cli = run
+        self._tmp = tempfile.TemporaryDirectory()
+        self.paths = settings.paths(Path(self._tmp.name) / "home")
+        run(["init"], self.paths)
+        gd = Path(__file__).parent / "fixtures" / "gamedata"
+        shutil.copytree(gd, self.paths.gamedata)
+        with open(self.paths.gamedata / "ItemSparse.csv", "a", encoding="utf-8") as f:
+            f.write(f"{self.STONE},Rough Stone,1,1,1,1,0,20,0\n")
+        self.paths.prices.write_text(f'{{"snapshot_time": "t", "listings": {{"{self.STONE}": [[20, 500]]}}}}',
+                                     encoding="utf-8")
+        self.paths.profile.write_text(
+            self.paths.profile.read_text(encoding="utf-8")
+            + '\n[characters."Testy Example"]\n[characters."Horde Person"]\nfaction = "horde"\n'
+              '[characters."Other Rules"]\nruleset = 3\n', encoding="utf-8")
+        self.write("Firstname Lastname", "level = 20\ncash_gold = 5\n[items]\n")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write(self, name, text):
+        f = self.paths.character(name) / "stock.toml"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+
+    def plan(self):
+        code, out = self.run_cli(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"],
+                                 self.paths)
+        self.assertEqual(code, 0, out)
+        return {"-".join(f.name.split("-")[-2:]): f.read_text(encoding="utf-8") for f in self.paths.reports.glob("*.md")}
+
+    def test_a_group_mate_mails_its_stones(self):
+        self.write("Testy Example", f"cash_gold = 7\nlevel = 20\n[items]\n{self.STONE} = 30\n")
+        reports = self.plan()
+        for name in ("guide-gold.md", "plan-gold.md"):
+            self.assertIn("mail from Testy Example", reports[name], name)
+        self.assertIn(shared.SHARED_NOTE, reports["plan-gold.md"])
+
+    def test_other_factions_and_rulesets_and_missing_files_contribute_nothing(self):
+        self.write("Horde Person", f"[items]\n{self.STONE} = 99\n")
+        self.write("Other Rules", f"[items]\n{self.STONE} = 99\n")  # Testy Example has no stock file at all
+        for text in self.plan().values():
+            self.assertNotIn("mail from", text)
+            self.assertNotIn(shared.SHARED_NOTE, text)
+
+    def test_the_budget_is_the_groups_shared_gold(self):
+        self.write("Testy Example", "cash_gold = 7\nlevel = 20\n[items]\n")
+        self.write("Horde Person", "cash_gold = 900\n[items]\n")
+        line = next(l for l in self.plan()["plan-gold.md"].splitlines() if l.startswith("- **Cash needed:**"))
+        self.assertIn("within the 12g 0s 0c shared by your 2/alliance characters", line)  # 5 + 7, not the horde's
+        text = self.paths.profile.read_text(encoding="utf-8")
+        self.paths.profile.write_text(text + '[gold]\n"2/alliance" = 0.5\n', encoding="utf-8")
+        reports = self.plan()
+        line = next(l for l in reports["plan-gold.md"].splitlines() if l.startswith("- **Cash needed:**"))
+        self.assertIn("shared by your 2/alliance characters", line)
+        self.assertIn("50s 0c shared", line)
+        self.assertNotIn("sum of `cash_gold`", reports["plan-gold.md"])
+
+    def test_a_damaged_file_of_a_group_mate_names_it(self):
+        self.write("Testy Example", "[items\n")
+        code, out = self.run_cli(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"],
+                                 self.paths)
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.paths.character("Testy Example") / "stock.toml"), out)
+
+
 if __name__ == "__main__":
     unittest.main()
