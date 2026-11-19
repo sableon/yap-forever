@@ -3,6 +3,7 @@ import unittest
 
 from tests import toy
 from yap_forever.planner import Plan, Step
+from yap_forever.shopping import CRAFT_ROOM
 
 BS = 164
 S, T, L, K, G = toy.COPPER_BAR, toy.IRON_BAR, toy.ROD, toy.STONE, toy.VEST
@@ -366,17 +367,24 @@ class ReagentBagTests(unittest.TestCase):
 
     def test_zero_reagent_slots_change_nothing(self):
         import dataclasses
-        from yap_forever.shopping import render_shopping
-        gd, p, m = chain_gd(), chain_plan(), toy.market({S: [(10, 1000)], T: [(50, 100)]})
-        base = dataclasses.replace(toy.stock(), bag_slots=40)
-        self.assertEqual(render_shopping(p, gd, m, base), render_shopping(p, gd, m, dataclasses.replace(base, reagent_slots=0)))
+        from yap_forever.shopping import carried_slots, carried_slots_split, group_trips, render_shopping, reagent_items, route_rows
+        gd, p = chain_gd(), chain_plan()
+        stack = {S: 20, T: 20, L: 20}
+        for counts in ({S: 100, T: 7}, {S: 1}, {}, {S: 20, T: 20, L: 21}):
+            self.assertEqual(carried_slots_split(counts, stack, reagent_items(gd), 0), carried_slots(counts, stack))
+        rows = route_rows(p, gd)
+        for cap in (1, 2, 4, 40):
+            self.assertEqual(group_trips(rows, cap, stack, reagent_items(gd), 0), group_trips(rows, cap, stack))
+        m = toy.market({S: [(10, 1000)], T: [(50, 100)]})
+        lines, _trips = render_shopping(p, gd, m, dataclasses.replace(toy.stock(), bag_slots=40, reagent_slots=0))
+        self.assertNotIn("reagent", "\n".join(lines))
 
     def test_mailbox_trips_one_with_reagent_bag_two_without(self):
         import dataclasses
         from yap_forever.shopping import render_shopping
         p, gd = self.mats_plan()
         m = toy.market({S: [(10, 1000)], T: [(10, 1000)]})
-        base = dataclasses.replace(toy.stock(), bag_slots=CRAFT + 4)
+        base = dataclasses.replace(toy.stock(), bag_slots=CRAFT_ROOM + 4)
         _lines, trips = render_shopping(p, gd, m, base)
         self.assertEqual(trips, 2)
         lines, trips = render_shopping(p, gd, m, dataclasses.replace(base, reagent_slots=6))
@@ -427,5 +435,3 @@ class ReagentBagTests(unittest.TestCase):
         self.assertIn("reagent bag", bagged)
         self.assertNotIn("reagent bag", plain)
 
-
-CRAFT = 10  # shopping.CRAFT_ROOM

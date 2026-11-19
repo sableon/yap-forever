@@ -58,7 +58,7 @@ def reagent_items(gd) -> set[int]:
     out = {i for r in gd.recipes.values() for i in r.reagents}
     out |= {i for i, it in gd.items.items() if it.class_id == 7}
     never = {i for i, it in gd.items.items() if it.class_id in (2, 4, 9)}
-    return out - never - set(gd.item_tool_category) - set(gd.tool_items.values())
+    return out - never - set(gd.item_tool_category)
 
 
 def _split_slots(counts: dict, stack: dict, reagents, reagent_slots: int) -> tuple[int, int]:
@@ -282,7 +282,8 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
         rows = [r for r in rows if r["st"].skill_to <= min(later)] or rows[:1]
     if bag_slots:
         items = {i for r in rows for i in r["need"]}
-        rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items), reagent_items(gd), reagent_slots)[0]
+        rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items),
+                           reagent_items(gd) if reagent_slots else None, reagent_slots)[0]
     else:
         rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
     split = _split(rows, plan, gd, left)
@@ -297,7 +298,7 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0) ->
     parts = [f"{n} {gd.name(i)} ({where[src]})" for i, n, src in items]
     total = _sum({i: n} for i, n, _src in items)
     stack = stacks(gd, total)
-    split = carried_split(total, stack, reagent_items(gd), reagent_slots)
+    split = carried_split(total, stack, reagent_items(gd) if reagent_slots else None, reagent_slots)
     note = pack_note(gd, total, stack, "them at the trainer")
     return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
             f"({slots_text(split)}{'; ' + note if note else ''}); the town may have "
@@ -343,7 +344,8 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
     if not stock.bag_slots:
         return lines, None
     stack = stacks(gd, {i for r in rows for i in r["need"]})
-    reagents, bag = reagent_items(gd), stock.reagent_slots
+    bag = stock.reagent_slots
+    reagents = reagent_items(gd) if bag else None  # once per render
     trips = group_trips(rows, stock.bag_slots - CRAFT_ROOM, stack, reagents, bag)
     lines += ["## Mailbox trips", "",
               f"Planned for {stock.bag_slots} free bag slots"
