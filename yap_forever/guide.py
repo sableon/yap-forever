@@ -338,16 +338,26 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
             out += [f"**{PROFESSIONS.get(p, p)} {lo}–{hi}**", ""] + [t for _, _, t in part] + [""]
 
 
+def _usable_at(r, at: int) -> bool:
+    """A recipe the player can craft at skill `at` without relying on a trainer who may still say no:
+    its requirement is met, and it isn't a trainer recipe whose inferred requirement is above `at`."""
+    if r is None or r.required_skill > at:
+        return False
+    return not (r.source == "trainer" and r.inferred_skill and r.inferred_skill > at)
+
+
 def _inferred_notes(plan, gd) -> dict[tuple[int, int, str], str]:
     """(profession, skill, recipe name) -> the note for a trainer recipe the trainer may not offer yet:
-    its requirement is inferred from Classic and is above the skill the route learns it at."""
+    its requirement is inferred from Classic and is above the skill the route learns it at. The fallback is
+    the first later route recipe of the profession that the player can craft at that skill (_usable_at)."""
     out = {}
     for prof, at, spell, how in plan.learn_log:
         r = gd.recipes.get(spell)
         if how != "trainer" or not r or not r.inferred_skill or r.inferred_skill <= at:
             continue
-        later = [s for s in plan.steps if s.profession == prof and s.spell_id != spell and s.skill_from >= at]
-        nxt = min(later, key=lambda s: s.skill_from, default=None)
+        later = sorted((s for s in plan.steps if s.profession == prof and s.spell_id != spell
+                        and s.skill_from >= at), key=lambda s: s.skill_from)
+        nxt = next((s for s in later if _usable_at(gd.recipes.get(s.spell_id), at)), None)
         out[(prof, at, r.name)] = trainer_text.inferred_note(
             r.inferred_skill, recipe_name(nxt.spell_id, nxt.name, gd) if nxt else None)
     return out

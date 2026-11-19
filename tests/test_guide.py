@@ -456,6 +456,48 @@ class TrainerRowTests(unittest.TestCase):
         text = render_guide(p, gd, toy.market(BARS), toy.stock(skills={BS: 30}), caps={BS: 40})
         self.assertIn("(inferred: the trainer may ask up to 35; if it isn't offered, come back at 35)", text)
 
+    def inferred_row(self, extra, steps_after, skill_at=30):
+        """The first learn row's text for BS inferred (needs 20, trainer may ask 35), at skill 30."""
+        from yap_forever.planner import Plan, Step
+        rs = base_recipes() + [toy.recipe(40, "BS inferred", BS, {toy.COPPER_BAR: 1}, req=20)] + extra
+        gd = toy.gamedata(rs)
+        gd.recipes[40].inferred_skill = 35
+        for spell, inferred in steps_after:
+            gd.recipes[spell].inferred_skill = inferred
+        steps = [Step(BS, skill_at, skill_at + 10, 40, "BS inferred", 10, 0, 0, {toy.COPPER_BAR: 10})]
+        at = skill_at + 10
+        for spell, _inf in steps_after:
+            steps.append(Step(BS, at, at + 10, spell, gd.recipes[spell].name, 10, 0, 0, {toy.COPPER_BAR: 10}))
+            at += 10
+        p = Plan(steps=steps, learn_log=[(BS, skill_at, 40, "trainer")],
+                 events=[f"Blacksmithing {skill_at}: Learn BS inferred (trainer 45s 0c)"], final_skill={BS: at})
+        text = render_guide(p, gd, toy.market(BARS), toy.stock(skills={BS: skill_at}), caps={BS: at})
+        (row,) = self.lines(text, f"- *At {skill_at}: Learn BS inferred")
+        return row
+
+    def test_fallback_skips_a_next_recipe_that_is_itself_inferred_higher(self):
+        extra = [toy.recipe(41, "BS second", BS, {toy.COPPER_BAR: 1}, req=25),
+                 toy.recipe(42, "BS third", BS, {toy.COPPER_BAR: 1}, req=25)]
+        row = self.inferred_row(extra, [(41, 45), (42, None)])
+        self.assertIn("craft BS third instead", row)
+        self.assertNotIn("BS second", row)
+
+    def test_fallback_skips_a_next_recipe_that_needs_more_skill_than_the_note_is_at(self):
+        extra = [toy.recipe(41, "BS high", BS, {toy.COPPER_BAR: 1}, req=40)]
+        row = self.inferred_row(extra, [(41, None)])
+        self.assertNotIn("BS high", row)
+        self.assertTrue(row.endswith("if it isn't offered, come back at 35)*"), row)
+
+    def test_fallback_takes_an_inferred_recipe_that_fits_under_the_skill(self):
+        extra = [toy.recipe(41, "BS fits", BS, {toy.COPPER_BAR: 1}, req=25)]
+        row = self.inferred_row(extra, [(41, 30)])  # inferred 30 is not above the skill it is read at
+        self.assertIn("craft BS fits instead", row)
+
+    def test_fallback_may_be_a_non_trainer_recipe_that_needs_no_trainer(self):
+        extra = [toy.recipe(41, "BS starter", BS, {toy.COPPER_BAR: 1}, req=1, source="starter")]
+        row = self.inferred_row(extra, [(41, None)])
+        self.assertIn("craft BS starter instead", row)
+
 
 class KeepGreensGuideTests(unittest.TestCase):
     def test_kept_green_row_says_keep_for_disenchanting(self):
