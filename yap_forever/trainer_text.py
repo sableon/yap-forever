@@ -42,11 +42,20 @@ def _no_trainer(rank: str, profession: int) -> str:
            "for your faction in its data."
 
 
-def services_text(s: Services) -> str:
-    """'Nearby: bank, mailbox; no auction house.'"""
-    have = [w for w, ok in (("bank", s.bank), ("auction house", s.auction), ("mailbox", s.mail)) if ok]
+NEUTRAL_AH = "neutral AH (its own prices and a higher deposit)"  # the planner prices the faction AH
+
+
+def services_text(s: Services, closest: trainers.Closest | None = None) -> str:
+    """'Nearby: bank, mailbox; no auction house.' With nothing near, the closest service in the zone
+    (`closest`), when there is one: 'Nearby: nothing within a short walk; the closest is the mailbox.'"""
+    auction = NEUTRAL_AH if s.neutral_auction else "auction house"
+    parts = (("bank", s.bank), (auction, s.auction), ("mailbox", s.mail))
+    have = [w for w, ok in parts if ok]
     lack = [w for w, ok in (("bank", s.bank), ("auction house", s.auction), ("mailbox", s.mail)) if not ok]
     if not have:
+        if closest is not None:
+            what = {"mailbox": "mailbox", "bank": "bank", "auction": NEUTRAL_AH if closest.neutral else "auction house"}
+            return f"Nearby: nothing within a short walk; the closest is the {what[closest.kind]}."
         return "Nearby: none (no bank, auction house or mailbox)."
     if not lack:
         return f"Nearby: {', '.join(have)}."
@@ -70,7 +79,9 @@ def _place(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
     if t.zone in CAPITALS[info.faction]:  # a capital has a bank, an auction house and a mailbox
         return place, True
     near = trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS)
-    return f"{place} {services_text(near)}", True
+    closest = None if near.bank or near.auction or near.mail else \
+        trainers.closest_service(t, data.npc_rows, data.mailboxes)
+    return f"{place} {services_text(near, closest)}", True
 
 
 def remote_stop(info: TrainerInfo | None, profession: int, cap: int) -> RemoteStop | None:

@@ -456,11 +456,55 @@ class TextTests(unittest.TestCase):
         self.assertEqual(f(Services(False, True, False)), "Nearby: auction house; no bank or mailbox.")
         self.assertEqual(f(Services(False, False, False)), "Nearby: none (no bank, auction house or mailbox).")
 
+    NEUTRAL = "neutral AH (its own prices and a higher deposit)"
+
     def test_remote_stop_with_coordinates(self):
         stop = trainer_text.remote_stop(self.info("alliance"), BS, 300)
         self.assertTrue(stop.found)
+        # the fixture's only auctioneer near Brakka serves both factions
         self.assertEqual(stop.text, "Brakka Ironfold, Stranglethorn Vale (30.0, 70.0). "
-                               "Nearby: bank, auction house, mailbox.")
+                                    f"Nearby: bank, {self.NEUTRAL}, mailbox.")
+
+    def test_a_neutral_auction_house_is_named_so_in_every_position(self):
+        f = trainer_text.services_text
+        self.assertEqual(f(Services(True, True, True, True)), f"Nearby: bank, {self.NEUTRAL}, mailbox.")
+        self.assertEqual(f(Services(False, True, False, True)), f"Nearby: {self.NEUTRAL}; no bank or mailbox.")
+        self.assertEqual(f(Services(True, True, True, False)), "Nearby: bank, auction house, mailbox.")
+
+    def test_nothing_near_says_the_closest(self):
+        f = trainer_text.services_text
+        none = Services(False, False, False)
+        self.assertEqual(f(none, trainers.Closest("mailbox")),
+                         "Nearby: nothing within a short walk; the closest is the mailbox.")
+        self.assertEqual(f(none, trainers.Closest("bank")),
+                         "Nearby: nothing within a short walk; the closest is the bank.")
+        self.assertEqual(f(none, trainers.Closest("auction")),
+                         "Nearby: nothing within a short walk; the closest is the auction house.")
+        self.assertEqual(f(none, trainers.Closest("auction", True)),
+                         f"Nearby: nothing within a short walk; the closest is the {self.NEUTRAL}.")
+
+    def test_nothing_near_and_nothing_in_the_zone_keeps_todays_text(self):
+        self.assertEqual(trainer_text.services_text(Services(False, False, False), None),
+                         "Nearby: none (no bank, auction house or mailbox).")
+
+    def test_the_closest_is_ignored_when_something_is_near(self):
+        self.assertEqual(trainer_text.services_text(Services(False, False, True), trainers.Closest("bank")),
+                         "Nearby: mailbox; no bank or auction house.")
+
+    def test_a_row_with_nothing_near_names_the_closest_service(self):
+        t = Trainer(1, "Lone Smith", BS, "Master", "AH", 33, (30.0, 70.0), True)
+        npcs = trainers.parse_npc_rows(_npc_text(
+            "[2] = {'Bank',1,1,1,1,0,{[33]={{60,70}}},nil,33,nil,nil,12,\"A\",\"Banker\",256},",
+            "[3] = {'Auc',1,1,1,1,0,{[33]={{30,45}}},nil,33,nil,nil,12,\"AH\",\"Auctioneer\",4097},"))
+        data = trainers.TrainerData([t], npcs, [], {33: "Somewhere"})
+        text = trainer_text.remote_stop(trainer_text.TrainerInfo("alliance", data), BS, 300).text
+        self.assertEqual(text, "Lone Smith, Somewhere (30.0, 70.0). Nearby: nothing within a short walk; "
+                               f"the closest is the {self.NEUTRAL}.")
+        self.assertNotRegex(text, r"\d+ (map|yards|units)")  # no distances
+
+    def test_a_row_with_nothing_in_the_zone_keeps_todays_text(self):
+        self.assertEqual(self.lone(33).text, "Lone Smith, Somewhere (30.0, 70.0). "
+                                             "Nearby: none (no bank, auction house or mailbox).")
 
     def test_remote_stop_several_trainers(self):
         stop = trainer_text.remote_stop(self.info("alliance"), BS, 225)

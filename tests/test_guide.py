@@ -336,7 +336,8 @@ class TrainerRowTests(unittest.TestCase):
         text = self.route([(60, 150), (200, 225), (275, 300)])
         (row,) = [l for l in self.lines(text, "- **Trip:**") if "rank to 300" in l]
         self.assertTrue(row.startswith("- **Trip:** Blacksmithing rank to 300: Brakka Ironfold, Stranglethorn Vale "
-                                       "(30.0, 70.0). Nearby: bank, auction house, mailbox. "), row)
+                                       "(30.0, 70.0). Nearby: bank, neutral AH (its own prices and a higher deposit), "
+                                       "mailbox. "), row)
         self.assertIn("While there, learn the trainer recipes your skill allows.", row)
         self.assertNotIn("set town", row)
 
