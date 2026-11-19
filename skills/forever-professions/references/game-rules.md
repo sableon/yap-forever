@@ -30,7 +30,7 @@ say so.
   intermediates and disenchant materials too), goes in the reagent bag first; gear (weapons,
   armor), patterns and tools never do. Packed essences count as reagents.
 - A pattern item (`Plans:`, `Pattern:`) in a character's own stock teaches its recipe at no cost, on
-  the main as on the alts: it is used up when learned (no longer owned, sellable or bought, and
+  every character: it is used up when learned (no longer owned, sellable or bought, and
   not on the shopping list), and the recipe's skill requirement still applies. Only recipes taught
   by a pattern item count; trainer, Favor and quest recipes are unchanged.
 - A mail a player sends holds at most 12 attachments; auction house mail can hold more.
