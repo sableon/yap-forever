@@ -291,6 +291,8 @@ def _split(rows, plan, gd=None, left=None, mail=None) -> dict[tuple[int, str], i
                 if rest <= 1e-6:
                     break
                 n = min(rest, source[1])
+                if n <= 1e-6:  # this character has nothing more to mail
+                    continue
                 source[1] -= n
                 rest -= n
                 key = (i, MAIL_FROM + source[0])

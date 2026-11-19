@@ -226,6 +226,22 @@ class SourceTextTests(unittest.TestCase):
         self.assertIn("10 Copper Bar (mail from Ann), 4 Copper Bar (mail from Bob)", trip)
         self.assertEqual(p.used_mail, {S: [("Ann", 10), ("Bob", 4)]})
 
+    def test_a_source_that_ran_dry_is_not_named_again(self):
+        from yap_forever.planner import Plan, Step
+        # Ann's 20 and Bob's 5 bars go to the first trip; the second needs more and must not name "0" from them
+        p = Plan(steps=[Step(BS, 1, 11, 1, "BS one", 10, 0, 0, {S: 30}, from_mail={S: 25}, buffered=10),
+                        Step(BS, 11, 21, 2, "BS two", 10, 0, 0, {T: 30}, buffered=10)],
+                 final_skill={BS: 21}, shared={"Bob": {S: 5}, "Ann": {S: 20}})
+        gd = toy.gamedata([toy.recipe(1, "BS one", BS, {S: 3}), toy.recipe(2, "BS two", BS, {S: 3, T: 3})])
+        gd.items[S].stack = gd.items[T].stack = 20
+        st = dataclasses.replace(toy.stock(shared=p.shared), bag_slots=14)  # 4 free slots: one row a trip
+        lines, trips = render_shopping(p, gd, toy.market({S: [(10, 1000)], T: [(10, 1000)]}), st)
+        text = "\n".join(l for l in lines if l.startswith("- 📬"))
+        self.assertEqual(trips, 2)
+        self.assertNotIn(" 0 Copper Bar", text)
+        self.assertEqual(text.count("(mail from Ann)"), 1)
+        self.assertEqual(text.count("(mail from Bob)"), 1)
+
     def test_mail_text_orders_by_item_then_character(self):
         names = {S: "Copper Bar", T: "Iron Bar"}
         used = {T: [("Ann", 1)], S: [("Bob", 2), ("Cyd", 3)]}
