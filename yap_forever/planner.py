@@ -161,6 +161,8 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         if r.source == "trainer":
             return Cost(r.fee, r.fee), 0, None, []
         if r.source == "scroll":
+            if r.scroll_item and pools.stock.get(r.scroll_item, 0) >= 1:  # your own pattern: free, used up
+                return Cost(), 0, "owned", []
             opt = valuer.buy_option(r.scroll_item, 1, pools.bought.get(r.scroll_item, 0))
             if opt is None:
                 return f"scroll not available: {gd.name(r.scroll_item)}"
@@ -289,7 +291,9 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             return Cost()
         favor_left -= favor_cost
         p.favor_spent += favor_cost
-        if scroll_kind:
+        if scroll_kind == "owned":
+            pools.stock[r.scroll_item] -= 1  # consumed: no longer owned, sellable or bought
+        elif scroll_kind:
             pool = pools.bought if scroll_kind == "ah" else pools.vendor
             pool[r.scroll_item] = pool.get(r.scroll_item, 0) + 1
         if r.source == "quest":
@@ -297,7 +301,8 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             items = ", ".join(f"{n} {gd.name(i)}" for i, n in q.items.items())
             p.events.append(f"{name} {s}: Learn {r.name} (quest from {q.giver}: hand in {items}; level {q.level})")
             return Cost()  # the hand-ins are taken and costed with the crafts
-        how = {"trainer": "trainer", "scroll": "scroll", "favor": f"{favor_cost} Favor"}[r.source]
+        how = {"trainer": "trainer", "scroll": "your own pattern" if scroll_kind == "owned" else "scroll",
+               "favor": f"{favor_cost} Favor"}[r.source]
         price = f" {money(learn_cost.cash)}" if learn_cost.cash else ""
         p.events.append(f"{name} {s}: Learn {r.name} ({how}{price})")
         return learn_cost

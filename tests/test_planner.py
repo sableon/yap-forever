@@ -158,6 +158,48 @@ class PlannerTests(unittest.TestCase):
         self.assertIn(3, {s.spell_id for s in p2.steps})
         self.assertIn("Learn Scroll free (scroll 5s 0c)", " ".join(p2.events))
 
+    def scroll_recipes(self, req=1):
+        return base_recipes() + [toy.recipe(3, "Scroll free", BS, {}, (toy.STONE, 1), req=req,
+                                            source="scroll", scroll=toy.SCROLL)]
+
+    def test_owned_pattern_is_learned_at_no_cost_and_consumed(self):
+        from yap_forever.shopping import render_shopping
+        rs = self.scroll_recipes()
+        st = toy.stock({toy.SCROLL: 1})
+        p = run(rs, BARS, stock=st)  # the pattern is not on the AH: owning it is the only way
+        self.assertNotIn(3, dict(p.skipped))
+        self.assertIn(3, {s.spell_id for s in p.steps})
+        self.assertEqual([how for _p, _s, spell, how in p.learn_log if spell == 3], ["owned"])
+        self.assertIn("Learn Scroll free (your own pattern)", " ".join(p.events))
+        self.assertEqual(p.used_stock.get(toy.SCROLL), 1)  # consumed: not left to sell
+        self.assertNotIn(toy.SCROLL, p.leftovers)
+        self.assertEqual(p.bought.get(toy.SCROLL, 0), 0)
+        gd = toy.gamedata(rs)
+        text = "\n".join(render_shopping(p, gd, toy.market(BARS), st)[0])
+        self.assertNotIn("Plans: Something", text)
+        self.assertNotIn("Trip:** buy the pattern", " ".join(p.events))
+
+    def test_owned_pattern_beats_a_listed_one(self):
+        rs = self.scroll_recipes()
+        market = {**BARS, toy.SCROLL: [(500, 1)]}
+        bought = run(rs, market)
+        owned = run(rs, market, stock=toy.stock({toy.SCROLL: 1}))
+        self.assertEqual([how for *_x, spell, how in bought.learn_log if spell == 3], ["ah"])
+        self.assertEqual([how for *_x, spell, how in owned.learn_log if spell == 3], ["owned"])
+        self.assertLess(owned.cash_total, bought.cash_total)
+
+    def test_without_the_pattern_nothing_changes(self):
+        rs = self.scroll_recipes()
+        self.assertEqual(run(rs, BARS).skipped, run(rs, BARS, stock=toy.stock({toy.COPPER_BAR: 3})).skipped)
+        self.assertIn((3, "scroll not available: Plans: Something"), run(rs, BARS).skipped)
+
+    def test_owned_pattern_still_needs_the_skill(self):
+        p = run(self.scroll_recipes(req=50), BARS, stock=toy.stock({toy.SCROLL: 1}))
+        steps = [s for s in p.steps if s.spell_id == 3]
+        self.assertTrue(steps)
+        self.assertTrue(all(s.skill_from >= 50 for s in steps))
+        self.assertEqual([s.skill_from < 50 for s in p.steps if s.profession == BS][:1], [True])
+
     def test_missing_rod_adds_tool_cost_once(self):
         rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
               toy.recipe(2, "Ench rod-needing", ENCH, {toy.ROD: 1}, tools=[373]),
