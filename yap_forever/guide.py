@@ -355,8 +355,11 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None) -> No
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
                 (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots,
                                           trainer_info, stock.level)))
-    for t in city_ranks(plan):
-        row = trainer_text.city_row(trainer_info, t.profession, t.cap) if t.profession in caps else None
+    planned, said = tuple(caps), set()
+    # in the order the guide shows them, so a city's "different parts" sentence is on its first row
+    for t in sorted((t for t in city_ranks(plan) if t.profession in caps),
+                    key=lambda t: (stage(t.profession, t.skill, True), planned.index(t.profession), t.skill)):
+        row = trainer_text.city_row(trainer_info, t.profession, t.cap, planned, said)
         if row:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append((t.skill, 0.5, f"- {row}"))
 

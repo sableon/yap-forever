@@ -136,8 +136,25 @@ def remote_stop(info: TrainerInfo | None, profession: int, cap: int, level: int 
                       True, all(known for _text, known in places))
 
 
-def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
-    """The row (without its dash) for a rank trained at any trainer of that rank in a capital."""
+def _apart(info: TrainerInfo, zone: int, planned: tuple[int, ...]) -> str:
+    """'In <city>, the <A> and <B> trainers are in different parts of the city.' for each two planned
+    professions the city's notes put in different groups; "" for a city without groups, a profession
+    in none of them, or fewer than two planned professions."""
+    groups = info.notes.city_groups.get(zone, ()) if info.notes else ()
+    where = {p: i for i, g in enumerate(groups) for p in g}
+    city = info.data.zone_name(zone)
+    return " ".join(f"In {city}, the {PROFESSIONS.get(a, a)} and {PROFESSIONS.get(b, b)} trainers are in "
+                    "different parts of the city."
+                    for i, a in enumerate(planned) for b in planned[i + 1:]
+                    if a in where and b in where and where[a] != where[b])
+
+
+def city_row(info: TrainerInfo | None, profession: int, cap: int, planned: tuple[int, ...] = (),
+             said: set[int] | None = None) -> str | None:
+    """The row (without its dash) for a rank trained at any trainer of that rank in a capital.
+    planned: the professions the guide plans, in order; a capital whose notes put two of them in
+    different groups says so. said: the zones that already said it (a set the caller keeps, so a
+    city says it once in the guide); a zone is added when its row says it."""
     if not _usable(info, cap):
         return None
     rank, name = RANK_BY_CAP[cap], PROFESSIONS.get(profession, str(profession))
@@ -153,9 +170,16 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
     text = f"Train {name} to {cap} at any {rank} {PERSON.get(profession, name)} in a capital"
     text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")."
     notes = info.notes
-    tips = [notes.cities[z] for z in dict.fromkeys(t.zone for t, _flag in examples)
-            if notes and z in notes.cities and profession in notes.city_professions.get(z, {profession})]
-    return " ".join([text] + tips)
+    said = set() if said is None else said
+    parts = [text]
+    for z in dict.fromkeys(t.zone for t, _flag in examples):
+        if notes and z in notes.cities:
+            parts.append(notes.cities[z])
+        apart = _apart(info, z, planned) if z not in said else ""
+        if apart:
+            parts.append(apart)
+            said.add(z)
+    return " ".join(parts)
 
 
 def add_note(text: str, note: str) -> str:

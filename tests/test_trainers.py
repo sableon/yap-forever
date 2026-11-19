@@ -748,16 +748,7 @@ class CityTipTests(unittest.TestCase):
         self.assertEqual(got, "Train Tailoring to 75 at any Journeyman Tailor in a capital "
                               "(for example Olla Stitchwell, Stormwind City). A tip.")
 
-    def test_a_tip_for_some_professions_shows_only_on_their_rows(self):
-        notes = Notes({}, {1519: "A tip."}, {1519: frozenset({TAILOR})})
-        info = trainer_text.TrainerInfo("alliance", self.data, notes)
-        self.assertTrue(trainer_text.city_row(info, TAILOR, 75).endswith("Stormwind City). A tip."))
-        self.assertNotIn("A tip", trainer_text.city_row(trainer_text.TrainerInfo("horde", self.data, notes), BS, 150))
-        ts = [Trainer(1, "Smith", BS, "Expert", "A", 1519, (1, 1), True)]
-        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City"})
-        self.assertNotIn("A tip", trainer_text.city_row(trainer_text.TrainerInfo("alliance", data, notes), BS, 150))
-
-    def test_a_tip_without_professions_shows_on_every_profession(self):
+    def test_a_tip_shows_on_every_profession(self):
         self.assertIn("A tip.", self.row({1519: "A tip."}, profession=TAILOR, cap=75))
 
     def test_a_city_without_a_tip_is_unchanged(self):
@@ -794,9 +785,86 @@ class CityTipTests(unittest.TestCase):
                          "(for example Grom Anvilhand, Orgrimmar).")
 
 
+ENG = 202
+STORMWIND_GROUPS = (frozenset({TAILOR, ALCH, ENCH}), frozenset({BS, ENG}), frozenset({LW}))
+
+
+class CityGroupTests(unittest.TestCase):
+    """"In <city>, the <A> and <B> trainers are in different parts of the city." once per city."""
+
+    SAID = "In Stormwind City, the Alchemy and Engineering trainers are in different parts of the city."
+
+    @staticmethod
+    def data(*profs, zone=1519):
+        ts = [Trainer(i, f"Trainer {i}", p, "Expert", "A", zone, (1, 1), True) for i, p in enumerate(profs, 1)]
+        return trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge", 1657: "Darnassus"})
+
+    def row(self, profession, planned, data=None, said=None, groups=None, tips=None, zone=1519):
+        notes = Notes({}, tips or {}, {1519: STORMWIND_GROUPS} if groups is None else groups)
+        info = trainer_text.TrainerInfo("alliance", data or self.data(ALCH, ENG, TAILOR, ENCH, BS, LW, zone=zone), notes)
+        return trainer_text.city_row(info, profession, 150, planned, said)
+
+    def test_two_planned_professions_in_different_groups_get_the_sentence(self):
+        got = self.row(ALCH, (ALCH, ENG))
+        self.assertEqual(got, "Train Alchemy to 150 at any Expert Alchemist in a capital "
+                              "(for example Trainer 1, Stormwind City). " + self.SAID)
+
+    def test_either_professions_row_says_it_in_planned_order(self):
+        got = self.row(ENG, (ALCH, ENG))
+        self.assertTrue(got.endswith(" " + self.SAID), got)
+        got = self.row(ENG, (ENG, ALCH))
+        self.assertTrue(got.endswith("the Engineering and Alchemy trainers are in different parts of the city."), got)
+
+    def test_the_same_group_says_nothing(self):
+        self.assertNotIn("different parts", self.row(TAILOR, (TAILOR, ALCH)))
+        self.assertNotIn("different parts", self.row(BS, (ENG, BS)))
+
+    def test_a_single_planned_profession_says_nothing(self):
+        self.assertNotIn("different parts", self.row(ALCH, (ALCH,)))
+        self.assertNotIn("different parts", self.row(ALCH, ()))
+
+    def test_a_profession_missing_from_the_groups_says_nothing(self):
+        groups = {1519: (frozenset({ALCH}), frozenset({BS}))}
+        self.assertNotIn("different parts", self.row(ALCH, (ALCH, ENG), groups=groups))
+        self.assertNotIn("different parts", self.row(ENG, (ALCH, ENG), groups=groups))
+
+    def test_a_city_without_groups_says_nothing(self):
+        self.assertNotIn("different parts", self.row(ALCH, (ALCH, ENG), groups={}))
+
+    def test_a_city_the_row_does_not_name_says_nothing(self):
+        data = self.data(ALCH, ENG, zone=1537)  # Ironforge trainers; the groups are Stormwind's
+        self.assertNotIn("different parts", self.row(ALCH, (ALCH, ENG), data=data))
+
+    def test_the_sentence_follows_the_cities_tip(self):
+        got = self.row(ALCH, (ALCH, ENG), tips={1519: "A tip."})
+        self.assertTrue(got.endswith("Stormwind City). A tip. " + self.SAID), got)
+
+    def test_said_once_per_city(self):
+        said = set()
+        first = self.row(ALCH, (ALCH, ENG), said=said)
+        second = self.row(ENG, (ALCH, ENG), said=said)
+        self.assertIn("different parts", first)
+        self.assertNotIn("different parts", second)
+        self.assertEqual(said, {1519})
+        # a city is marked only when its sentence is said
+        said = set()
+        self.row(TAILOR, (TAILOR, ALCH), said=said)
+        self.assertEqual(said, set())
+
+    def test_two_cities_each_get_their_sentence(self):
+        ts = [Trainer(1, "Smith 1", BS, "Expert", "A", 1519, (1, 1), True),
+              Trainer(2, "Smith 2", BS, "Expert", "A", 1537, (1, 1), True)]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge"})
+        groups = {1519: (frozenset({BS}), frozenset({ALCH})), 1537: (frozenset({ALCH}), frozenset({BS}))}
+        got = self.row(BS, (BS, ALCH), data=data, groups=groups)
+        self.assertIn("In Stormwind City, the Blacksmithing and Alchemy trainers are in different parts of the city. "
+                      "In Ironforge, the Blacksmithing and Alchemy trainers are in different parts of the city.", got)
+
+
 class ShippedNotesTests(unittest.TestCase):
-    def test_every_city_tip_is_for_a_capital(self):
-        for zone in trainer_notes.load_notes().cities:
+    def test_every_city_tip_and_group_is_for_a_capital(self):
+        notes = trainer_notes.load_notes()
+        for zone in [*notes.cities, *notes.city_groups]:
             self.assertIn(zone, trainers.CAPITALS["alliance"] + trainers.CAPITALS["horde"])
 
 
@@ -866,7 +934,8 @@ class LoadInfoTests(unittest.TestCase):
 
     def test_shipped_notes_with_a_wrongly_typed_list_are_a_note_not_a_traceback(self):
         bad = ('[trainers.1]\nnearby = [["bank"]]\n', '[trainers.1]\nnearby = [{}]\n',
-               '[cities.1519]\ntip = "t"\nprofessions = [["alchemy"]]\n')
+               '[cities.1519]\ntip = "t"\ngroups = [[["alchemy"]]]\n',
+               '[cities.1519]\ngroups = [["alchemy"], ["alchemy"]]\n')
         for text in bad:
             with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as static, \
                     unittest.mock.patch.object(gamedata, "fetch_all"), \

@@ -11,7 +11,7 @@ from yap_forever.config import PROFESSION_IDS, STATIC_DIR
 
 MAX_LEVEL = 60
 _TRAINER_KEYS = {"reach_level", "flight_path", "note", "group_level", "solo_level", "nearby"}
-_CITY_KEYS = {"tip", "professions"}
+_CITY_KEYS = {"tip", "groups"}
 SERVICES = ("bank", "auction", "mail")  # what `nearby` may name
 _FILE = "trainer_notes.toml"
 
@@ -30,7 +30,8 @@ class TrainerNote:
 class Notes:
     trainers: dict[int, TrainerNote]  # by NPC ID
     cities: dict[int, str]  # tips by the capital's AreaTable zone ID
-    city_professions: dict[int, frozenset[int]] = field(default_factory=dict)  # skill lines a tip is for; none listed: all
+    # by zone ID: the skill lines whose trainers are close together, one set per group of the city
+    city_groups: dict[int, tuple[frozenset[int], ...]] = field(default_factory=dict)
 
 
 def _bad(why: str) -> ValueError:
@@ -79,6 +80,26 @@ def _trainer(npc: int, table: object) -> TrainerNote:
     return TrainerNote(reach, flight, note, group, solo, tuple(nearby))
 
 
+def _groups(where: str, value: object) -> tuple[frozenset[int], ...]:
+    """A city's groups: lists of profession names, each name once in all, trainers of one group close together."""
+    names = ", ".join(PROFESSION_IDS)
+    if not isinstance(value, list) or not value:
+        raise _bad(f"{where} must be a list of lists of profession names ({names}), not {value!r}")
+    seen: set[str] = set()
+    out = []
+    for group in value:
+        if not isinstance(group, list) or not group:
+            raise _bad(f"{where} must hold non-empty lists of profession names ({names}), not {group!r}")
+        for n in group:
+            if not isinstance(n, str) or n not in PROFESSION_IDS:
+                raise _bad(f"{where} has {n!r}, which is not a profession name ({names})")
+            if n in seen:
+                raise _bad(f"{where} names {n} more than once")
+            seen.add(n)
+        out.append(frozenset(PROFESSION_IDS[n] for n in group))
+    return tuple(out)
+
+
 def load_notes(path: Path | None = None) -> Notes:
     """The notes from the shipped file (or `path`); ValueError with a message when it is not usable."""
     path = Path(path) if path is not None else STATIC_DIR / _FILE
@@ -101,23 +122,20 @@ def load_notes(path: Path | None = None) -> Notes:
     if not isinstance(cities, dict):
         raise _bad("cities must be a table of <zone ID> = \"tip\" lines")
     out_t = {_id(k, "trainers"): _trainer(_id(k, "trainers"), v) for k, v in trainers.items()}
-    out_c, out_p = {}, {}
+    out_c, out_g = {}, {}
     for k, v in cities.items():
         zone, where = _id(k, "cities"), f"cities.{k}"
         table = v if isinstance(v, dict) else {"tip": v}
         unknown = sorted(set(table) - _CITY_KEYS)
         if unknown:
             raise _bad(f"{where} has unknown key(s) {', '.join(unknown)}; known: {', '.join(sorted(_CITY_KEYS))}")
-        tip = table.get("tip")
-        if not isinstance(tip, str) or not tip.strip():
-            raise _bad(f"{where} must be a non-empty sentence (or a table with a non-empty tip), not {tip!r}")
-        out_c[zone] = tip
-        if "professions" in table:
-            names = table["professions"]
-            if (not isinstance(names, list) or not names
-                    or not all(isinstance(n, str) and n in PROFESSION_IDS for n in names)
-                    or len(set(names)) != len(names)):
-                raise _bad(f"{where} professions must be a list of different names from "
-                           f"{', '.join(PROFESSION_IDS)}, not {names!r}")
-            out_p[zone] = frozenset(PROFESSION_IDS[n] for n in names)
-    return Notes(out_t, out_c, out_p)
+        if "tip" not in table and "groups" not in table:
+            raise _bad(f"{where} must be a non-empty sentence (or a table with a tip or groups)")
+        if "tip" in table:
+            tip = table["tip"]
+            if not isinstance(tip, str) or not tip.strip():
+                raise _bad(f"{where} must be a non-empty sentence (or a table with a non-empty tip), not {tip!r}")
+            out_c[zone] = tip
+        if "groups" in table:
+            out_g[zone] = _groups(f"{where} groups", table["groups"])
+    return Notes(out_t, out_c, out_g)
