@@ -265,3 +265,82 @@ class WholeCraftGuideTests(unittest.TestCase):
         self.assertIn("134× LW basic — 268 Copper Bar", text)
         keep = text[text.index("## Keep while levelling"):text.index("## Route")]
         self.assertIn("268", keep)
+
+
+class TalentLineTests(unittest.TestCase):
+    OVERTIME_RELATIVE = ("Working Overtime 5/5, read as +20% of the base chance (unconfirmed in game; "
+                         'set working_overtime_reading = "points" for +20 percentage points).')
+    OVERTIME_POINTS = "Working Overtime 5/5, read as +20 percentage points (unconfirmed in game)."
+
+    def render(self, character=None, reading="relative", skills=None, caps=None):
+        rs = base_recipes()
+        st = toy.stock(skills=skills)
+        caps = caps or {BS: 40, ENCH: 40}
+        gd = toy.gamedata(rs)
+        from yap_forever.costmodel import Valuer
+        from yap_forever.planner import plan
+        overtime = character.working_overtime if character else 0
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps=caps, overtime=overtime,
+                 reading=reading)
+        return render_guide(p, gd, toy.market(BARS), st, caps=caps, character=character, reading=reading)
+
+    def test_no_talents_no_lines(self):
+        from yap_forever.profile import Character
+        for c in (None, Character("A B"), Character("A B", working_overtime=0)):
+            text = self.render(c)
+            self.assertNotIn("Working Overtime", text)
+            self.assertNotIn("Dedicated Study", text)
+
+    def test_overtime_line_both_readings(self):
+        from yap_forever.profile import Character
+        c = Character("A B", working_overtime=5)
+        self.assertIn(self.OVERTIME_RELATIVE, self.render(c, "relative"))
+        text = self.render(c, "points")
+        self.assertIn(self.OVERTIME_POINTS, text)
+        self.assertNotIn("+20%", text)
+
+    def test_overtime_line_names_the_rank(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", working_overtime=2))
+        self.assertIn("Working Overtime 2/5, read as +8% of the base chance", text)
+
+    def test_overtime_line_is_in_the_header_before_the_route(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", working_overtime=5))
+        self.assertLess(text.index("Working Overtime 5/5"), text.index("## Keep while levelling"))
+
+    def test_dedicated_study_names_the_lowest_profession(self):
+        from yap_forever.profile import Character
+        # Enchanting starts lower (skill 10 vs 30), so its remaining points count: 40 - 10 = 30.
+        text = self.render(Character("A B", dedicated_study=True), skills={BS: 30, ENCH: 10})
+        self.assertIn("Dedicated Study: one free point a day goes to your lowest profession; "
+                      "30 days would cover the last 30 points of Enchanting.", text)
+        self.assertNotIn("Working Overtime", text)
+
+    def test_dedicated_study_tie_takes_the_first_profession_of_the_route(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", dedicated_study=True), skills={BS: 10, ENCH: 10})
+        self.assertIn("last 30 points of Blacksmithing.", text)
+
+    def test_dedicated_study_single_profession(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", dedicated_study=True), caps={ENCH: 25})
+        self.assertIn("24 days would cover the last 24 points of Enchanting.", text)
+
+    def test_dedicated_study_one_point_is_singular(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", dedicated_study=True), caps={ENCH: 2})
+        self.assertIn("Dedicated Study: one free point a day goes to your lowest profession; "
+                      "1 day would cover the last point of Enchanting.", text)
+        self.assertNotIn("1 point", text)
+
+    def test_dedicated_study_nothing_to_level(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", dedicated_study=True), skills={BS: 40, ENCH: 40})
+        self.assertIn("Dedicated Study: one free point a day goes to your lowest profession; "
+                      "Blacksmithing needs no points on this route.", text)
+
+    def test_dedicated_study_off_has_no_line(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", dedicated_study=False), skills={BS: 30, ENCH: 10})
+        self.assertNotIn("Dedicated Study", text)
