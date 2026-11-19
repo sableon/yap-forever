@@ -12,7 +12,8 @@
 #
 # [cities] holds tips for a capital, keyed by the AreaTable zone ID: `1657 = "tip"`, or a table
 # `[cities.1519]` with `tip` and `professions` (names like "alchemy"; the tip then shows only on
-# rows of those professions). A tip is said once on a city row and never changes the route. Specialisation trainers are left out on purpose.
+# rows of those professions). A tip is said once on a city row and never changes the route.
+# Specialisation trainers are left out on purpose.
 
 [trainers.7948]  # Kylanna Windwhisper, Master Alchemy, Alliance, Feralas
 reach_level = 35

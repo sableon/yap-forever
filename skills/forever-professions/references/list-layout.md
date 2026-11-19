@@ -81,10 +81,11 @@ Write it for that.
   first trip is harder)` before the full stop), then the trainer's one-sentence tip. An instance
   trainer reads `Go with a group from about level G, solo from about level S.` (` (you're level L)`
   below G), then the tip. A trainer without notes reads as before. A city row (`Train ... in a
-  capital (for example ...)`) adds the tip of each capital it names, once; a city tip may be limited to some professions (the Stormwind tip is for
-  Alchemy and Engineering rows only). A trainer's notes may also list services known from play to be
-  near (`nearby`: bank, auction, mail); they count as near in the "Nearby" line even when the data's
-  radius finds none, so "nothing within a short walk" is not said for them. Tips never change the route.
+  capital (for example ...)`) adds the tip of each capital it names, once; a city tip may be limited
+  to some professions (the Stormwind tip is for Alchemy and Engineering rows only). A trainer's notes
+  may also list services known from play to be near (`nearby`: bank, auction, mail); they count as
+  near in the "Nearby" line even when the data's radius finds none, so "nothing within a short walk"
+  is not said for them. Tips never change the route.
   Name only trainers whose title names the rank; if there is none, name the odd-titled one with
   "(title unconfirmed in the data)". When the data has no trainer of that rank for the faction, say so
   in a sentence; never leave a name or a place empty.

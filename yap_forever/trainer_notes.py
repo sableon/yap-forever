@@ -67,8 +67,8 @@ def _trainer(npc: int, table: object) -> TrainerNote:
     if not isinstance(note, str) or ("note" in table and not note.strip()):
         raise _bad(f"{where} note must be a non-empty sentence, not {note!r}")
     nearby = table.get("nearby", [])
-    if (not isinstance(nearby, list) or ("nearby" in table and not nearby) or len(set(nearby)) != len(nearby)
-            or any(n not in SERVICES for n in nearby)):
+    if (not isinstance(nearby, list) or ("nearby" in table and not nearby)
+            or not all(isinstance(n, str) and n in SERVICES for n in nearby) or len(set(nearby)) != len(nearby)):
         raise _bad(f"{where} nearby must be a list of different services from {', '.join(SERVICES)}, not {nearby!r}")
     if (group is None) != (solo is None):
         raise _bad(f"{where} needs group_level and solo_level together")
@@ -114,8 +114,9 @@ def load_notes(path: Path | None = None) -> Notes:
         out_c[zone] = tip
         if "professions" in table:
             names = table["professions"]
-            if (not isinstance(names, list) or not names or len(set(names)) != len(names)
-                    or any(n not in PROFESSION_IDS for n in names)):
+            if (not isinstance(names, list) or not names
+                    or not all(isinstance(n, str) and n in PROFESSION_IDS for n in names)
+                    or len(set(names)) != len(names)):
                 raise _bad(f"{where} professions must be a list of different names from "
                            f"{', '.join(PROFESSION_IDS)}, not {names!r}")
             out_p[zone] = frozenset(PROFESSION_IDS[n] for n in names)

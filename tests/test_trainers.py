@@ -823,6 +823,15 @@ class RealDataTests(unittest.TestCase):
         info = trainer_text.TrainerInfo("alliance", self.data)
         self.assertIn("neutral AH (its own prices and a higher deposit)", trainer_text.remote_stop(info, BS, 300).text)
 
+    def test_the_rank_fill_changes_only_tailoring_master_for_the_planned_professions(self):
+        d = REAL
+        raw = gamedata.parse(gamedata.extract_table((d / "Trainer.lua").read_text(encoding="utf-8"), "TrainerRanks"))
+        before = {int(k): [gamedata.Rank(*map(int, x)) for x in v] for k, v in raw.items()}
+        after = gamedata.fill_rank_levels(before)
+        changed = [(prof, b.cap) for prof in gamedata.PROFESSIONS for b, a in zip(before[prof], after[prof])
+                   if a != b]
+        self.assertEqual(changed, [(TAILOR, 300)])
+
     def test_pinned_tailoring_master_rank_has_a_level(self):
         gd = gamedata.load_gamedata(REAL, professions=[TAILOR])
         self.assertEqual(gd.trainer_ranks[TAILOR][-1].cap, 300)
@@ -854,6 +863,19 @@ class LoadInfoTests(unittest.TestCase):
         self.assertIsNone(info.notes)
         self.assertTrue(info.data.trainers)
         self.assertEqual(note, "Trainer notes are left out of this guide: trainers.1 is wrong.")
+
+    def test_shipped_notes_with_a_wrongly_typed_list_are_a_note_not_a_traceback(self):
+        bad = ('[trainers.1]\nnearby = [["bank"]]\n', '[trainers.1]\nnearby = [{}]\n',
+               '[cities.1519]\ntip = "t"\nprofessions = [["alchemy"]]\n')
+        for text in bad:
+            with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as static, \
+                    unittest.mock.patch.object(gamedata, "fetch_all"), \
+                    unittest.mock.patch.object(trainer_notes, "STATIC_DIR", Path(static)):
+                (Path(static) / "trainer_notes.toml").write_text(text, encoding="utf-8")
+                info, note = trainer_text.load_info(self.folder(d), "horde")
+            self.assertIsNone(info.notes, text)
+            self.assertTrue(info.data.trainers)
+            self.assertTrue(note.startswith("Trainer notes are left out of this guide: "), text)
 
     def test_no_faction_downloads_nothing(self):
         with unittest.mock.patch.object(gamedata, "fetch_all") as fetch:

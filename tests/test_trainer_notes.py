@@ -106,12 +106,12 @@ professions = ["alchemy", "engineering"]
         self.assertIn("NPC", message("[trainers.0]\nreach_level = 3\n"))
 
     def test_nearby_values_are_checked(self):
-        for bad in ('"mail"', '["post"]', '["mail", "mail"]', "[1]", "[]"):
+        for bad in ('"mail"', '["post"]', '["mail", "mail"]', "[1]", "[]", '[["bank"]]', "[{}]"):
             self.assertIn("nearby", message(f"[trainers.1]\nnearby = {bad}\n"), bad)
         load('[trainers.1]\nnearby = ["bank"]\n')
 
     def test_city_professions_are_checked(self):
-        for bad in ('"alchemy"', '["mining"]', "[]", "[171]", '["alchemy", "alchemy"]'):
+        for bad in ('"alchemy"', '["mining"]', "[]", "[171]", '["alchemy", "alchemy"]', '[["alchemy"]]', "[{}]"):
             self.assertIn("professions", message(f'[cities.1519]\ntip = "t"\nprofessions = {bad}\n'), bad)
         self.assertIn("tip", message('[cities.1519]\nprofessions = ["alchemy"]\n'))
         self.assertIn("unknown", message('[cities.1519]\ntip = "t"\nextra = 1\n'))
