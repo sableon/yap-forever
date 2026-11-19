@@ -238,14 +238,15 @@ class NearbyTests(unittest.TestCase):
         return trainers.nearby(self.by_id[npc], self.data.npc_rows, self.data.mailboxes, radius)
 
     def test_banker_auctioneer_and_mailbox_inside_the_radius(self):
-        self.assertEqual(self.near(90001), Services(bank=True, auction=True, mail=True))
+        # the only auctioneer in that zone is friendly to both factions: a neutral one
+        self.assertEqual(self.near(90001), Services(bank=True, auction=True, mail=True, neutral_auction=True))
 
     def test_outside_the_radius(self):
         # the banker at (31, 71) is ~1.41 away, the auctioneer at (29, 69.5) ~1.12, the mailbox ~0.71
         self.assertEqual(self.near(90001, radius=1.0), Services(False, False, True))
         self.assertEqual(self.near(90001, radius=0.5), Services(False, False, False))
-        self.assertEqual(self.near(90001, radius=1.2), Services(False, True, True))
-        self.assertEqual(self.near(90001, radius=1.5), Services(True, True, True))
+        self.assertEqual(self.near(90001, radius=1.2), Services(False, True, True, True))
+        self.assertEqual(self.near(90001, radius=1.5), Services(True, True, True, True))
 
     def test_only_the_same_zone_counts(self):
         # the Stormwind trainer sees the Stormwind banker at (61, 41.5), not the auctioneer at (30, 70)
@@ -273,6 +274,95 @@ class NearbyTests(unittest.TestCase):
 
     def test_radius_is_a_named_constant(self):
         self.assertGreater(trainers.NEARBY_RADIUS, 0)
+
+
+def _near(trainer_at, *service_rows, mailboxes=()):
+    filler = "[99] = {'Peddler',1,1,1,1,0,{[12]={{1,1}}},nil,12,nil,nil,12,\"A\",\"Vendor\",4},"  # an empty table is not parsed
+    rows = trainers.parse_npc_rows(_npc_text(filler, *service_rows))
+    t = Trainer(1, "T", TAILOR, "Master", "A", 12, trainer_at, True)
+    return t, rows, list(mailboxes)
+
+
+def _auctioneer(npc, sides, x, y, zone=12):
+    return (f"[{npc}] = {{'Auc{npc}',1,1,1,1,0,{{[{zone}]={{{{{x},{y}}}}}}},nil,{zone},nil,nil,12,\"{sides}\","
+            "\"Auctioneer\",4097},")
+
+
+class NeutralAuctionTests(unittest.TestCase):
+    def near(self, *rows):
+        t, npcs, boxes = _near((10, 10), *rows)
+        return trainers.nearby(t, npcs, boxes, 5.0)
+
+    def test_an_auctioneer_for_both_factions_is_neutral(self):
+        got = self.near(_auctioneer(2, "AH", 11, 10))
+        self.assertEqual((got.auction, got.neutral_auction), (True, True))
+
+    def test_a_faction_auctioneer_is_not(self):
+        for sides in ("A", "H"):
+            got = self.near(_auctioneer(2, sides, 11, 10))
+            self.assertEqual((got.auction, got.neutral_auction), (True, False), sides)
+
+    def test_a_faction_auctioneer_next_to_a_neutral_one_makes_it_a_plain_auction_house(self):
+        got = self.near(_auctioneer(2, "AH", 11, 10), _auctioneer(3, "A", 12, 10))
+        self.assertEqual((got.auction, got.neutral_auction), (True, False))
+
+    def test_a_neutral_auctioneer_out_of_range_does_not_count(self):
+        got = self.near(_auctioneer(2, "A", 11, 10), _auctioneer(3, "AH", 40, 40))
+        self.assertEqual((got.auction, got.neutral_auction), (True, False))
+
+    def test_no_auction_house_is_not_neutral(self):
+        self.assertFalse(self.near().neutral_auction)
+
+    def test_an_empty_friendly_field_is_for_both(self):  # the loader reads a missing field as "AH" too
+        row = "[2] = {'Auc',1,1,1,1,0,{[12]={{11,10}}},nil,12,nil,nil,nil,nil,\"Auctioneer\",4097},"
+        self.assertTrue(self.near(row).neutral_auction)
+
+    def test_booty_bay_style_fixture_trainer_has_a_neutral_auction_house(self):
+        data = fixture_data()
+        t = next(t for t in data.trainers if t.npc_id == 90001)
+        self.assertTrue(trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS).neutral_auction)
+
+
+class ClosestServiceTests(unittest.TestCase):
+    def closest(self, at, *rows, mailboxes=(), zone=12):
+        t, npcs, boxes = _near(at, *rows, mailboxes=mailboxes)
+        t = Trainer(1, "T", TAILOR, "Master", "A", zone, at, True)
+        return trainers.closest_service(t, npcs, boxes)
+
+    BANK = "[5] = {'Bank',1,1,1,1,0,{[12]={{%s,%s}}},nil,12,nil,nil,12,\"A\",\"Banker\",256},"
+
+    def test_the_nearest_of_the_three(self):
+        self.assertEqual(self.closest((10, 10), self.BANK % (30, 10), mailboxes=[(12, 10, 60)]),
+                         trainers.Closest("bank", False))
+        self.assertEqual(self.closest((10, 10), self.BANK % (30, 10), mailboxes=[(12, 10, 20)]),
+                         trainers.Closest("mailbox", False))
+        self.assertEqual(self.closest((10, 10), self.BANK % (60, 10), _auctioneer(2, "A", 10, 40)),
+                         trainers.Closest("auction", False))
+
+    def test_a_neutral_auction_house_says_so(self):
+        self.assertEqual(self.closest((10, 10), _auctioneer(2, "AH", 10, 40)), trainers.Closest("auction", True))
+
+    def test_the_closest_auctioneer_decides_neutral(self):
+        got = self.closest((10, 10), _auctioneer(2, "A", 10, 30), _auctioneer(3, "AH", 10, 50))
+        self.assertEqual(got, trainers.Closest("auction", False))
+
+    def test_only_the_same_zone_counts(self):
+        self.assertIsNone(self.closest((10, 10), mailboxes=[(13, 11, 11)]))
+        self.assertIsNone(self.closest((10, 10), _auctioneer(2, "A", 11, 11, zone=13)))
+
+    def test_nothing_in_the_zone(self):
+        self.assertIsNone(self.closest((10, 10)))
+
+    def test_unplaced_services_do_not_count(self):
+        self.assertIsNone(self.closest((10, 10), self.BANK % (-1, -1)))
+
+    def test_a_trainer_without_coordinates_has_none(self):
+        t = Trainer(1, "T", TAILOR, "Master", "A", 12, None, True)
+        self.assertIsNone(trainers.closest_service(t, {}, [(12, 1, 1)]))
+
+    def test_a_tie_goes_to_the_mailbox_then_the_bank(self):
+        self.assertEqual(self.closest((10, 10), self.BANK % (10, 30), mailboxes=[(12, 10, 30)]).kind, "mailbox")
+        self.assertEqual(self.closest((10, 10), self.BANK % (10, 30), _auctioneer(2, "A", 10, 30)).kind, "bank")
 
 
 class ZoneNameTests(unittest.TestCase):

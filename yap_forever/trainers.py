@@ -63,6 +63,16 @@ class Services:
     bank: bool
     auction: bool
     mail: bool
+    # The auction house within reach is friendly to both factions (Booty Bay, Gadgetzan, Everlook):
+    # it has its own prices and a higher deposit than the faction one the planner prices with.
+    neutral_auction: bool = False
+
+
+@dataclass(frozen=True)
+class Closest:
+    """The service nearest to a trainer in the same zone, when none is within a short walk."""
+    kind: str  # "mailbox", "bank" or "auction"
+    neutral: bool = False  # for an auction house: friendly to both factions
 
 
 @dataclass
@@ -194,11 +204,18 @@ def load_mailboxes(object_lua: str) -> list[tuple[int, float, float]]:
             for p in _spawn_points(r[3])]
 
 
+def _neutral(row: list) -> bool:
+    """An auctioneer friendly to both factions (a missing field reads as both, as in load_trainers)."""
+    sides = row[_FRIENDLY] or "AH"
+    return isinstance(sides, str) and "A" in sides and "H" in sides
+
+
 def nearby(trainer: Trainer, npc_lua_rows: dict[int, list], mailboxes: list[tuple[int, float, float]],
            radius: float) -> Services:
     """A bank, an auction house and a mailbox within `radius` map units of the trainer, same zone.
 
-    A trainer inside an instance has no coordinates, so nothing is near it.
+    A trainer inside an instance has no coordinates, so nothing is near it. The auction house is
+    neutral when every auctioneer within the radius is friendly to both factions.
     """
     if trainer.coords is None:
         return Services(False, False, False)
@@ -207,12 +224,35 @@ def nearby(trainer: Trainer, npc_lua_rows: dict[int, list], mailboxes: list[tupl
     def close(points) -> bool:
         return any((px - x) ** 2 + (py - y) ** 2 <= radius ** 2 for _, px, py in points)
 
-    def npcs(flag: int) -> bool:
-        return close(p for r in npc_lua_rows.values() if _flags(r) & flag
-                     for p in _spawn_points(r[_SPAWNS], trainer.zone))
+    def npcs(flag: int) -> list[list]:
+        return [r for r in npc_lua_rows.values() if _flags(r) & flag and close(_spawn_points(r[_SPAWNS], trainer.zone))]
 
-    return Services(bank=npcs(BANKER_FLAG), auction=npcs(AUCTIONEER_FLAG),
-                    mail=close(m for m in mailboxes if m[0] == trainer.zone))
+    auctioneers = npcs(AUCTIONEER_FLAG)
+    return Services(bank=bool(npcs(BANKER_FLAG)), auction=bool(auctioneers),
+                    mail=close(m for m in mailboxes if m[0] == trainer.zone),
+                    neutral_auction=bool(auctioneers) and all(_neutral(r) for r in auctioneers))
+
+
+def closest_service(trainer: Trainer, npc_lua_rows: dict[int, list],
+                    mailboxes: list[tuple[int, float, float]]) -> Closest | None:
+    """The bank, auction house or mailbox nearest to the trainer in the same zone, however far;
+    None when the zone has none (or the trainer has no coordinates). A tie goes to the mailbox,
+    then the bank."""
+    if trainer.coords is None:
+        return None
+    x, y = trainer.coords
+
+    def dist(points) -> float:
+        return min(((px - x) ** 2 + (py - y) ** 2 for _, px, py in points), default=float("inf"))
+
+    found = [(dist(m for m in mailboxes if m[0] == trainer.zone), 0, Closest("mailbox"))]
+    for order, kind, flag in ((1, "bank", BANKER_FLAG), (2, "auction", AUCTIONEER_FLAG)):
+        for r in npc_lua_rows.values():
+            if _flags(r) & flag:
+                found.append((dist(_spawn_points(r[_SPAWNS], trainer.zone)), order,
+                              Closest(kind, _neutral(r) if kind == "auction" else False)))
+    d, _order, best = min(found, key=lambda f: (f[0], f[1]))
+    return best if d != float("inf") else None
 
 
 def load_areas(path: Path) -> tuple[dict[int, str], dict[int, int]]:
