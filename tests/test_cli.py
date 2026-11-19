@@ -146,6 +146,28 @@ class CliTests(unittest.TestCase):
     def report_names(self):
         return sorted(f.name for f in self.paths.reports.glob("*.md"))
 
+    def test_plan_refuses_a_character_on_another_ruleset_or_faction(self):
+        self.ready_home()
+        for line, where in (("ruleset = 3\n", "ruleset 3"), ('faction = "horde"\n', "horde")):
+            with self.subTest(line=line):
+                text = self.paths.profile.read_text(encoding="utf-8")
+                self.paths.profile.write_text(text + line, encoding="utf-8")
+                code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"],
+                                self.paths)
+                self.assertEqual(code, 1)
+                self.assertIn("no prices yet", out)
+                self.assertIn("isn't supported yet", out)
+                self.assertIn(where, out)
+                self.assertEqual(self.report_names(), [])
+                self.paths.profile.write_text(text, encoding="utf-8")
+
+    def test_plan_for_the_profiles_own_group_is_not_refused(self):
+        self.ready_home()
+        text = self.paths.profile.read_text(encoding="utf-8")
+        self.paths.profile.write_text(text + 'ruleset = 2\nfaction = "alliance"\n', encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0, out)
+
     def test_plan_reports_carry_the_characters_name(self):
         from datetime import date
         self.ready_home()

@@ -206,6 +206,12 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
     if character not in prof.characters:
         print(f"no character {character!r} in {paths.profile}; known: {', '.join(prof.characters) or 'none'}")
         return 1
+    group = prof.group_of(character)
+    if group != (prof.ruleset, prof.faction):
+        print(f"{character} plays on ruleset {group[0]}, {group[1]}, but your saved prices are for ruleset "
+              f"{prof.ruleset}, {prof.faction}: there are no prices yet for that ruleset and faction, "
+              "and planning it isn't supported yet")
+        return 1
     if not paths.prices.exists():
         print(f"no prices yet: run {command_hint('prices')}")
         return 1
