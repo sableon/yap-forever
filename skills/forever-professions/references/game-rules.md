@@ -47,6 +47,8 @@ say so.
 - Enchanting wands can't be disenchanted.
 - Disenchanting "compresses" green crafts into stackable dust, essences and shards, which saves
   bag space on long routes.
+- Essences pack 3 lesser into 1 greater of the same kind and back (Magic, Astral, Mystic, Nether,
+  Eternal), so carried essences take fewer bag slots.
 
 ## Legacy talents
 

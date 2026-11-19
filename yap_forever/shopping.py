@@ -7,6 +7,7 @@ crafts' worth: nothing is left over that is too little for another craft.
 import dataclasses
 import math
 
+from yap_forever.disenchant import ESSENCE_PAIRS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
 
@@ -15,11 +16,51 @@ BRING_POINTS = 25  # without a bag count, bring enough for this many points (or 
 
 
 def stacks(gd, items) -> dict[int, int]:
+    items = set(items) | {ESSENCE_PAIRS[i] for i in items if i in ESSENCE_PAIRS}  # packed essences
     return {i: (gd.items[i].stack if i in gd.items else 1) for i in items}
 
 
 def slots(counts: dict, stack: dict) -> int:
     return sum(math.ceil(q / stack.get(i, 1) - 1e-9) for i, q in counts.items() if q > 1e-9)
+
+
+def pack(counts: dict, stack: dict) -> dict:
+    """What you carry: lesser essences packed 3 -> 1 greater as far as it saves bag slots (packing
+    all of them on a tie); a greater essence the route needs shares the packed stacks."""
+    out = {i: q for i, q in counts.items() if q > 1e-9}
+    for lesser, greater in ESSENCE_PAIRS.items():
+        whole = math.ceil(out.get(lesser, 0) - 1e-6)
+        if whole < 3:
+            continue
+        had = out.get(greater, 0)
+
+        def cost(k):
+            return slots({lesser: whole - 3 * k, greater: had + k}, stack)
+
+        k = min(range(whole // 3 + 1), key=lambda k: (cost(k), -k))
+        if k:
+            out[greater] = had + k
+            out[lesser] = whole - 3 * k
+            if not out[lesser]:
+                del out[lesser]
+    return out
+
+
+def carried_slots(counts: dict, stack: dict) -> int:
+    """Bag slots for carrying `counts`, essences packed."""
+    return slots(pack(counts, stack), stack)
+
+
+def pack_note(gd, counts: dict, stack: dict, unpack: str) -> str:
+    """'to save slots, pack 90 Lesser X into 30 Greater X (3 to 1) and unpack ...', or ''."""
+    packed = pack(counts, stack)
+    parts = []
+    for lesser, greater in ESSENCE_PAIRS.items():
+        k = packed.get(greater, 0) - counts.get(greater, 0)
+        if k > 1e-9:
+            k = round(k)
+            parts.append(f"{3 * k} {gd.name(lesser)} into {k} {gd.name(greater)}")
+    return f"to save slots, pack {', '.join(parts)} (3 to 1) and unpack {unpack}" if parts else ""
 
 
 def batch_size(per_craft: dict, output, stack: dict, free: int) -> int:
@@ -61,7 +102,8 @@ def merged_steps(plan, gd) -> list[tuple]:
                 buffered=sum(p.crafts * step_factor(p) for p in parts),
                 cash=sum(p.cash for p in parts), economic=sum(p.economic for p in parts),
                 materials=_sum(p.materials for p in parts), from_stock=_sum(p.from_stock for p in parts),
-                used_made=_sum(p.used_made for p in parts)), parts)
+                used_made=_sum(p.used_made for p in parts), extra=_sum(p.extra for p in parts),
+                tools_bought=_sum(p.tools_bought for p in parts)), parts)
         else:
             latest[st.profession] = len(out)
             out.append((st, [st]))
@@ -82,9 +124,14 @@ def route_rows(plan, gd) -> list[dict]:
     rows, missing = [], {}  # missing: intermediate -> [count, index of the first row needing it]
     for st, parts in merged:
         r, k = gd.recipes[st.spell_id], step_factor(st)
-        row = {"st": st, "parts": parts, "n": math.ceil(st.crafts * k - 1e-9), "more": 0, "need": {}, "here": {}, "earlier": {}}
-        for i, q in r.reagents.items():
-            d = q * row["n"]
+        row = {"st": st, "parts": parts, "n": math.ceil(st.crafts * k - 1e-9), "more": 0, "need": {}, "here": {},
+               "earlier": {}, "tools": {i: math.ceil(q - 1e-6) for i, q in st.tools_bought.items()}}
+        demand = {i: q * row["n"] for i, q in r.reagents.items()}  # whole crafts, buffered
+        planned = {i: q * st.crafts for i, q in r.reagents.items()}  # what the planner took per craft
+        for i, q in st.extra.items():  # taken once: quest hand-ins, a crafted tool's materials
+            demand[i] = demand.get(i, 0) + math.ceil(q - 1e-6)
+            planned[i] = planned.get(i, 0) + q
+        for i, d in demand.items():
             if i in makes and i in craftable:
                 own = min(d, pool.get(i, 0))
             else:  # disenchanted reagents: the planner's expected count, buffered
@@ -94,7 +141,7 @@ def route_rows(plan, gd) -> list[dict]:
                 if i in pool:
                     pool[i] -= own
             rest = d - own
-            planner_made = q * st.crafts - st.materials.get(i, 0) - st.used_made.get(i, 0)
+            planner_made = planned[i] - st.materials.get(i, 0) - st.used_made.get(i, 0)
             if rest <= 0:
                 continue
             if i in makes and i in craftable and not (st.materials.get(i, 0) > 1e-6 and planner_made <= 0.01):
@@ -103,6 +150,8 @@ def route_rows(plan, gd) -> list[dict]:
                 row["earlier"][i] = row["earlier"].get(i, 0) + rest  # yours: crafted in the batch below
             else:
                 row["need"][i] = row["need"].get(i, 0) + rest
+        for i, q in row["tools"].items():  # bought, never crafted here
+            row["need"][i] = row["need"].get(i, 0) + q
         if r.output:
             pool[r.output[0]] = pool.get(r.output[0], 0) + row["n"] * r.output[1]
         rows.append(row)
@@ -135,7 +184,7 @@ def group_trips(rows, cap: int, stack: dict) -> list[list[dict]]:
         trial = dict(need)
         for i, q in r["need"].items():
             trial[i] = trial.get(i, 0) + q
-        if trips[-1] and slots(trial, stack) > max(cap, slots(need, stack)):  # rows adding no stacks stay
+        if trips[-1] and carried_slots(trial, stack) > max(cap, carried_slots(need, stack)):  # rows adding no stacks stay
             trips.append([])
             trial = dict(r["need"])
         trips[-1].append(r)
@@ -170,30 +219,42 @@ def _split(rows, plan, gd=None, left=None) -> dict[tuple[int, str], int]:
     return out
 
 
-def bring_list(plan, gd, trip, bag_slots: int | None) -> tuple[int, list[tuple[int, int, str]]]:
-    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items)."""
-    rows = [r for r in route_rows(plan, gd)
-            if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill]
+def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None) -> tuple[int, list[tuple[int, int, str]]]:
+    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
+    owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
+    the trip use the bank first, as on the shopping list."""
+    every = route_rows(plan, gd)
+    at = next((k for k, r in enumerate(every)
+               if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
+    rows = [r for r in every[at:] if r["st"].profession == trip.profession]
     if not rows:
         return trip.skill, []
+    left = {i: float(n) for i, n in owned.items()} if owned is not None else _bank(plan)
+    _split(every[:at], plan, gd, left)  # the bank the rows before the trip use
+    later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
+    if later:  # the next rank trip brings its own
+        rows = [r for r in rows if r["st"].skill_to <= min(later)] or rows[:1]
     if bag_slots:
         items = {i for r in rows for i in r["need"]}
         rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items))[0]
     else:
-        later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
-        limit = min([trip.skill + BRING_POINTS] + later)
-        rows = [r for r in rows if r["st"].skill_to <= limit] or rows[:1]
-    split = _split(rows, plan, gd)
+        rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
+    split = _split(rows, plan, gd, left)
     return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
 
 
-def bring_text(plan, gd, trip, bag_slots) -> str:
-    reach, items = bring_list(plan, gd, trip, bag_slots)
+def bring_text(plan, gd, trip, bag_slots, owned=None) -> str:
+    reach, items = bring_list(plan, gd, trip, bag_slots, owned)
     if not items:
         return ""
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
     parts = [f"{n} {gd.name(i)} ({where[src]})" for i, n, src in items]
-    return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer; the town may have "
+    total = _sum({i: n} for i, n, _src in items)
+    stack = stacks(gd, total)
+    n_slots = carried_slots(total, stack)
+    note = pack_note(gd, total, stack, "them at the trainer")
+    return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
+            f"({n_slots} bag slot{'s' if n_slots != 1 else ''}{'; ' + note if note else ''}); the town may have "
             "no auction house, mailbox or bank, so buy and collect before you go.")
 
 
@@ -221,7 +282,7 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
     for (i, src), n in sorted(split.items(), key=lambda x: (x[0][1], gd.name(x[0][0]))):
         if src == "bank":
             continue
-        cost = (gd.vendor_prices.get(i, 0) * n if src == "vendor"
+        cost = ((gd.vendor_prices.get(i) or (gd.items[i].buy_price if i in gd.items else 0)) * n if src == "vendor"
                 else market.buy_cost(i, n) or (market.min_price(i) or 0) * n)
         total += cost
         lines.append(f"| {gd.name(i)} | {n} | {'vendor' if src == 'vendor' else 'AH'} | {gold(cost)} |")
@@ -249,9 +310,12 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
         for r in trip:
             for i, q in r["need"].items():
                 need[i] = need.get(i, 0) + q
+        whole = {i: math.ceil(q - 1e-6) for i, q in need.items()}
+        note = pack_note(gd, whole, stack, "them as you craft")
         lines.append(f"- 📬 **Trip {t}** (skill {first.skill_from}–{last.skill_to}, "
-                     f"{slots({i: math.ceil(q - 1e-6) for i, q in need.items()}, stack)} stacks)."
+                     f"{carried_slots(whole, stack)} stacks)."
                      + (f" From the mail: {', '.join(parts['mail'])}." if parts["mail"] else "")
                      + (f" From a vendor: {', '.join(parts['vendor'])}." if parts["vendor"] else "")
-                     + (f" From the bank: {', '.join(parts['bank'])}." if parts["bank"] else ""))
+                     + (f" From the bank: {', '.join(parts['bank'])}." if parts["bank"] else "")
+                     + (f" {note[0].upper()}{note[1:]}." if note else ""))
     return lines + [""], len(trips)

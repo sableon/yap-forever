@@ -11,6 +11,7 @@ with open(STATIC_DIR / "disenchant.toml", "rb") as _f:
     _DATA = tomllib.load(_f)
 BANDS = _DATA["band"]
 DE_THRESHOLDS: tuple[int, int, int, int] = tuple(_DATA["skill_ups"])
+ESSENCE_PAIRS: dict[int, int] = {int(k): v for k, v in _DATA["essence_pairs"].items()}  # lesser -> greater
 
 
 def _band(item_level: int):

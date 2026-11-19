@@ -220,3 +220,85 @@ class WholeCraftTests(unittest.TestCase):
         self.assertEqual(rows[0]["more"], 2)
         self.assertEqual(rows[0]["need"], {S: 36})
         self.assertEqual(rows[1]["earlier"], {L: 12})
+
+
+E, GE = toy.ESSENCE, toy.GREATER_ESSENCE
+
+
+def essence_gd(stack):
+    gd = toy.gamedata([toy.recipe(1, "Enchant A", 333, {E: 4}), toy.recipe(2, "Enchant B", 333, {GE: 1})])
+    for i in (E, GE):
+        gd.items[i].stack = stack
+    return gd
+
+
+class EssencePackingTests(unittest.TestCase):
+    """Carried essences are packed 3 lesser -> 1 greater when that saves bag slots."""
+
+    def test_pairs_cover_every_tier(self):
+        from yap_forever.disenchant import ESSENCE_PAIRS
+        self.assertEqual(ESSENCE_PAIRS, {10938: 10939, 10998: 11082, 11134: 11135, 11174: 11175, 16202: 16203})
+
+    def test_pack_stack_10(self):
+        from yap_forever.shopping import carried_slots, pack
+        stack = {E: 10, GE: 10}
+        self.assertEqual(pack({E: 92}, stack), {GE: 30, E: 2})  # 10 slots -> 4
+        self.assertEqual(carried_slots({E: 92}, stack), 4)
+
+    def test_pack_stack_20(self):
+        from yap_forever.shopping import carried_slots, pack
+        stack = {E: 20, GE: 20}
+        self.assertEqual(carried_slots({E: 92}, stack), 3)  # 5 slots -> 2 + 1
+        self.assertEqual(sum(pack({E: 92}, stack).get(i, 0) * (3 if i == GE else 1) for i in (E, GE)), 92)
+
+    def test_no_pack_when_it_saves_nothing(self):
+        from yap_forever.shopping import pack
+        self.assertEqual(pack({E: 20}, {E: 20, GE: 20}), {E: 20})  # 1 slot; packed would be 2
+        self.assertEqual(pack({E: 2}, {E: 10, GE: 10}), {E: 2})
+
+    def test_greater_already_carried_shares_its_stacks(self):
+        from yap_forever.shopping import carried_slots, pack
+        stack = {E: 10, GE: 10}
+        self.assertEqual(pack({E: 92, GE: 5}, stack), {GE: 35, E: 2})
+        self.assertEqual(carried_slots({E: 92, GE: 5}, stack), 5)
+
+    def plan(self):
+        return orange(Plan(steps=[Step(333, 100, 123, 1, "Enchant A", 23, 0, 0, {E: 92})],
+                           ranks=[(333, 100, 300, 0)], bought={E: 92}, final_skill={333: 123}))
+
+    def test_bring_text_says_pack_and_slots(self):
+        from yap_forever.shopping import bring_text
+        from yap_forever.trips import Trip
+        gd = essence_gd(10)
+        text = bring_text(self.plan(), gd, Trip(100, 333, "rank", "Enchanting rank to 225"), None)
+        self.assertIn("92 Lesser Astral Essence (from the mail)", text)
+        self.assertIn("pack 90 Lesser Astral Essence into 30 Greater Astral Essence", text)
+        self.assertIn("4 bag slots", text)
+
+    def test_bring_list_fits_more_when_packed(self):
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import Trip
+        gd = essence_gd(10)
+        p = orange(Plan(steps=[Step(333, 100, 110, 1, "Enchant A", 10, 0, 0, {E: 40}),
+                               Step(333, 110, 120, 2, "Enchant B", 10, 0, 0, {GE: 10}),
+                               Step(333, 120, 145, 1, "Enchant A", 13, 0, 0, {E: 52})],
+                        bought={E: 92, GE: 10}, final_skill={333: 145}))
+        # 15 slots, 10 kept for crafts: unpacked 40 lesser + 10 greater is 5 slots, + 52 lesser is 11;
+        # packed: 30 greater (+ 10) and 2 lesser is 5 slots
+        reach, items = bring_list(p, gd, Trip(100, 333, "rank", "Enchanting rank to 225"), bag_slots=15)
+        self.assertEqual(reach, 145)
+
+    def test_mailbox_trip_counts_packed_slots_and_shopping_is_unchanged(self):
+        import dataclasses
+        from yap_forever.shopping import render_shopping
+        gd = essence_gd(10)
+        m = toy.market({E: [(100, 1000)]})
+        lines, trips = render_shopping(self.plan(), gd, m, dataclasses.replace(toy.stock(), bag_slots=14))
+        self.assertEqual(trips, 1)  # 4 slots packed fit in 14 - 10; unpacked 10 would not
+        trip = next(l for l in lines if l.startswith("- 📬"))
+        self.assertIn("4 stacks", trip)
+        self.assertIn("From the mail: 92 Lesser Astral Essence.", trip)
+        self.assertIn("pack 90 Lesser Astral Essence into 30 Greater Astral Essence", trip)
+        text = "\n".join(lines)
+        self.assertIn("| Lesser Astral Essence | 92 | AH | 92s |", text)
+        self.assertIn("**Gold to bring: 92s**", text)

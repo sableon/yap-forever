@@ -168,6 +168,21 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 1, flags)
             self.assertIn("one or two different professions", out)
 
+    def test_plan_numeric_profession_must_be_known(self):
+        self.ready_home()
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "129:20"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertIn("unknown profession", out)
+
+    def test_plan_rejects_three_saved_goals(self):
+        self.ready_home()
+        stock = self.paths.character("Firstname Lastname") / "stock.toml"
+        stock.write_text("level = 20\n[items]\n\n[goals]\nblacksmithing = 20\nenchanting = 20\ntailoring = 20\n",
+                         encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertIn("plan one or two at a time", out)
+
     def test_plan_unknown_character_lists_known(self):
         run(["init"], self.paths)
         code, out = run(["plan", "--character", "Bob"], self.paths)

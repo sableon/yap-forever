@@ -33,13 +33,19 @@ favor = 300          # Merchant's Favor points
 cash_gold = 25       # soft budget
 mining = 0           # Mining skill, if the character mines
 short_farm_ore = 0
-target = 150         # skill to plan both professions to
+bag_slots = 40       # free bag slots while crafting; gives mailbox trips (leave out to skip them)
+keep_greens = false  # without Enchanting: keep green crafts to disenchant on another character
+[goals]              # one or two professions: a skill up to 300, or a recipe to craft once
+blacksmithing = 225
+enchanting = "Enchant Bracer - Minor Health"
 [skills]             # current profession skills; the plan starts here (absent = 1)
 blacksmithing = 120
 enchanting = 95
 [items]              # what the character already has: item ID = count
 2840 = 40            # Copper Bar
 ```
+
+`plan --prof NAME:TARGET` overrides `[goals]` for one run.
 
 ## 3. Blizzard API client
 
