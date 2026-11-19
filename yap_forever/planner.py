@@ -114,12 +114,14 @@ def apply_favor(recipes: dict, favor) -> dict:
 def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
          reuse: dict[int, tuple[float, float]] | None = None, caps: dict[int, int] | None = None,
          craft_once: dict[int, int] | None = None, exclude: frozenset[int] = frozenset(),
-         one_time_in_full: bool = False) -> Plan:
+         one_time_in_full: bool = False, overtime: int = 0, reading: str = "relative") -> Plan:
     """caps: profession -> target skill (default Blacksmithing and Enchanting to `cap`).
     craft_once: profession -> recipe crafted once on reaching its cap. exclude: recipes not to use.
     one_time_in_full: in gold mode, charge a recipe's one-time costs (pattern, fee, tools) in full
     rather than spread over the points it could cover (a candidate route; see compare.settle_routes).
-    reuse: item -> (count later steps consume, value per unit), credited when a step makes it."""
+    reuse: item -> (count later steps consume, value per unit), credited when a step makes it.
+    overtime, reading: the character's Working Overtime rank and how it reads (see skillup_chance);
+    it raises the chance of every skill-up, disenchanting included."""
     quests = quests or {}
     reuse = reuse or {}
     caps = dict(caps) if caps else {BS: cap, ENCH: cap}
@@ -252,7 +254,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         de_credit += n
         while skill[ENCH] < min(ench_cap, rank_cap[ENCH]):
             s = skill[ENCH]
-            chance = skillup_chance(s, DE_THRESHOLDS)
+            chance = skillup_chance(s, DE_THRESHOLDS, overtime, reading)
             if chance <= 0:
                 de_credit = 0.0
                 return
@@ -417,7 +419,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         for r in recipes.values():
             if r.skill_line != prof or r.required_skill > s:
                 continue
-            chance = skillup_chance(s, r.thresholds)
+            chance = skillup_chance(s, r.thresholds, overtime, reading)
             if chance <= 0:
                 continue
             crafts = 1 / chance

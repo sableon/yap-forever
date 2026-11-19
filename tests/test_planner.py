@@ -16,10 +16,12 @@ def base_recipes():
     ]
 
 
-def run(recipes, listings=None, stock=None, favor=toy.NO_FAVOR, quest=(), cap=225, quests=None, reuse=None):
+def run(recipes, listings=None, stock=None, favor=toy.NO_FAVOR, quest=(), cap=225, quests=None, reuse=None,
+        **talents):
     gd = toy.gamedata(recipes, quest_items=quest)
     st = stock or toy.stock()
-    return plan(gd, Valuer(toy.market(listings), gd, st), st, favor, cap=cap, quests=quests, reuse=reuse)
+    return plan(gd, Valuer(toy.market(listings), gd, st), st, favor, cap=cap, quests=quests, reuse=reuse,
+                **talents)
 
 
 BARS = {toy.COPPER_BAR: [(100, 100000)]}
@@ -238,6 +240,48 @@ class PlannerTests(unittest.TestCase):
         self.assertGreater(p.cash_total, 0)
         self.assertGreaterEqual(p.economic_total, p.cash_total - p.sale_proceeds - p.leftover_value)
 
+
+
+def crafts_of(p, prof, spell=None):
+    return sum(s.crafts for s in p.steps if s.profession == prof and (spell is None or s.spell_id == spell))
+
+
+class WorkingOvertimeTests(unittest.TestCase):
+    def yellow_route(self):
+        # always yellow or green: 1 -> 100 skill at chance (100 - s) / 99 or less
+        return [toy.recipe(1, "BS slow", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1), t=(1, 1, 50, 100)),
+                toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+
+    def test_rank_five_needs_fewer_crafts(self):
+        base = run(self.yellow_route(), BARS, cap=60)
+        for reading in ("relative", "points"):
+            fast = run(self.yellow_route(), BARS, cap=60, overtime=5, reading=reading)
+            self.assertEqual(fast.final_skill[BS], base.final_skill[BS])
+            self.assertLess(crafts_of(fast, BS, 1), crafts_of(base, BS, 1), reading)
+        rel = run(self.yellow_route(), BARS, cap=60, overtime=5, reading="relative")
+        pts = run(self.yellow_route(), BARS, cap=60, overtime=5, reading="points")
+        self.assertLess(crafts_of(pts, BS, 1), crafts_of(rel, BS, 1))
+
+    def test_rank_zero_changes_nothing(self):
+        a = run(self.yellow_route(), BARS, cap=60)
+        for reading in ("relative", "points"):
+            b = run(self.yellow_route(), BARS, cap=60, overtime=0, reading=reading)
+            self.assertEqual(a.steps, b.steps)
+            self.assertEqual((a.cash_total, a.economic_total), (b.cash_total, b.economic_total))
+
+    def test_disenchant_skillups_use_the_talent_too(self):
+        rs = [toy.recipe(1, "Belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),
+              toy.recipe(2, "Ench dust", ENCH, {toy.DUST: 1})]
+        listings = {**BARS, toy.DUST: [(300, 100000)]}
+        base = run(rs, listings, cap=60)
+        fast = run(rs, listings, cap=60, overtime=5, reading="points")
+        self.assertEqual(fast.final_skill[ENCH], base.final_skill[ENCH])
+
+        def disenchants_per_point(p):
+            de = [s for s in p.steps if s.profession == ENCH and s.spell_id == 0]
+            self.assertTrue(de)
+            return sum(s.crafts for s in de) / sum(s.skill_to - s.skill_from for s in de)
+        self.assertLess(disenchants_per_point(fast), disenchants_per_point(base))
 
 
 class BankGreensTests(unittest.TestCase):

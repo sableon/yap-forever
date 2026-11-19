@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from yap_forever.config import STATIC_DIR
 from yap_forever.disenchant import de_skill_needed, de_yield
+from yap_forever.profile import OVERTIME_READINGS
 
 AH_UNIT_CAP = 5  # AH sales of one crafted item counted at the lowest price; quest items exempt
 VENDOR_TOOLS = {5956}  # Blacksmith Hammer
@@ -25,13 +26,28 @@ def craft_margin(skill: int) -> float:
     return 0.90 + 0.05 * (min(max(skill, 1), 300) - 1) / 299
 
 
-def skillup_chance(skill: int, t: tuple[int, int, int, int]) -> float:
+OVERTIME_STEP = 0.04  # Working Overtime: per rank, on every tradeskill (rank 0-5)
+
+
+def skillup_chance(skill: int, t: tuple[int, int, int, int], overtime: int = 0,
+                   reading: str = "relative") -> float:
+    """Chance of a skill-up for one craft. overtime = Working Overtime rank; `reading` says how its
+    4% per rank applies: "relative" scales the base chance, "points" adds to it. Both cap at 1;
+    a craft that can't skill up (grey, or below orange) stays at 0."""
+    if reading not in OVERTIME_READINGS:
+        raise ValueError(f"unknown Working Overtime reading {reading!r}: "
+                         f"use one of {', '.join(OVERTIME_READINGS)}")
     orange, yellow, _green, grey = t
     if skill < orange or skill >= grey:
         return 0.0
     if skill < yellow:
         return 1.0
-    return (grey - skill) / (grey - yellow)
+    p = (grey - skill) / (grey - yellow)
+    if not overtime or p <= 0:
+        return p
+    if reading == "points":
+        return min(1.0, p + OVERTIME_STEP * overtime)
+    return min(1.0, p * (1 + OVERTIME_STEP * overtime))
 
 
 def money(c: float) -> str:

@@ -74,6 +74,12 @@ class ProfileTests(unittest.TestCase):
                 profile.load_profile(write(d, EXAMPLE + 'dedicated_study = "yes"\n'))
         self.assertIn("characters.Main.dedicated_study", str(cm.exception))
 
+    def test_overtime_limits_are_defined_once(self):
+        from yap_forever import costmodel, talents
+        self.assertIs(costmodel.OVERTIME_READINGS, profile.OVERTIME_READINGS)
+        self.assertEqual(talents.MAX_OVERTIME, profile.MAX_OVERTIME)
+        self.assertFalse(hasattr(talents, "MAX_RANK"))
+
     def test_working_overtime_reading_unknown(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(ValueError) as cm:

@@ -7,6 +7,7 @@ from yap_forever.config import STATIC_DIR
 from yap_forever.costmodel import BARS, ORES, STONES
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
+from yap_forever.talents import talent_lines
 from yap_forever.trips import trips
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
@@ -89,9 +90,11 @@ def _title(caps, route) -> str:
     return title + (f" — {route} route" if route else "")
 
 
-def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None) -> str:
+def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None,
+                 character=None, reading="relative") -> str:
     """caps: profession -> target (default Blacksmithing and Enchanting to the stock's target).
-    alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives."""
+    alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
+    character, reading: the profile.Character and Working Overtime reading, for the talent lines."""
     caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
     if comparison:
@@ -103,6 +106,8 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
         intro.append("Until you switch, gather and keep the materials below instead of selling them.")
     if intro:
         out += [" ".join(intro), ""]
+    for line in talent_lines(character, reading, plan, caps, stock):
+        out += [line, ""]
     _keep(out, plan, gd, market)
     _route(out, plan, gd, caps, stock, alts or {})
     from yap_forever.shopping import render_shopping  # shopping imports this module
