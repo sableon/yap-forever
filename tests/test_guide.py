@@ -327,6 +327,19 @@ class TalentLineTests(unittest.TestCase):
         text = self.render(Character("A B", dedicated_study=True), caps={ENCH: 25})
         self.assertIn("24 days would cover the last 24 points of Enchanting.", text)
 
+    def test_dedicated_study_one_point_is_singular(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", dedicated_study=True), caps={ENCH: 2})
+        self.assertIn("Dedicated Study: one free point a day goes to your lowest profession; "
+                      "1 day would cover the last point of Enchanting.", text)
+        self.assertNotIn("1 point", text)
+
+    def test_dedicated_study_nothing_to_level(self):
+        from yap_forever.profile import Character
+        text = self.render(Character("A B", dedicated_study=True), skills={BS: 40, ENCH: 40})
+        self.assertIn("Dedicated Study: one free point a day goes to your lowest profession; "
+                      "Blacksmithing needs no points on this route.", text)
+
     def test_dedicated_study_off_has_no_line(self):
         from yap_forever.profile import Character
         text = self.render(Character("A B", dedicated_study=False), skills={BS: 30, ENCH: 10})

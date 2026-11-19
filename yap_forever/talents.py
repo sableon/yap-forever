@@ -1,8 +1,8 @@
 """What the guide and the report say about the character's legacy talents."""
 from yap_forever.costmodel import OVERTIME_STEP
 from yap_forever.gamedata import PROFESSIONS
+from yap_forever.profile import MAX_OVERTIME
 
-MAX_RANK = 5
 
 
 def talent_lines(character, reading, plan, caps, stock) -> list[str]:
@@ -16,7 +16,7 @@ def talent_lines(character, reading, plan, caps, stock) -> list[str]:
         else:
             how = (f"+{pct}% of the base chance (unconfirmed in game; "
                    f'set working_overtime_reading = "points" for +{pct} percentage points)')
-        out.append(f"Working Overtime {rank}/{MAX_RANK}, read as {how}.")
+        out.append(f"Working Overtime {rank}/{MAX_OVERTIME}, read as {how}.")
     if character and character.dedicated_study and caps:
         out.append(_dedicated_study(plan, caps, stock))
     return out
@@ -33,5 +33,5 @@ def _dedicated_study(plan, caps, stock) -> str:
     if n == 0:
         return head + f"{name} needs no points on this route."
     if n == 1:
-        return head + f"1 day would cover the last 1 point of {name}."
+        return head + f"1 day would cover the last point of {name}."
     return head + f"{n} days would cover the last {n} points of {name}."

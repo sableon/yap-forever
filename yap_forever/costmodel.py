@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from yap_forever.config import STATIC_DIR
 from yap_forever.disenchant import de_skill_needed, de_yield
+from yap_forever.profile import OVERTIME_READINGS
 
 AH_UNIT_CAP = 5  # AH sales of one crafted item counted at the lowest price; quest items exempt
 VENDOR_TOOLS = {5956}  # Blacksmith Hammer
@@ -25,7 +26,6 @@ def craft_margin(skill: int) -> float:
     return 0.90 + 0.05 * (min(max(skill, 1), 300) - 1) / 299
 
 
-OVERTIME_READINGS = ("relative", "points")
 OVERTIME_STEP = 0.04  # Working Overtime: per rank, on every tradeskill (rank 0-5)
 
 
