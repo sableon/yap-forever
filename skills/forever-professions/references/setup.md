@@ -69,7 +69,7 @@ and who has another machine that can fetch prices:
 
 ```toml
 host = "me@my-vps"                  # required: an ssh host
-key = "~/.ssh/id_example"           # optional: ssh key file; ~ is expanded
+key = "~/.ssh/id_example"           # optional: ssh key file, an absolute path or one starting with ~
 command = "cd yap-forever && git pull -q && python3 -m yap_forever prices"  # default, run there
 remote_file = ".yap-forever/cache/prices.json"  # default: where that machine leaves its prices
 ```
@@ -117,8 +117,12 @@ Windows 10 and later (an optional feature on some builds), macOS and Linux) and 
 reach the API and has this tool set up. Write `remote.toml` in the home folder (the keys are in step
 2), then run `<python> -m yap_forever prices --remote`. It runs the remote command over ssh, copies
 the prices file back and replaces the saved prices only when the copy is a valid prices file with
-listings. The ssh login must work without a prompt (ssh-agent or an unencrypted key), because the
-command asks for no passphrase or password and fails at once if one is needed. `--host NAME`
+listings, for the profile's region and ruleset (and for the saved auction house, when `house.json`
+exists). A copy for another region, ruleset or house is refused and the saved prices stay.
+Run `ssh HOST` once by hand first, so the machine's host key is known: the command refuses an
+unknown key instead of asking. The ssh login must work without a prompt (ssh-agent or an
+unencrypted key), because the command asks for no passphrase or password and fails at once if one
+is needed. `--host NAME`
 replaces the host from `remote.toml` for one run (the other keys stay; without a `remote.toml` the
 defaults apply). Keep the host and key path to the player's own machine; never paste them anywhere
 public.

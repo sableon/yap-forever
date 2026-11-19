@@ -142,6 +142,29 @@ def cmd_prices_auctionator(paths: Paths, file: Path, realm: str | None) -> int:
     return 0
 
 
+def _remote_accept(paths: Paths):
+    """The check for a copied prices file: its region and ruleset are the profile's, and its house is the
+    saved house when there is one. Returns the reason to refuse it, or None. Nothing is compared when the
+    profile can't be read (the plan checks the house later)."""
+    try:
+        prof = profile.load_profile(paths.profile)
+    except (FileNotFoundError, ValueError):
+        return lambda m: None
+    try:
+        house = profile.load_house(paths.house)
+    except (FileNotFoundError, ValueError):
+        house = None
+
+    def accept(m: prices.Market) -> str | None:
+        for field, theirs, ours in (("region", m.region, prof.region), ("ruleset", m.ruleset, prof.ruleset),
+                                    ("house", m.house, house)):
+            if ours is not None and theirs != ours:
+                return (f"the copied prices are for {field} {theirs if theirs not in (None, '') else 'unknown'}, "
+                        f"but yours is {ours}")
+        return None
+    return accept
+
+
 def cmd_prices_remote(paths: Paths, host: str | None) -> int:
     try:
         saved = settings.load_remote(paths.remote)
@@ -158,7 +181,7 @@ def cmd_prices_remote(paths: Paths, host: str | None) -> int:
         print(f"no remote machine set: write host = \"...\" in {paths.remote} "
               "(see references/setup.md), or pass --host HOST")
         return 1
-    return remote.fetch_remote(saved, paths.prices)
+    return remote.fetch_remote(saved, paths.prices, accept=_remote_accept(paths))
 
 
 def cmd_prices(paths: Paths) -> int:

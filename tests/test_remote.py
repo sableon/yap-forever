@@ -156,6 +156,31 @@ class FetchRemoteTests(unittest.TestCase):
         self.assertEqual(os.listdir(self.dest.parent), ["prices.json"])
 
     @with_openssh
+    def test_a_refused_copy_keeps_dest_and_names_the_reason_not_the_host(self):
+        self.dest.parent.mkdir(parents=True)
+        self.dest.write_text(GOOD.replace("2840", "1111"), encoding="utf-8")
+        before = self.dest.read_bytes()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = remote.fetch_remote(self.r, self.dest, run=FakeRun(),
+                                       accept=lambda m: "the copy is for region xx" if m.region == "eu" else None)
+        self.assertEqual(code, 1)
+        self.assertIn("the copy is for region xx", out.getvalue())
+        self.assertIn("your saved prices are unchanged", out.getvalue())
+        self.assertNoSecrets(out.getvalue())
+        self.assertEqual(self.dest.read_bytes(), before)
+        self.assertEqual(os.listdir(self.dest.parent), ["prices.json"])
+
+    @with_openssh
+    def test_an_accepted_copy_is_saved(self):
+        code, _ = self.go(FakeRun())
+        self.assertEqual(code, 0)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = remote.fetch_remote(self.r, self.dest, run=FakeRun(), accept=lambda m: None)
+        self.assertEqual(code, 0)
+
+    @with_openssh
     def test_dest_unchanged_after_a_failed_step(self):
         self.dest.parent.mkdir(parents=True)
         self.dest.write_text(GOOD, encoding="utf-8")
@@ -269,14 +294,14 @@ class CliTests(unittest.TestCase):
 
     def test_host_flag_alone_uses_defaults(self):
         calls = []
-        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest: calls.append((r, dest)) or 0):
+        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest, **kw: calls.append((r, dest)) or 0):
             code, _ = run_cli(["prices", "--remote", "--host", "bob-box.test"], self.paths)
         self.assertEqual(code, 0)
         self.assertEqual(calls, [(Remote("bob-box.test"), self.paths.prices)])
 
     def test_host_flag_is_stripped_and_blank_is_refused(self):
         calls = []
-        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest: calls.append(r) or 0):
+        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest, **kw: calls.append(r) or 0):
             run_cli(["prices", "--remote", "--host", "  bob.test "], self.paths)
             code, out = run_cli(["prices", "--remote", "--host", "  "], self.paths)
         self.assertEqual(calls, [Remote("bob.test")])
@@ -287,7 +312,7 @@ class CliTests(unittest.TestCase):
         self.paths.remote.write_text('host = "file.test"\nkey = "/keys/k"\ncommand = "go"\n'
                                      'remote_file = "f.json"\n', encoding="utf-8")
         calls = []
-        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest: calls.append(r) or 0):
+        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest, **kw: calls.append(r) or 0):
             run_cli(["prices", "--remote", "--host", "flag.test"], self.paths)
             run_cli(["prices", "--remote"], self.paths)
         self.assertEqual(calls, [Remote("flag.test", "/keys/k", "go", "f.json"),
@@ -299,8 +324,55 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("host", out)
 
+    def accept(self, **copy):
+        """cmd_prices_remote's check applied to a copy with these fields (the rest match the profile)."""
+        fields = {"house": 7, "region": "eu", "ruleset": 2, **copy}
+        m = Market({1: [(5, 1)]})
+        m.house, m.region, m.ruleset = fields["house"], fields["region"], fields["ruleset"]
+        got = []
+        with mock.patch("yap_forever.cli.remote.fetch_remote",
+                        lambda r, dest, **kw: got.append(kw["accept"](m)) or 0):
+            run_cli(["prices", "--remote", "--host", "h.test"], self.paths)
+        return got[0]
+
+    def set_profile(self, house=7):
+        from yap_forever import profile
+        self.paths.profile.write_text('region = "eu"\nruleset = 2\nfaction = "alliance"\n', encoding="utf-8")
+        if house is not None:
+            profile.save_house(self.paths.house, house, "eu", 2)
+
+    def test_a_matching_copy_is_accepted(self):
+        self.set_profile()
+        self.assertIsNone(self.accept())
+
+    def test_a_copy_for_another_region_is_refused_naming_the_field(self):
+        self.set_profile()
+        msg = self.accept(region="us")
+        self.assertIn("region", msg)
+        self.assertNotIn("h.test", msg)
+
+    def test_a_copy_for_another_ruleset_is_refused_naming_the_field(self):
+        self.set_profile()
+        msg = self.accept(ruleset=1)
+        self.assertIn("ruleset", msg)
+        self.assertNotIn("h.test", msg)
+
+    def test_a_copy_for_another_house_is_refused_when_house_json_exists(self):
+        self.set_profile()
+        msg = self.accept(house=9)
+        self.assertIn("house", msg)
+        self.assertNotIn("h.test", msg)
+
+    def test_without_house_json_the_house_is_not_compared(self):
+        self.set_profile(house=None)
+        self.assertIsNone(self.accept(house=9))
+        self.assertIn("region", self.accept(region="us"))
+
+    def test_without_a_profile_nothing_is_compared(self):
+        self.assertIsNone(self.accept(region="us", ruleset=1, house=9))
+
     def test_exit_code_comes_from_the_fetch(self):
-        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest: 1):
+        with mock.patch("yap_forever.cli.remote.fetch_remote", lambda r, dest, **kw: 1):
             code, _ = run_cli(["prices", "--remote", "--host", "h.test"], self.paths)
         self.assertEqual(code, 1)
 
