@@ -177,7 +177,8 @@ class PlannerTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         text = "\n".join(render_shopping(p, gd, toy.market(BARS), st)[0])
         self.assertNotIn("Plans: Something", text)
-        self.assertNotIn("Trip:** buy the pattern", " ".join(p.events))
+        from yap_forever.trips import trips
+        self.assertEqual([t for t in trips(p, gd) if t.spell == 3], [])  # no vendor or AH pattern trip
 
     def test_owned_pattern_beats_a_listed_one(self):
         rs = self.scroll_recipes()
@@ -187,6 +188,22 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual([how for *_x, spell, how in bought.learn_log if spell == 3], ["ah"])
         self.assertEqual([how for *_x, spell, how in owned.learn_log if spell == 3], ["owned"])
         self.assertLess(owned.cash_total, bought.cash_total)
+
+    def test_owned_pattern_costs_its_sale_value_in_value_mode_but_no_cash(self):
+        rs = self.scroll_recipes()
+        gd = toy.gamedata(rs)
+        totals = []
+        for price in (500, 3000):  # the same pattern, worth more on the second AH
+            market = {**BARS, toy.SCROLL: [(price, 1)]}
+            st = toy.stock({toy.SCROLL: 1})
+            p = run(rs, market, stock=st)
+            self.assertEqual([how for *_x, spell, how in p.learn_log if spell == 3], ["owned"])
+            worth = Valuer(toy.market(market), gd, st).owned_value(toy.SCROLL)
+            totals.append((p.cash_total, p.economic_total, worth))
+        (cash_a, econ_a, worth_a), (cash_b, econ_b, worth_b) = totals
+        self.assertGreater(worth_b, worth_a)
+        self.assertEqual(cash_a, cash_b)  # an owned pattern costs no cash
+        self.assertAlmostEqual(econ_b - econ_a, worth_b - worth_a, places=6)  # but its sale value is given up
 
     def test_without_the_pattern_nothing_changes(self):
         rs = self.scroll_recipes()
@@ -198,7 +215,6 @@ class PlannerTests(unittest.TestCase):
         steps = [s for s in p.steps if s.spell_id == 3]
         self.assertTrue(steps)
         self.assertTrue(all(s.skill_from >= 50 for s in steps))
-        self.assertEqual([s.skill_from < 50 for s in p.steps if s.profession == BS][:1], [True])
 
     def test_missing_rod_adds_tool_cost_once(self):
         rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),

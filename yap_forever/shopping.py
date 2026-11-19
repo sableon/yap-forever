@@ -264,11 +264,13 @@ def _split(rows, plan, gd=None, left=None) -> dict[tuple[int, str], int]:
     return out
 
 
-def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0) -> tuple[int, list[tuple[int, int, str]]]:
+def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0,
+              reagents=None) -> tuple[int, list[tuple[int, int, str]]]:
     """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
     owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
     the trip use the bank first, as on the shopping list. reagent_slots: a reagent bag holds mats
-    first; CRAFT_ROOM stays on normal slots."""
+    first (`reagents`: the set from reagent_items, built here when not given); CRAFT_ROOM stays on
+    normal slots."""
     every = route_rows(plan, gd)
     at = next((k for k, r in enumerate(every)
                if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
@@ -283,7 +285,8 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
     if bag_slots:
         items = {i for r in rows for i in r["need"]}
         rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items),
-                           reagent_items(gd) if reagent_slots else None, reagent_slots)[0]
+                           reagents if reagents is not None else reagent_items(gd) if reagent_slots else None,
+                           reagent_slots)[0]
     else:
         rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
     split = _split(rows, plan, gd, left)
@@ -291,14 +294,15 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
 
 
 def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0) -> str:
-    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots)
+    reagents = reagent_items(gd) if reagent_slots else None
+    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents)
     if not items:
         return ""
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
     parts = [f"{n} {gd.name(i)} ({where[src]})" for i, n, src in items]
     total = _sum({i: n} for i, n, _src in items)
     stack = stacks(gd, total)
-    split = carried_split(total, stack, reagent_items(gd) if reagent_slots else None, reagent_slots)
+    split = carried_split(total, stack, reagents, reagent_slots)
     note = pack_note(gd, total, stack, "them at the trainer")
     return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
             f"({slots_text(split)}{'; ' + note if note else ''}); the town may have "

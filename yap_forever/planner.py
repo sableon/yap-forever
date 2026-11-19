@@ -161,8 +161,11 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         if r.source == "trainer":
             return Cost(r.fee, r.fee), 0, None, []
         if r.source == "scroll":
-            if r.scroll_item and pools.stock.get(r.scroll_item, 0) >= 1:  # your own pattern: free, used up
-                return Cost(), 0, "owned", []
+            if r.scroll_item and pools.stock.get(r.scroll_item, 0) >= 1:
+                # your own pattern: no cash, used up; the value modes give up what it would sell for,
+                # as for any owned item (Valuer._take)
+                v = valuer.owned_value(r.scroll_item)
+                return Cost(0, v, v), 0, "owned", []
             opt = valuer.buy_option(r.scroll_item, 1, pools.bought.get(r.scroll_item, 0))
             if opt is None:
                 return f"scroll not available: {gd.name(r.scroll_item)}"
