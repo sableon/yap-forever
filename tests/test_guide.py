@@ -440,7 +440,7 @@ class TrainerRowTests(unittest.TestCase):
                          "Blacksmithing 50: Learn BS later (trainer 45s 0c)"], final_skill={BS: 60})
         text = render_guide(p, gd, toy.market(BARS), toy.stock(skills={BS: 30}), caps={BS: 60})
         (row,) = self.lines(text, "- *At 30: Learn BS inferred")
-        self.assertTrue(row.endswith("(trainer 45s 0c) (inferred: the trainer may ask up to 35; if it isn't "
+        self.assertTrue(row.endswith("(trainer 45s 0c; inferred: the trainer may ask up to 35; if it isn't "
                                      "offered, craft BS basic instead)*"), row)
         (later,) = self.lines(text, "- *At 50: Learn BS later")
         self.assertNotIn("inferred", later)
@@ -454,7 +454,8 @@ class TrainerRowTests(unittest.TestCase):
                  learn_log=[(BS, 30, 40, "trainer")],
                  events=["Blacksmithing 30: Learn BS inferred (trainer 45s 0c)"], final_skill={BS: 40})
         text = render_guide(p, gd, toy.market(BARS), toy.stock(skills={BS: 30}), caps={BS: 40})
-        self.assertIn("(inferred: the trainer may ask up to 35; if it isn't offered, come back at 35)", text)
+        self.assertIn("(trainer 45s 0c; inferred: the trainer may ask up to 35; if it isn't offered, come back at 35)*", text)
+        self.assertNotIn(") (", text.split("Learn BS inferred", 1)[1].split("\n", 1)[0])
 
     def inferred_row(self, extra, steps_after, skill_at=30):
         """The first learn row's text for BS inferred (needs 20, trainer may ask 35), at skill 30."""

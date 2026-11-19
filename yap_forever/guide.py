@@ -310,7 +310,8 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
             de[d.group(2)] = [first_at, at, n + float(d.group(1))]
             continue
         note = inferred.get((p, at, text.split(" (", 1)[0].removeprefix("Learn ")), "")
-        lines.setdefault((stage(p, at, True), p), []).append((at, 0, f"- *At {at}: {_fix_names(text, gd)}{note}*"))
+        lines.setdefault((stage(p, at, True), p), []).append(
+            (at, 0, f"- *At {at}: {trainer_text.add_note(_fix_names(text, gd), note)}*"))
     for item, (first_at, last, n) in de.items():
         text = (f"- *At {first_at}: disenchant {count(n)} {item}*" if first_at == last else
                 f"- *From {first_at}: disenchant your {item} as you make them ({count(n)} in all, by {last})*")

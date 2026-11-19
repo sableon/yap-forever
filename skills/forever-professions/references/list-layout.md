@@ -72,10 +72,13 @@ Write it for that.
   "(title unconfirmed in the data)". When the data has no trainer of that rank for the faction, say so
   in a sentence; never leave a name or a place empty.
 - Expert and Journeyman ranks are not trips: `Train Blacksmithing to 150 at any Expert Blacksmith
-  in a capital (for example <name>, <capital>).` names up to two trainers in the faction's capitals
-  and drops the parenthesis when there is none.
+  in a capital (for example <name>, <capital>).` names up to two trainers in the faction's capitals.
+  When none of the rank's trainers is in a capital, the row names up to two of them with their zones
+  and says `(no Expert Blacksmith in a capital in the data)`, never "in a capital".
 - A trainer recipe whose requirement is only inferred from Classic (`TrainerInferred`) and is above
-  the skill the route learns it at gets `(inferred: the trainer may ask up to <skill>; if it isn't
-  offered, craft <next row's recipe> instead)`, or `come back at <skill>` when no row follows.
+  the skill the route learns it at gets a note inside the fee's parenthesis: `(trainer <fee>; inferred: the trainer may ask up to
+  <skill>; if it isn't offered, craft <recipe> instead)`. The recipe is the first later row of the
+  profession that the player can craft at that skill (its requirement is met and it is not itself a
+  trainer recipe inferred higher); when there is none the note says `come back at <skill>`.
 - If the trainer data can't be downloaded or read, the guide renders without names and says why
   once, near the top.
