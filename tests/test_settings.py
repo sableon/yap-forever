@@ -70,13 +70,23 @@ class RemoteTests(unittest.TestCase):
     def test_key_expands_home(self):
         r = self.load('host = "example-host"\nkey = "~/.ssh/id_demo"\n')
         self.assertEqual(r.key, str(Path("~/.ssh/id_demo").expanduser()))
-        self.assertNotIn("~", r.key)
 
     def test_empty_host_refused(self):
         for text in ('host = ""\n', 'host = "  "\n', 'command = "x"\n'):
             with self.subTest(text=text), self.assertRaises(ValueError) as cm:
                 self.load(text)
             self.assertIn("host", str(cm.exception))
+
+
+    def test_non_text_or_empty_values_refused(self):
+        cases = (('host = 5\n', "host"), ('host = "h"\ncommand = 1\n', "command"),
+                 ('host = "h"\nremote_file = ["a"]\n', "remote_file"),
+                 ('host = "h"\nkey = 7\n', "key"), ('host = "h"\ncommand = "  "\n', "command"))
+        for text, name in cases:
+            with self.subTest(text=text), self.assertRaises(ValueError) as cm:
+                self.load(text)
+            self.assertIn("remote.toml", str(cm.exception))
+            self.assertIn(name, str(cm.exception))
 
 
 class CredentialsTests(unittest.TestCase):

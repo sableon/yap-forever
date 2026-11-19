@@ -108,9 +108,18 @@ def load_remote(path: Path) -> Remote | None:
     if not path.exists():
         return None
     d = tomllib.loads(path.read_text(encoding="utf-8"))
-    host = str(d.get("host", "")).strip()
+    for name in ("host", "command", "remote_file"):
+        if name in d and not isinstance(d[name], str):
+            raise ValueError(f"{name} in {path.name} must be text, e.g. {name} = \"...\"")
+    host = d.get("host", "").strip()
     if not host:
         raise ValueError(f"fill in host in {path.name}")
+    command = d.get("command", REMOTE_COMMAND)
+    if not command.strip():
+        raise ValueError(f"command in {path.name} is empty: give the command to run there, or leave it out")
     key = d.get("key")
-    return Remote(host, str(Path(key).expanduser()) if key else None,
-                  d.get("command", REMOTE_COMMAND), d.get("remote_file", REMOTE_FILE))
+    if key is not None and not isinstance(key, str):
+        raise ValueError(f"key in {path.name} must be text, e.g. key = \"~/.ssh/id_example\"")
+    if key and key.startswith("~"):
+        key = str(Path(key).expanduser())  # any other key path stays as the player typed it
+    return Remote(host, key or None, command, d.get("remote_file", REMOTE_FILE))
