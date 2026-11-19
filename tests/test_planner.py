@@ -316,7 +316,7 @@ class ResolveGoalsTests(unittest.TestCase):
         self.Goal = Goal
         self.gd = toy.gamedata(base_recipes() + [
             toy.recipe(3, "BS Iron Thing", BS, {toy.IRON_BAR: 1}, req=40),
-            toy.recipe(4, "BS Mystery", BS, {toy.IRON_BAR: 1}, req=50, source="unknown")])
+            toy.recipe(4, "BS Mystery", BS, {toy.IRON_BAR: 1}, t=(50, 60, 70, 80), req=50, source="unknown")])
 
     def test_resolve_recipe_by_name_and_id(self):
         from yap_forever.planner import resolve_goals
