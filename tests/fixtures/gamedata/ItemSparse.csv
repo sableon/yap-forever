@@ -1,10 +1,10 @@
-ID,Display_lang,OverallQualityID,ItemLevel,SellPrice,BuyPrice,TotemCategoryID,Stackable
-2840,Copper Bar,1,10,15,60,0,20
-2851,Copper Chain Belt,1,6,40,200,0,0
-2857,Runed Copper Belt,2,18,200,1000,0,
-2862,Rough Sharpening Stone,1,5,2,10,0,
-2770,Copper Ore,1,5,5,20,0,
-5956,Blacksmith Hammer,1,10,4,18,162,
-6218,Runed Copper Rod,1,5,25,100,373,
-6339,Runed Silver Rod,1,20,250,1000,374,
-11145,Runed Truesilver Rod,1,40,1000,4000,376,
+ID,Display_lang,OverallQualityID,ItemLevel,SellPrice,BuyPrice,TotemCategoryID,Stackable,Bonding
+2840,Copper Bar,1,10,15,60,0,20,0
+2851,Copper Chain Belt,1,6,40,200,0,0,0
+2857,Runed Copper Belt,2,18,200,1000,0,,2
+2862,Rough Sharpening Stone,1,5,2,10,0,,0
+2770,Copper Ore,1,5,5,20,0,,
+5956,Blacksmith Hammer,1,10,4,18,162,,3
+6218,Runed Copper Rod,1,5,25,100,373,,0
+6339,Runed Silver Rod,1,20,250,1000,374,,1
+11145,Runed Truesilver Rod,1,40,1000,4000,376,,4

@@ -59,6 +59,7 @@ def fill_rank_levels(ranks: dict[int, list[Rank]]) -> dict[int, list[Rank]]:
 
 
 NO_DISENCHANT_FLAG = 0x8000  # ItemSparse Flags_0: item cannot be disenchanted
+MAILABLE_BONDING = (0, 2, 3)  # ItemSparse Bonding: none, on equip, on use; 1 (on pickup) and 4 (quest) stay put
 
 @dataclass
 class ItemInfo:
@@ -71,6 +72,12 @@ class ItemInfo:
     buy_price: int
     no_disenchant: bool = False  # client flag; e.g. Enchanting's own wands
     stack: int = 1  # most of one item a bag slot holds
+    bonding: int | None = None  # ItemSparse Bonding; None = the cached file has no such column
+
+    @property
+    def mailable(self) -> bool:
+        """Another of your characters can be mailed one: not bound on pickup, not a quest item."""
+        return self.bonding in MAILABLE_BONDING
 
 
 @dataclass
@@ -248,7 +255,8 @@ def load_gamedata(d: Path | None = None, professions: Iterable[int] = (BS, ENCH)
         items[i] = ItemInfo(i, r["Display_lang"], int(r["OverallQualityID"]), int(r["ItemLevel"]),
                             classes.get(i, -1), int(r["SellPrice"]), int(r["BuyPrice"]),
                             bool(int(r.get("Flags_0") or 0) & NO_DISENCHANT_FLAG),
-                            max(1, int(r.get("Stackable") or 1)))
+                            max(1, int(r.get("Stackable") or 1)),
+                            int(r["Bonding"] or 0) if "Bonding" in r else None)
         cat = int(r.get("TotemCategoryID") or 0)
         if cat:
             item_cat[i] = cat

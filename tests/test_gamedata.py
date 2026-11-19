@@ -75,6 +75,32 @@ class GameDataTests(unittest.TestCase):
         self.assertEqual((i.name, i.quality, i.item_level, i.class_id, i.sell_price),
                          ("Runed Copper Belt", 2, 18, 4, 200))
 
+    def test_bonding_is_read_and_says_what_can_be_mailed(self):
+        got = {i: self.gd.items[i].bonding for i in (2840, 2857, 2770, 5956, 6339, 11145)}
+        self.assertEqual(got, {2840: 0, 2857: 2, 2770: 0, 5956: 3, 6339: 1, 11145: 4})  # an empty cell is 0
+        self.assertEqual({i: self.gd.items[i].mailable for i in got},
+                         {2840: True, 2857: True, 2770: True, 5956: True, 6339: False, 11145: False})
+
+    def test_bonding_of_every_kind(self):
+        kinds = {0: True, 1: False, 2: True, 3: True, 4: False, 5: False}  # 5 appears in the data, not mailable
+        for bonding, mailable in kinds.items():
+            with self.subTest(bonding=bonding):
+                self.assertEqual(gamedata.ItemInfo(1, "x", 1, 1, 7, 0, 0, bonding=bonding).mailable, mailable)
+
+    def test_unknown_bonding_is_not_mailable(self):
+        self.assertFalse(gamedata.ItemInfo(1, "x", 1, 1, 7, 0, 0).mailable)
+
+    def test_a_cache_without_the_bonding_column_leaves_it_unknown(self):
+        import shutil
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            shutil.copytree(FIX, Path(d) / "gd")
+            sparse = Path(d) / "gd" / "ItemSparse.csv"
+            sparse.write_text("\n".join(r.rsplit(",", 1)[0] for r in sparse.read_text().splitlines()) + "\n")
+            gd = gamedata.load_gamedata(Path(d) / "gd")
+        self.assertIsNone(gd.items[2840].bonding)
+        self.assertFalse(gd.items[2840].mailable)
+
     def test_quest_items_from_objectives(self):
         self.assertEqual(self.gd.quest_items, {2857, 3240})
 
