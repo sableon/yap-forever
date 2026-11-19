@@ -17,6 +17,15 @@ MAX_REMOTE = 3  # trainers named for a remote rank
 MAX_EXAMPLES = 2  # trainers named as examples for a capital rank
 
 
+UNCONFIRMED = " (title unconfirmed in the data)"
+
+
+@dataclass(frozen=True)
+class RemoteStop:
+    text: str
+    found: bool  # False: the sentence says the data has no such trainer
+
+
 @dataclass(frozen=True)
 class TrainerInfo:
     faction: str  # "alliance" or "horde"
@@ -43,25 +52,38 @@ def services_text(s: Services) -> str:
     return f"Nearby: {', '.join(have)}; no {' or '.join(lack)}."
 
 
-def _place(t: Trainer, data: TrainerData) -> str:
+def _confirmed_first(found: list[Trainer]) -> list[tuple[Trainer, str]]:
+    """Trainers with a confirmed title; when there are none, the others, each flagged."""
+    sure = [(t, "") for t in found if t.title_confirmed]
+    return sure or [(t, UNCONFIRMED) for t in found]
+
+
+def _place(t: Trainer, flag: str, info: TrainerInfo) -> str:
+    data = info.data
     zone = data.zone_name(t.zone)
     if t.coords is None:
         parent = data.parent_zone(t.zone)
-        return f"{t.name}, inside {zone}" + (f" ({data.zone_name(parent)})" if parent else "") + "."
+        return f"{t.name}{flag}, inside {zone}" + (f" ({data.zone_name(parent)})" if parent else "") + "."
+    place = f"{t.name}{flag}, {zone} ({t.coords[0]:.1f}, {t.coords[1]:.1f})."
+    if t.zone in CAPITALS[info.faction]:  # a capital has a bank, an auction house and a mailbox
+        return place
     near = trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS)
-    return f"{t.name}, {zone} ({t.coords[0]:.1f}, {t.coords[1]:.1f}). {services_text(near)}"
+    return f"{place} {services_text(near)}"
 
 
-def remote_stop(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
-    """Where to train to `cap` in a set town (Artisan and Master): the sentence that follows
-    '**Trip:** <what>: ', or None when the guide should not name trainers."""
+def remote_stop(info: TrainerInfo | None, profession: int, cap: int) -> RemoteStop | None:
+    """Where to train to `cap` in a set town (Artisan and Master): the text that follows
+    '**Trip:** <what>: ', or None when the guide should not name trainers.
+    A trainer in the character's own capital gets no "Nearby" line; others outside it do."""
     if not _usable(info, cap):
         return None
     rank = RANK_BY_CAP[cap]
-    found = trainers.trainers_for(info.data.trainers, profession, rank, info.faction)[:MAX_REMOTE]
+    found = trainers.trainers_for(info.data.trainers, profession, rank, info.faction)
     if not found:
-        return _no_trainer(rank, profession)
-    return " ".join(("Or " if i else "") + _place(t, info.data) for i, t in enumerate(found))
+        return RemoteStop(_no_trainer(rank, profession), False)
+    named = _confirmed_first(found)[:MAX_REMOTE]
+    return RemoteStop(" ".join(("Or " if i else "") + _place(t, flag, info) for i, (t, flag) in enumerate(named)),
+                      True)
 
 
 def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
@@ -72,10 +94,10 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
     found = trainers.trainers_for(info.data.trainers, profession, rank, info.faction)
     if not found:
         return f"Train {name} to {cap}: {_no_trainer(rank, profession)}"
-    examples = [t for t in found if t.zone in CAPITALS[info.faction]][:MAX_EXAMPLES]
+    examples = _confirmed_first([t for t in found if t.zone in CAPITALS[info.faction]])[:MAX_EXAMPLES]
     text = f"Train {name} to {cap} at any {rank} {PERSON.get(profession, name)} in a capital"
     if examples:
-        text += " (for example " + " or ".join(f"{t.name}, {info.data.zone_name(t.zone)}" for t in examples) + ")"
+        text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")"
     return text + "."
 
 

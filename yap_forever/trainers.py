@@ -77,7 +77,8 @@ class TrainerData:
         return zone_name(zone, self.zones)
 
     def parent_zone(self, zone: int) -> int | None:
-        """The zone an instance or sub-area lies in, when the data gives one that is itself a zone."""
+        """The zone an instance or sub-area lies in, when the data gives one that is itself a zone.
+        A parent that is itself a sub-area is dropped on purpose: it would name a place players don't use."""
         parent = self.parents.get(zone, 0)
         return parent if parent in self.zones and not self.parents.get(parent, 0) else None
 

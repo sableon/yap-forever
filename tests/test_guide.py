@@ -274,8 +274,9 @@ class TrainerRowTests(unittest.TestCase):
     def test_artisan_row_names_both_alliance_trainers(self):
         text = self.route([(60, 150), (200, 225)])
         (row,) = [l for l in self.lines(text, "- **Trip:**") if "rank to 225" in l]
-        self.assertIn("Thessa Hammerlow, Stormwind City (60.5, 40.2). Nearby: bank; no auction house or mailbox. "
-                      "Or Wandering Smith, Ironforge (20.0, 20.0).", row)
+        self.assertIn("Thessa Hammerlow, Stormwind City (60.5, 40.2). Or Wandering Smith, Ironforge (20.0, 20.0). "
+                      "While there", row)  # both are in Alliance capitals: no Nearby line
+        self.assertNotIn("Nearby", row)
 
     def test_instance_trainer_row(self):
         from yap_forever.planner import Plan, Step
@@ -314,7 +315,6 @@ class TrainerRowTests(unittest.TestCase):
         self.assertNotIn("Nearby", with_none)
 
     def test_missing_data_note_comes_once_near_the_top(self):
-        from yap_forever import trainer_text
         text = self.route([(60, 150), (200, 225)], faction="", trainer_note="Trainer names are left out of this "
                                                                            "guide: the trainer data files are missing.")
         self.assertEqual(text.count("Trainer names are left out"), 1)

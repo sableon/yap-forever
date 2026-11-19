@@ -166,8 +166,7 @@ class CliTests(unittest.TestCase):
         with mock.patch("yap_forever.plan.render_guide", return_value="guide") as guide:
             code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
         self.assertEqual(code, 0, out)
-        info = guide.call_args.args[7 + 1]  # trainer_info follows alts
-        self.assertEqual(info.faction, "alliance")
+        self.assertEqual(guide.call_args.kwargs["trainer_info"].faction, "alliance")
 
     def test_plan_uses_saved_goals(self):
         stock = self.ready_home()

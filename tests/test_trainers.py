@@ -306,24 +306,64 @@ class TextTests(unittest.TestCase):
         self.assertEqual(f(Services(False, False, False)), "Nearby: none (no bank, auction house or mailbox).")
 
     def test_remote_stop_with_coordinates(self):
-        text = trainer_text.remote_stop(self.info("alliance"), BS, 300)
-        self.assertEqual(text, "Brakka Ironfold, Stranglethorn Vale (30.0, 70.0). "
+        stop = trainer_text.remote_stop(self.info("alliance"), BS, 300)
+        self.assertTrue(stop.found)
+        self.assertEqual(stop.text, "Brakka Ironfold, Stranglethorn Vale (30.0, 70.0). "
                                "Nearby: bank, auction house, mailbox.")
 
     def test_remote_stop_several_trainers(self):
-        text = trainer_text.remote_stop(self.info("alliance"), BS, 225)
-        self.assertEqual(text, "Thessa Hammerlow, Stormwind City (60.5, 40.2). Nearby: bank; no auction house or "
-                               "mailbox. Or Wandering Smith, Ironforge (20.0, 20.0). "
-                               "Nearby: none (no bank, auction house or mailbox).")
+        stop = trainer_text.remote_stop(self.info("alliance"), BS, 225)
+        self.assertEqual(stop.text, "Thessa Hammerlow, Stormwind City (60.5, 40.2). "
+                                    "Or Wandering Smith, Ironforge (20.0, 20.0).")
+
+    def lone(self, zone, faction="alliance", sides="AH", confirmed=True, rows=None, mailboxes=()):
+        t = Trainer(1, "Lone Smith", BS, "Master", sides, zone, (30.0, 70.0), confirmed)
+        data = trainers.TrainerData([t], rows or {}, list(mailboxes), {zone: "Somewhere"})
+        return trainer_text.remote_stop(trainer_text.TrainerInfo(faction, data), BS, 300)
+
+    def test_capital_trainer_has_no_nearby_line(self):
+        self.assertEqual(self.lone(1519).text, "Lone Smith, Somewhere (30.0, 70.0).")
+        self.assertNotIn("Nearby", self.lone(1637, faction="horde").text)
+
+    def test_trainer_outside_a_capital_gets_nearby(self):
+        self.assertEqual(self.lone(33, mailboxes=[(33, 30.5, 70)]).text,
+                         "Lone Smith, Somewhere (30.0, 70.0). Nearby: mailbox; no bank or auction house.")
+
+    def test_trainer_in_the_other_factions_capital_still_gets_nearby(self):
+        text = self.lone(1637, faction="alliance").text  # Orgrimmar is not an Alliance capital
+        self.assertEqual(text, "Lone Smith, Somewhere (30.0, 70.0). Nearby: none (no bank, auction house or mailbox).")
+        self.assertIn("Nearby", self.lone(1519, faction="horde").text)
+
+    def test_unconfirmed_trainers_are_named_only_when_no_confirmed_one_exists(self):
+        sure, odd = Trainer(1, "Sure Smith", BS, "Master", "AH", 33, (1, 1), True), \
+            Trainer(2, "Odd Smith", BS, "Master", "AH", 33, (2, 2), False)
+        mk = lambda ts: trainer_text.TrainerInfo("alliance", trainers.TrainerData(ts, {}, [], {33: "Somewhere"}))
+        both = trainer_text.remote_stop(mk([odd, sure]), BS, 300).text
+        self.assertIn("Sure Smith, Somewhere", both)
+        self.assertNotIn("Odd Smith", both)
+        only = trainer_text.remote_stop(mk([odd]), BS, 300).text
+        self.assertTrue(only.startswith("Odd Smith (title unconfirmed in the data), Somewhere (2.0, 2.0)."), only)
+
+    def test_capital_examples_prefer_confirmed_titles(self):
+        ts = [Trainer(1, "Odd Smith", BS, "Expert", "A", 1519, (1, 1), False),
+              Trainer(2, "Sure Smith", BS, "Expert", "A", 1537, (1, 1), True)]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge"})
+        info = trainer_text.TrainerInfo("alliance", data)
+        self.assertIn("(for example Sure Smith, Ironforge)", trainer_text.city_row(info, BS, 150))
+        data.trainers.pop()
+        self.assertIn("(for example Odd Smith (title unconfirmed in the data), Stormwind City)",
+                      trainer_text.city_row(info, BS, 150))
 
     def test_instance_trainer_says_inside(self):
-        self.assertEqual(trainer_text.remote_stop(self.info("horde"), ENCH, 300), "Zarn Runeweaver, inside Uldaman.")
-        self.assertEqual(trainer_text.remote_stop(self.info("alliance"), ALCH, 300),
+        self.assertEqual(trainer_text.remote_stop(self.info("horde"), ENCH, 300).text,
+                         "Zarn Runeweaver, inside Uldaman.")
+        self.assertEqual(trainer_text.remote_stop(self.info("alliance"), ALCH, 300).text,
                          "Dorn Deepdelver, inside Hollow Depths (Misty Vale).")
 
     def test_no_trainer_for_the_faction(self):
-        self.assertEqual(trainer_text.remote_stop(self.info("horde"), BS, 225),
-                         "the planner has no Artisan Blacksmith trainer for your faction in its data.")
+        stop = trainer_text.remote_stop(self.info("horde"), BS, 225)
+        self.assertEqual((stop.text, stop.found),
+                         ("the planner has no Artisan Blacksmith trainer for your faction in its data.", False))
 
     def test_city_row_names_capital_trainers(self):
         text = trainer_text.city_row(self.info("horde"), BS, 150)

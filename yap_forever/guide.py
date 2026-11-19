@@ -220,12 +220,11 @@ def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, trainer_
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
         stop = trainer_text.remote_stop(trainer_info, t.profession, t.cap)
+        learn = "While there, learn the trainer recipes your skill allows."
         if stop is None:
-            where = "the trainer is in a set town (the planner doesn't say where yet). " \
-                    "While there, learn the trainer recipes your skill allows."
+            where = f"the trainer is in a set town (the planner doesn't say where yet). {learn}"
         else:
-            where = stop + ("" if stop.startswith("the planner has no")
-                            else " While there, learn the trainer recipes your skill allows.")
+            where = f"{stop.text} {learn}" if stop.found else stop.text
         return (f"- **Trip:** {t.what}: {where}"
                 + (bring_text(plan, gd, t, bag_slots, owned) if plan is not None else ""))
     if t.kind == "vendor":

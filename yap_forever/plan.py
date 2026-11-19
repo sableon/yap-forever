@@ -97,7 +97,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict,
         full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps), encoding="utf-8")
         guide = paths.reports / f"{today}-guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
-                                     trainer_info, trainer_note),
+                                     trainer_info=trainer_info, trainer_note=trainer_note),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
     return table, files

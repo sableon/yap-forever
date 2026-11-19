@@ -64,7 +64,10 @@ Write it for that.
   <zone> (x, y). Nearby: bank, mailbox; no auction house.` (map coordinates; "Nearby" is a bank, an
   auction house and a mailbox within a few map units of the trainer, same zone, and says plainly
   when there is none). A trainer inside an instance reads `<name>, inside <instance>` and gets no
-  coordinates, never `(-1, -1)`. When the data has no trainer of that rank for the faction, say so
+  coordinates, never `(-1, -1)`. A trainer in a capital of the character's own faction gets no
+  "Nearby" line (capitals have all three); a trainer in the other faction's capital still does.
+  Name only trainers whose title names the rank; if there is none, name the odd-titled one with
+  "(title unconfirmed in the data)". When the data has no trainer of that rank for the faction, say so
   in a sentence; never leave a name or a place empty.
 - Expert and Journeyman ranks are not trips: `Train Blacksmithing to 150 at any Expert Blacksmith
   in a capital (for example <name>, <capital>).` names up to two trainers in the faction's capitals
