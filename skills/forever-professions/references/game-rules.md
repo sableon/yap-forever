@@ -8,7 +8,9 @@ say so.
 - Expert trainers train up to 150, Artisan to 225, Master to 300. Artisan and Master trainers
   sit in specific towns.
 - Level requirements (Classic data, not yet contradicted): 150 needs level 10, 225 level 20,
-  300 level 35.
+  300 level 35. The pinned trainer data gives Tailoring's Master rank level 0 (and a few other
+  ranks too); a rank with level 0 takes the level the other professions give the same cap, when
+  they agree, so Tailoring to 300 waits for level 35 like every other profession.
 - Fees: base 5s / 50s / 5g per rank; players report that only reputation changes them. The
   client data shows small per-profession differences that nobody has confirmed in game.
 - **Recipe skill requirements at trainers are often inferred** from Classic and moved down. Some
@@ -22,6 +24,11 @@ say so.
 - Trainer places are not listed here: the guide's trainer rows come from the Questie Forever NPC
   data, for the character's faction. Facts the data lacks: Booty Bay is a neutral town, and the
   Alliance Master Enchanting trainer is inside Uldaman (Badlands), which has no map coordinates.
+  Booty Bay, Gadgetzan and Everlook have a neutral auction house with its own prices and a higher
+  deposit; the planner's prices are the faction auction house's, so the guide calls it out.
+- From what character level each Artisan and Master trip is comfortable, which trainers have a
+  flight path for repeat visits, and small tips were noted in play (2026-11-19) and live in
+  `data_static/trainer_notes.toml`; the guide's trainer rows say them.
 
 ## Bags, bank and mail
 

@@ -68,6 +68,20 @@ Write it for that.
   when there is none). A trainer inside an instance reads `<name>, inside <instance>` and gets no
   coordinates, never `(-1, -1)`. A trainer in a capital of the character's own faction gets no
   "Nearby" line (capitals have all three); a trainer in the other faction's capital still does.
+  When the auction house found is run by auctioneers friendly to both factions (Booty Bay,
+  Gadgetzan, Everlook), "Nearby" says `neutral AH (its own prices and a higher deposit)` instead of
+  `auction house`: the planner's prices are the faction auction house's. When nothing is within a
+  short walk but the zone has a bank, an auction house or a mailbox, it says `Nearby: nothing within
+  a short walk; the closest is the <mailbox|bank|auction house>.` (no distances; the same neutral
+  wording for an auction house); with none in the zone it keeps `Nearby: none (no bank, auction
+  house or mailbox).`
+- Trainer notes from play (`yap_forever/data_static/trainer_notes.toml`, keyed by NPC ID) follow a
+  remote row's place and Nearby line: `Easy to reach from about level N, with a flight path for
+  repeat visits.` (each part only when the file has it; below that level, ` (you're level L: the
+  first trip is harder)` before the full stop), then the trainer's one-sentence tip. An instance
+  trainer reads `Go with a group from about level G, solo from about level S.` (` (you're level L)`
+  below G), then the tip. A trainer without notes reads as before. A city row (`Train ... in a
+  capital (for example ...)`) adds the tip of each capital it names, once. Tips never change the route.
   Name only trainers whose title names the rank; if there is none, name the odd-titled one with
   "(title unconfirmed in the data)". When the data has no trainer of that rank for the faction, say so
   in a sentence; never leave a name or a place empty.
