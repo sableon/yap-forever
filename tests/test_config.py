@@ -99,6 +99,13 @@ class GoalsTests(unittest.TestCase):
         self.assertEqual(s.bag_slots, 40)
         self.assertEqual((plain.goals, plain.bag_slots), ({}, None))
 
+    def test_stock_reagent_slots(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = config.load_stock(write(d, "stock.toml", "reagent_slots = 6\n" + STOCK))
+            plain = config.load_stock(write(d, "plain.toml", STOCK))
+        self.assertEqual(s.reagent_slots, 6)
+        self.assertEqual(plain.reagent_slots, 0)
+
 
 class CredentialTests(unittest.TestCase):
     def test_credentials_repr_masks(self):
