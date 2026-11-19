@@ -11,8 +11,10 @@
 # For a trainer inside an instance, use group_level and solo_level (both) instead of reach_level.
 #
 # [cities] holds tips for a capital, keyed by the AreaTable zone ID: `1657 = "tip"`, or a table
-# `[cities.1519]` with `tip` and `professions` (names like "alchemy"; the tip then shows only on
-# rows of those professions). A tip is said once on a city row and never changes the route.
+# `[cities.1519]` with an optional `tip` and optional `groups`: a list of lists of profession names
+# (like "alchemy"), each name at most once. The trainers of one group are close together; a
+# character whose two professions are in different groups walks between them, and the guide says so
+# once per city. A tip is said on a city row; neither changes the route.
 # Specialisation trainers are left out on purpose.
 
 [trainers.7948]  # Kylanna Windwhisper, Master Alchemy, Alliance, Feralas
@@ -67,8 +69,7 @@ reach_level = 18
 flight_path = true
 
 [cities]
-1657 = "The bank and the AH are far apart."  # Darnassus
+1657 = "Most trainers are close together, but the bank and the AH are far apart."  # Darnassus
 
-[cities.1519]  # Stormwind City
-tip = "The Alchemy and Engineering trainers are a long walk from the bank and the AH."
-professions = ["alchemy", "engineering"]
+[cities.1519]  # Stormwind City: the trainers of a group are close together
+groups = [["tailoring", "alchemy", "enchanting"], ["blacksmithing", "engineering"], ["leatherworking"]]

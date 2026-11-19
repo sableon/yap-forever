@@ -3,10 +3,13 @@ import datetime
 import unittest
 
 from tests import toy
+from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import render_guide, source_group
 from tests.test_planner import BARS, base_recipes, run
 
 BS, ENCH = 164, 333
+ALCH, ENG, TAILOR = 171, 202, 197
+GROUPS = (frozenset({TAILOR, ALCH, ENCH}), frozenset({BS, ENG}), frozenset({165}))
 
 
 def guide(recipes, listings, stock=None, cap=60):
@@ -392,6 +395,60 @@ class TrainerRowTests(unittest.TestCase):
         (row,) = self.lines(text, "- Train ")
         self.assertEqual(row, "- Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
                               "(for example Grom Anvilhand, Orgrimmar). A tip.")
+
+    SAID = "In Stormwind City, the Alchemy and Engineering trainers are in different parts of the city."
+
+    def city_route(self, planned, ranks, groups=None, tips=None, zone=1519, profs=None):
+        """A guide for `planned` professions with a city row for each (profession, from, cap) in `ranks`;
+        every profession has an Expert trainer in `zone` (profs: the ones that do)."""
+        from yap_forever import trainers
+        from yap_forever.planner import Plan
+        from yap_forever.trainer_notes import Notes
+        from yap_forever.trainer_text import TrainerInfo
+        ts = [trainers.Trainer(i, f"Trainer {i}", p, "Expert", "A", zone, (1, 1), True)
+              for i, p in enumerate(profs or planned, 1)]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge", 1657: "Darnassus"})
+        notes = Notes({}, tips or {}, {1519: GROUPS} if groups is None else groups)
+        p = Plan(steps=[], ranks=[(prof, s, cap, 450) for prof, s, cap in ranks],
+                 events=[f"{PROFESSIONS[prof]} {s}: train rank up to {cap} (4s 50c)" for prof, s, cap in ranks],
+                 final_skill={prof: 150 for prof in planned})
+        return render_guide(p, toy.gamedata(base_recipes()), toy.market(BARS), toy.stock(),
+                            caps={prof: 150 for prof in planned}, trainer_info=TrainerInfo("alliance", data, notes))
+
+    def test_two_professions_in_different_city_groups_say_so_once(self):
+        text = self.city_route([ALCH, ENG], [(ALCH, 60, 150), (ENG, 60, 150)])
+        rows = self.lines(text, "- Train ")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sum(self.SAID in r for r in rows), 1, rows)
+        self.assertTrue(rows[0].endswith(" " + self.SAID), rows[0])  # the city's first row
+
+    def test_the_sentence_is_on_the_first_row_in_the_guide(self):
+        text = self.city_route([ENG, ALCH], [(ALCH, 60, 150), (ENG, 60, 150)])
+        rows = self.lines(text, "- Train ")
+        self.assertIn("Engineering and Alchemy trainers", "".join(rows))
+        self.assertTrue(rows[0].startswith("- Train Engineering"), rows)  # profession order in the guide
+        self.assertIn("different parts", rows[0])
+        self.assertNotIn("different parts", rows[1])
+
+    def test_the_same_city_group_says_nothing(self):
+        text = self.city_route([TAILOR, ALCH], [(TAILOR, 60, 150), (ALCH, 60, 150)])
+        self.assertNotIn("different parts", text)
+
+    def test_one_planned_profession_says_nothing(self):
+        text = self.city_route([ALCH], [(ALCH, 60, 150)], profs=[ALCH, ENG])
+        self.assertNotIn("different parts", text)
+
+    def test_a_profession_missing_from_the_groups_says_nothing(self):
+        text = self.city_route([ALCH, ENG], [(ALCH, 60, 150), (ENG, 60, 150)],
+                               groups={1519: (frozenset({ALCH}), frozenset({BS}))})
+        self.assertNotIn("different parts", text)
+
+    def test_darnassus_tip_still_shows(self):
+        tip = "Most trainers are close together, but the bank and the AH are far apart."
+        text = self.city_route([ALCH, ENG], [(ALCH, 60, 150), (ENG, 60, 150)], zone=1657, tips={1657: tip},
+                               groups={})
+        rows = self.lines(text, "- Train ")
+        self.assertTrue(all(r.endswith(" " + tip) for r in rows), rows)  # the tip is per row, as before
 
     def test_artisan_row_names_both_alliance_trainers(self):
         text = self.route([(60, 150), (200, 225)])

@@ -81,8 +81,13 @@ Write it for that.
   first trip is harder)` before the full stop), then the trainer's one-sentence tip. An instance
   trainer reads `Go with a group from about level G, solo from about level S.` (` (you're level L)`
   below G), then the tip. A trainer without notes reads as before. A city row (`Train ... in a
-  capital (for example ...)`) adds the tip of each capital it names, once; a city tip may be limited
-  to some professions (the Stormwind tip is for Alchemy and Engineering rows only). A trainer's notes
+  capital (for example ...)`) adds the tip of each capital it names, once per row. A capital's notes may also
+  group the professions whose trainers are close together (Stormwind: Tailoring, Alchemy and
+  Enchanting; Blacksmithing and Engineering; Leatherworking alone). When the guide plans two
+  professions that the notes put in different groups of a capital a city row names, the first
+  such row says once per city `In <city>, the <A> and <B> trainers are in different parts of the
+  city.` (after the tip, with the planned professions' names in the guide's order); the same group,
+  one planned profession or a profession in no group say nothing. A trainer's notes
   may also list services known from play to be near (`nearby`: bank, auction, mail); they count as
   near in the "Nearby" line even when the data's radius finds none, so "nothing within a short walk"
   is not said for them. Tips never change the route.

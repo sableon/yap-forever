@@ -46,14 +46,18 @@ nearby = ["mail", "bank", "auction"]
 
 [cities.1519]
 tip = "Another tip."
-professions = ["alchemy", "engineering"]
+groups = [["alchemy", "engineering"], ["tailoring"]]
+
+[cities.1537]
+groups = [["blacksmithing"]]
 ''')
         self.assertEqual(got.trainers[100], TrainerNote(reach_level=35, flight_path=True, note="A short sentence."))
         self.assertEqual(got.trainers[101], TrainerNote(group_level=37, solo_level=52))
         self.assertEqual(got.trainers[102], TrainerNote())
         self.assertEqual(got.trainers[103], TrainerNote(nearby=("mail", "bank", "auction")))
         self.assertEqual(got.cities, {1657: "A tip.", 1519: "Another tip."})
-        self.assertEqual(got.city_professions, {1519: frozenset({171, 202})})
+        self.assertEqual(got.city_groups, {1519: (frozenset({171, 202}), frozenset({197})),
+                                           1537: (frozenset({164}),)})
 
     def test_an_empty_file_is_no_notes(self):
         self.assertEqual(load(""), Notes({}, {}))
@@ -110,11 +114,23 @@ professions = ["alchemy", "engineering"]
             self.assertIn("nearby", message(f"[trainers.1]\nnearby = {bad}\n"), bad)
         load('[trainers.1]\nnearby = ["bank"]\n')
 
-    def test_city_professions_are_checked(self):
-        for bad in ('"alchemy"', '["mining"]', "[]", "[171]", '["alchemy", "alchemy"]', '[["alchemy"]]', "[{}]"):
-            self.assertIn("professions", message(f'[cities.1519]\ntip = "t"\nprofessions = {bad}\n'), bad)
-        self.assertIn("tip", message('[cities.1519]\nprofessions = ["alchemy"]\n'))
+    def test_city_groups_are_checked(self):
+        bad_values = ('"alchemy"', "5", "[]", '["alchemy"]', "[[]]", '[[], ["alchemy"]]', '[["mining"]]',
+                      "[[171]]", '[["alchemy", "alchemy"]]', '[["alchemy"], ["alchemy", "tailoring"]]',
+                      "[[{}]]", "[[[\"alchemy\"]]]", "[{}]", "[[true]]", '[["Alchemy"]]')
+        for bad in bad_values:
+            self.assertIn("cities.1519 groups", message(f'[cities.1519]\ngroups = {bad}\n'), bad)
+            self.assertIn("cities.1519 groups", message(f'[cities.1519]\ntip = "t"\ngroups = {bad}\n'), bad)
+
+    def test_a_city_needs_a_tip_or_groups_and_knows_no_other_keys(self):
+        self.assertIn("tip", message("[cities.1519]\n"))
+        self.assertIn("groups", message("[cities.1519]\n"))
+        self.assertIn("tip", message('[cities.1519]\ntip = ""\ngroups = [["alchemy"]]\n'))
         self.assertIn("unknown", message('[cities.1519]\ntip = "t"\nextra = 1\n'))
+        self.assertIn("unknown", message('[cities.1519]\ntip = "t"\nprofessions = ["alchemy"]\n'))
+        got = load('[cities.1519]\ngroups = [["alchemy"], ["engineering", "tailoring"]]\n')
+        self.assertEqual(got.cities, {})  # no tip
+        self.assertEqual(got.city_groups, {1519: (frozenset({171}), frozenset({202, 197}))})
 
     def test_trainers_must_be_tables_and_cities_strings(self):
         self.assertIn("trainers", message("trainers = 5\n"))
@@ -136,7 +152,8 @@ class ShippedFileTests(unittest.TestCase):
     def test_twelve_trainers_and_two_cities(self):
         self.assertEqual(sorted(self.notes.trainers),
                          sorted([7948, 1386, 2836, 3355, 11073, 11072, 11074, 8736, 11097, 11098, 11052, 2399]))
-        self.assertEqual(sorted(self.notes.cities), [1519, 1657])
+        self.assertEqual(sorted(self.notes.cities), [1657])  # Stormwind has groups, no tip
+        self.assertEqual(sorted(self.notes.city_groups), [1519])
 
     def test_values_from_play(self):
         t = self.notes.trainers
@@ -161,9 +178,13 @@ class ShippedFileTests(unittest.TestCase):
 
     def test_city_tips(self):
         self.assertEqual(self.notes.cities, {
-            1657: "The bank and the AH are far apart.",
-            1519: "The Alchemy and Engineering trainers are a long walk from the bank and the AH."})
-        self.assertEqual(self.notes.city_professions, {1519: frozenset({171, 202})})  # Darnassus: every profession
+            1657: "Most trainers are close together, but the bank and the AH are far apart."})
+
+    def test_stormwind_groups(self):
+        # from play (2026-11-19): Tailoring, Alchemy and Enchanting are close together; so are
+        # Blacksmithing and Engineering, in another part of the city; Leatherworking is on its own
+        self.assertEqual(self.notes.city_groups, {1519: (
+            frozenset({197, 171, 333}), frozenset({164, 202}), frozenset({165}))})
 
 
 if __name__ == "__main__":
