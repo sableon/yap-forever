@@ -86,8 +86,8 @@ The player creates it themselves; you never see the secret.
    and Client Secret between the quotes. Set `"region"` to the same region as the profile.
 4. `<python> -m yap_forever check` (without `--offline`) should now say `API token OK`.
 
-If the API can't be reached at all (timeouts), the player's network may block it. A VPN or
-another machine can fetch prices for now. Price import from an addon is planned.
+If the API can't be reached at all (timeouts), the player's network may block it. Two fallbacks
+for prices are in step 5: another machine over ssh, or Auctionator's saved data.
 
 ## 4. Find the auction house
 
@@ -104,3 +104,33 @@ theirs:
 ## 5. Prices
 
 `<python> -m yap_forever prices`. Then `check` should show every line `OK`.
+
+If the API can't be reached from the player's machine, there are two fallbacks. Both save the
+same prices file the normal command does, so `plan` works unchanged.
+
+**From another machine (`--remote`).** Needs OpenSSH (`ssh` and `scp` on the PATH: included with
+Windows 10 and later (an optional feature on some builds), macOS and Linux) and a machine that can
+reach the API and has this tool set up. Write `remote.toml` in the home folder (the keys are in step
+2), then run `<python> -m yap_forever prices --remote`. It runs the remote command over ssh, copies
+the prices file back and replaces the saved prices only when the copy is a valid prices file with
+listings. The ssh login must work without a prompt (ssh-agent or an unencrypted key), because the
+command asks for no passphrase or password and fails at once if one is needed. `--host NAME`
+replaces the host from `remote.toml` for one run (the other keys stay; without a `remote.toml` the
+defaults apply). Keep the host and key path to the player's own machine; never paste them anywhere
+public.
+
+**From Auctionator (`--auctionator`).** For a player with the Auctionator addon who has scanned the
+auction house in game. Log out or `/reload` first so the game writes its saved data, then run
+`<python> -m yap_forever prices --auctionator PATH`, where PATH is the addon's file:
+`WTF/Account/<account>/SavedVariables/Auctionator.lua` inside the game folder, for example
+`.../World of Warcraft/<game version folder>/WTF/Account/MYACCOUNT/SavedVariables/Auctionator.lua`.
+The game version folder depends on the install, and `<account>` is the player's account folder. If
+the file holds several realms, the command lists their keys and asks for `--realm KEY`. If it holds
+none, scan the auction house with Auctionator first.
+
+What an Auctionator import can't give: one price and one count per item, no listing depth. The
+planner buys the whole quantity at that one price, so costs are a lower bound, and sale limits
+that depend on listing counts use the day's quantity, so they are approximate. Items whose latest
+count is more than 3 days older than the newest scan, or zero, are left out, and the guide and
+report say how many. The guide and report header names the scan day and warns when it is more
+than 3 days old: tell the player to scan again before relying on the numbers.

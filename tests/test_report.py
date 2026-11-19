@@ -1,3 +1,4 @@
+import datetime
 import unittest
 
 from tests import toy
@@ -28,6 +29,36 @@ class VerdictTests(unittest.TestCase):
 
     def test_verdict_not_yet(self):
         self.assertEqual(verdict(Plan(farm={2770: 250}), toy.stock()), "Not yet")
+
+
+AUCTIONATOR_LINE = ("Prices: Auctionator scan of 2026-11-18 (one price per item, no listing depth: costs are a "
+                    "lower bound and AH sale limits are approximate).")
+
+
+class PricesHeaderTests(unittest.TestCase):
+    def render(self, today, **fields):
+        p, m, gd, st = sample()
+        for k, v in fields.items():
+            setattr(m, k, v)
+        return render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, today=today)
+
+    def test_api_prices_keep_todays_report(self):
+        text = self.render(datetime.date(2026, 11, 20))
+        self.assertNotIn("Auctionator", text)
+        self.assertNotIn("days old", text)
+        self.assertEqual(text.splitlines()[1], "")
+
+    def test_fresh_auctionator_scan(self):
+        text = self.render(datetime.date(2026, 11, 20), source="auctionator", scan_day="2026-11-18")
+        self.assertEqual(text.splitlines()[2], AUCTIONATOR_LINE)
+        self.assertNotIn("days old", text)
+        self.assertIn("- Prices: Auctionator scan of 2026-11-18.", text)
+        self.assertNotIn("AH snapshot", text)
+
+    def test_stale_auctionator_scan_counts_dropped_items(self):
+        text = self.render(datetime.date(2026, 11, 25), source="auctionator", scan_day="2026-11-18", dropped=5)
+        self.assertEqual(text.splitlines()[2], AUCTIONATOR_LINE + " This scan is 7 days old: scan again for "
+                         "current prices. 5 items older than the scan window left out.")
 
 
 class RenderTests(unittest.TestCase):

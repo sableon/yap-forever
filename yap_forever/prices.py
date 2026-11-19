@@ -1,4 +1,5 @@
 """Auction house prices: download a house's snapshot and answer price questions."""
+import datetime
 import json
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from yap_forever import bnet
 from yap_forever import settings
 
 AH_CUT = 0.05
+STALE_DAYS = 3  # an imported scan older than this many days before today gets a warning
 
 
 class Market:
@@ -18,6 +20,11 @@ class Market:
         self.region = ""
         self.ruleset: int | None = None
         self.commodities_time = ""
+        # Where the prices came from: "api" (full listings) or "auctionator" (one price and count per
+        # item); for an import, the scan day and how many items were left out as not listed.
+        self.source = "api"
+        self.scan_day = ""
+        self.dropped = 0
 
     @classmethod
     def from_snapshot(cls, regular: dict, commodities: dict, snapshot_time: str = "") -> "Market":
@@ -60,6 +67,7 @@ class Market:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {"snapshot_time": self.snapshot_time, "commodities_time": self.commodities_time,
                 "house": self.house, "region": self.region, "ruleset": self.ruleset,
+                "source": self.source, "scan_day": self.scan_day, "dropped": self.dropped,
                 "listings": {str(i): v for i, v in self.listings.items()}}
         path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -72,10 +80,32 @@ class Market:
                     d.get("snapshot_time", ""))
             m.house, m.region, m.ruleset = d.get("house"), d.get("region", ""), d.get("ruleset")
             m.commodities_time = d.get("commodities_time", "")
+            m.source, m.scan_day, m.dropped = d.get("source", "api"), d.get("scan_day", ""), d.get("dropped", 0)
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             raise ValueError(f"{path} is damaged ({type(e).__name__}): "
                              f"run {settings.command_hint('prices')}") from None
         return m
+
+
+def source_line(market: "Market", today: datetime.date | None = None) -> str:
+    """The header line for guide and report: where the prices came from. Empty for API prices."""
+    if market.source != "auctionator":
+        return ""
+    # a hand-edited prices file can hold anything in these fields
+    scan_day = market.scan_day if isinstance(market.scan_day, str) else ""
+    dropped = market.dropped if isinstance(market.dropped, int) and not isinstance(market.dropped, bool) else 0
+    line = (f"Prices: Auctionator scan of {scan_day or 'unknown date'} (one price per item, no listing "
+            "depth: costs are a lower bound and AH sale limits are approximate).")
+    try:
+        age = ((today or datetime.date.today()) - datetime.date.fromisoformat(scan_day)).days
+    except ValueError:
+        line += " Scan date unknown: scan again for current prices."
+    else:
+        if age > STALE_DAYS:
+            line += f" This scan is {age} days old: scan again for current prices."
+    if dropped > 0:
+        line += f" {dropped} items older than the scan window left out."
+    return line
 
 
 def fetch(client, house: int, ruleset: int, prices_path: Path, log_path: Path, region: str = "") -> int:

@@ -1,3 +1,4 @@
+import datetime
 import unittest
 
 from tests import toy
@@ -12,6 +13,69 @@ def guide(recipes, listings, stock=None, cap=60):
     p = run(recipes, listings, stock=st, cap=cap)
     gd = toy.gamedata(recipes)
     return render_guide(p, gd, toy.market(listings), st)
+
+
+def auctionator_market(scan_day="2026-11-18", dropped=0):
+    m = toy.market({toy.COPPER_BAR: [(100, 50)]})
+    m.source, m.scan_day, m.dropped = "auctionator", scan_day, dropped
+    return m
+
+
+LINE = ("Prices: Auctionator scan of 2026-11-18 (one price per item, no listing depth: costs are a lower "
+        "bound and AH sale limits are approximate).")
+
+
+class PricesHeaderTests(unittest.TestCase):
+    def render(self, market, today):
+        recipes = base_recipes()
+        st = toy.stock()
+        p = run(recipes, {toy.COPPER_BAR: [(100, 50)]}, stock=st, cap=60)
+        return render_guide(p, toy.gamedata(recipes), market, st, today=today)
+
+    def test_fresh_auctionator_scan_header_is_the_exact_line_under_the_title(self):
+        text = self.render(auctionator_market(), datetime.date(2026, 11, 20))
+        lines = text.splitlines()
+        self.assertTrue(lines[0].startswith("# "))
+        self.assertEqual(lines[2], LINE)
+        self.assertNotIn("days old", text)
+        self.assertIn("- Prices: Auctionator scan of 2026-11-18.", text)
+        self.assertNotIn("AH snapshot", text)
+
+    def test_the_three_days_the_docs_promise(self):
+        from yap_forever import auctionator, prices
+        self.assertEqual((prices.STALE_DAYS, auctionator.FRESH_DAYS), (3, 3))
+
+    def test_three_days_old_is_still_fresh_four_is_stale(self):
+        self.assertNotIn("days old", self.render(auctionator_market(), datetime.date(2026, 11, 21)))
+        text = self.render(auctionator_market(), datetime.date(2026, 11, 22))
+        self.assertIn(LINE + " This scan is 4 days old: scan again for current prices.", text)
+
+    def test_dropped_items_are_counted_in_the_same_line(self):
+        text = self.render(auctionator_market(dropped=3), datetime.date(2026, 11, 19))
+        self.assertIn(LINE + " 3 items older than the scan window left out.", text)
+        text = self.render(auctionator_market(dropped=3), datetime.date(2026, 11, 30))
+        self.assertIn(LINE + " This scan is 12 days old: scan again for current prices. "
+                      "3 items older than the scan window left out.", text)
+
+    def test_api_prices_keep_todays_header(self):
+        recipes = base_recipes()
+        st = toy.stock()
+        p = run(recipes, {toy.COPPER_BAR: [(100, 50)]}, stock=st, cap=60)
+        m = toy.market({toy.COPPER_BAR: [(100, 50)]})
+        m.snapshot_time = "T"
+        text = render_guide(p, toy.gamedata(recipes), m, st, today=datetime.date(2030, 1, 1))
+        self.assertNotIn("Auctionator", text)
+        self.assertNotIn("days old", text)
+        self.assertEqual(text.splitlines()[1], "")
+        self.assertIn("- Prices: your AH snapshot of T.", text)
+
+    def test_unknown_scan_day_does_not_crash(self):
+        text = self.render(auctionator_market(scan_day=""), datetime.date(2026, 11, 20))
+        self.assertIn("Auctionator scan of unknown date", text)
+        self.assertIn("Scan date unknown: scan again for current prices.", text)
+        text = self.render(auctionator_market(scan_day="garbage"), datetime.date(2026, 11, 20))
+        self.assertNotIn("days old", text)
+        self.assertIn("Scan date unknown: scan again for current prices.", text)
 
 
 class GoldTests(unittest.TestCase):
