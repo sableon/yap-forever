@@ -77,11 +77,17 @@ def bags_to_stock(bags: Path, stock: Path) -> bool:
         raise ValueError(f"{what}: profs must be a list of profession names")
     names = [_PROFESSION_NAMES.get(p, str(p)) if isinstance(p, int) else " ".join(p.lower().split()) for p in profs]
     slots = {k: _count(d, k, what) for k in ("bag_slots", "reagent_slots")}
-    items = d.get("items", {})
+    raw = d.get("items", {})
+    items: dict[int, int] = {}
     try:
-        items = {int(k): int(v) for k, v in items.items()}
-    except (ValueError, TypeError, AttributeError):
-        raise ValueError(f"{what}: [items] must be item ID = count") from None
+        for k, v in raw.items():
+            if isinstance(v, bool) or not isinstance(v, int):
+                raise ValueError
+            if int(k) in items:
+                raise ValueError(f"{what}: [items] lists item {int(k)} twice")
+            items[int(k)] = v
+    except (ValueError, TypeError, AttributeError) as e:
+        raise ValueError(str(e) or f"{what}: [items] must be item ID = whole number count") from None
     out = [f"# Made from {bags.name} by yap-forever. Check before you plan: {FILL_IN}.",
            "# level = <your level>",
            "# cash_gold = <gold you can spend>"]
@@ -114,6 +120,8 @@ def migrate(data_dir: Path, dest: Paths, characters: dict[str, Path], region: st
                 actions.append(f"converted {src} -> {dst} (check {FILL_IN})")
             else:
                 actions.append(f"kept {dst}")
+        elif dst.exists():
+            actions.append(f"kept {dst}")
         else:
             _copy(src, dst, actions)
             _add_goals(dst, actions)

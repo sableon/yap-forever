@@ -55,6 +55,16 @@ class ReportNameTests(unittest.TestCase):
     def test_the_name_itself_in_the_profile_is_not_a_collision(self):
         self.assertEqual(report_name("Testy Example", ["Testy Example"]), "testy-example")
 
+    def test_composed_and_decomposed_spellings_are_one_name(self):
+        composed, decomposed = "Zo\u00e9 Example", "Zoe\u0301 Example"
+        self.assertNotEqual(composed, decomposed)
+        self.assertEqual(report_name(composed), report_name(decomposed))
+        names = [composed, decomposed]
+        got = [report_name(n, names) for n in names]
+        self.assertEqual(got[0], f"zo\u00e9-example-{digest(composed)}")
+        self.assertEqual(got[1], f"zo\u00e9-example-{digest(decomposed)}")
+        self.assertNotEqual(got[0], got[1])
+
     def test_hash_is_utf8_sha1_first_8_hex(self):
         self.assertEqual(digest("Élise Brightforge"),
                          hashlib.sha1("Élise Brightforge".encode("utf-8")).hexdigest()[:8])

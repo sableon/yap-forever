@@ -86,6 +86,21 @@ class BagsToStockTests(unittest.TestCase):
         for word in ("bags.toml", "level", "cash_gold", "[skills]", "[goals]"):
             self.assertIn(word, top)
 
+    def test_items_with_the_same_id_twice_are_refused_naming_the_file(self):
+        self.bags.write_text('profs = ["alchemy"]\n[items]\n"2589" = 1\n"02589" = 2\n', encoding="utf-8")
+        with self.assertRaises(ValueError) as cm:
+            self.convert()
+        self.assertIn(str(self.bags), str(cm.exception))
+        self.assertFalse(self.stock.exists())
+
+    def test_a_count_that_is_not_a_whole_number_is_refused_naming_the_file(self):
+        for bad in ('2589 = 1.5', '2589 = "3"', '2589 = true'):
+            self.bags.write_text(f'profs = ["alchemy"]\n[items]\n{bad}\n', encoding="utf-8")
+            with self.assertRaises(ValueError, msg=bad) as cm:
+                self.convert()
+            self.assertIn(str(self.bags), str(cm.exception), bad)
+            self.assertFalse(self.stock.exists(), bad)
+
     def test_never_overwrites_an_existing_stock_file(self):
         self.stock.write_text("level = 9\n", encoding="utf-8")
         self.assertFalse(self.convert())

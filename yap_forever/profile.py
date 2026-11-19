@@ -39,9 +39,9 @@ _WINDOWS_REFUSED = set('<>:"/\\|?*')
 
 
 def _file_part(name: str) -> str:
-    """A character's name as one piece of a file name: casefolded, whitespace runs as '-', and the
+    """A character's name as one piece of a file name: in NFC, casefolded, whitespace runs as '-', and the
     characters Windows refuses (and control characters) dropped. Letters with accents stay."""
-    dashed = re.sub(r"\s+", "-", name.strip().casefold())
+    dashed = re.sub(r"\s+", "-", unicodedata.normalize("NFC", name).strip().casefold())
     return "".join(c for c in dashed if c not in _WINDOWS_REFUSED and unicodedata.category(c) != "Cc")
 
 

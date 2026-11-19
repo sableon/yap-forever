@@ -105,6 +105,15 @@ class SameFilesForEveryCharacterTests(MigrateTests):
         self.assertEqual(stock.read_text(encoding="utf-8"), "level = 9\n")
         self.assertTrue(any(a.startswith("kept") and str(stock) in a for a in actions), actions)
 
+    def test_a_stock_file_keeps_an_existing_stock_file_and_gets_no_goals(self):
+        stock = self.dest.character("Ana") / "stock.toml"
+        stock.parent.mkdir(parents=True)
+        stock.write_text("level = 9\n", encoding="utf-8")
+        actions = self.run_migrate()
+        self.assertEqual(stock.read_text(encoding="utf-8"), "level = 9\n")
+        self.assertTrue(any(a == f"kept {stock}" for a in actions), actions)
+        self.assertFalse(any("goals" in a and str(stock) in a for a in actions), actions)
+
     def test_a_missing_file_is_skipped(self):
         actions = migrate(self.data, self.dest, {"Ana": self.user / "nope.toml"})
         self.assertTrue(any("nope.toml (not found)" in a for a in actions), actions)
