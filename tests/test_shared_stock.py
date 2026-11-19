@@ -173,6 +173,66 @@ class MailPoolTests(unittest.TestCase):
         self.assertNotIn("Copper Rod (mail", text)
 
 
+class MailedGreensTests(unittest.TestCase):
+    """The owner's example: crafts mailed to the enchanter to disenchant."""
+    BELT = toy.BELT
+
+    def rs(self):
+        return [toy.recipe(1, "BS basic", BS, {S: 1}, (toy.STONE, 1)), toy.recipe(2, "Ench dust", ENCH, {toy.DUST: 1})]
+
+    def go(self, st, caps=None, bonding=None):
+        gd = toy.gamedata(self.rs())
+        for i, b in (bonding or {}).items():
+            gd.items[i].bonding = b
+        market = toy.market({**BARS, toy.DUST: [(300, 100000)], self.BELT: [(5000, 10)]})
+        return plan(gd, Valuer(market, gd, st), st, toy.NO_FAVOR, caps=caps or {BS: 40, ENCH: 40}), gd, market
+
+    def test_a_mates_greens_are_disenchanted_and_named(self):
+        p, _gd, _m = self.go(toy.stock(shared={"Ann": {self.BELT: 30}}))
+        first = next(st for st in p.steps if st.profession == ENCH)
+        self.assertEqual((first.spell_id, first.skill_from), (0, 1))
+        self.assertEqual(first.materials, {self.BELT: 30})
+        self.assertEqual((first.from_mail, first.from_stock), ({self.BELT: 30}, {}))
+        self.assertEqual(p.used_mail, {self.BELT: [("Ann", 30)]})
+        self.assertIn("Enchanting 1: disenchant 30 Runed Copper Belt (mail from Ann)", p.events)
+        self.assertNotIn(self.BELT, p.leftovers)
+        self.assertGreater(p.de_materials.get(toy.DUST, 0), 0)
+
+    def test_own_greens_come_first_and_each_source_is_named(self):
+        st = toy.stock({self.BELT: 10}, shared={"Ann": {self.BELT: 20}, "Bob": {self.BELT: 5}})
+        p, _gd, _m = self.go(st)
+        self.assertEqual(p.used_stock, {self.BELT: 10})
+        self.assertEqual(p.used_mail, {self.BELT: [("Ann", 20), ("Bob", 5)]})
+        self.assertIn("Enchanting 1: disenchant 10 Runed Copper Belt from your bank", p.events)
+        self.assertTrue(any(e.endswith("disenchant 25 Runed Copper Belt (mail from Ann, Bob)") for e in p.events))
+
+    def test_without_enchanting_in_the_plan_a_mates_greens_are_left_alone(self):
+        p, _gd, _m = self.go(toy.stock(shared={"Ann": {self.BELT: 30}}), caps={BS: 40})
+        self.assertEqual(p.used_mail, {})
+        self.assertFalse(any(st.spell_id == 0 for st in p.steps))
+
+    def test_soulbound_greens_stay_with_their_character(self):
+        gd = toy.gamedata(self.rs())
+        gd.items[self.BELT].bonding = 1
+        group = shared.Group(2, "alliance", others={"Ann": toy.stock({self.BELT: 30})})
+        p, _gd, _m = self.go(toy.stock(shared=group.shared_items(gd)), bonding={self.BELT: 1})
+        self.assertEqual(p.used_mail, {})
+
+    def test_the_guide_and_report_name_the_source(self):
+        from yap_forever.guide import render_guide
+        from yap_forever.report import render, verdict
+        st = toy.stock(shared={"Ann": {self.BELT: 30}})
+        p, gd, market = self.go(st)
+        text = render_guide(p, gd, market, st, caps={BS: 40, ENCH: 40})
+        self.assertIn("*At 1: disenchant 30 Runed Copper Belt (mail from Ann)*", text)
+        row = next(l for l in text.splitlines() if l.startswith("| Runed Copper Belt"))
+        self.assertEqual([c.strip() for c in row.split("|")[2:6]], ["30", "0", "30", "0"])  # keep, bank, mail, still
+        self.assertIn("- From your other characters, by mail: 30 Runed Copper Belt (mail from Ann).", text)
+        report = render(p, verdict(p, st), market, gd, st, toy.NO_FAVOR, caps={BS: 40, ENCH: 40})
+        self.assertIn("Enchanting 1: disenchant 30 Runed Copper Belt (mail from Ann)", report)
+        self.assertIn("30 Runed Copper Belt (mail from Ann)", report)
+
+
 class OwnItemsFirstTests(unittest.TestCase):
     """Your own ore, smelted, comes before bars another character mails; mining comes after them."""
     IRON_ORE = 2772
@@ -515,6 +575,10 @@ class GuideTests(unittest.TestCase):
         note = int(re.search(r"(\d+) Copper Bar \(mail from Ann\)", next(
             l for l in text.splitlines() if l.startswith("- From your other characters"))).group(1))
         self.assertEqual(note, trip)
+        row = next(l for l in text.splitlines() if l.startswith("| Copper Bar | ") and "By mail" not in l)
+        keep = [c.strip() for c in row.split("|")[2:6]]  # keep, in bank, by mail, still to get
+        self.assertEqual(int(keep[2]), trip)  # the keep table counts what the trips count
+        self.assertEqual(float(keep[0]) - int(keep[1]) - int(keep[2]), float(keep[3]))
         self.assertGreater(trip, p.used_mail[S][0][1])  # the buffer is on top of what the planner took
 
     def test_the_report_counts_what_the_trips_count(self):

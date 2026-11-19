@@ -97,7 +97,7 @@ def _title(caps, route) -> str:
 
 def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None,
                  character=None, reading="relative", today=None, trainer_info=None, trainer_note="",
-                 saving_line="", mode="gold", study_hint_gold_per_point=100) -> str:
+                 saving_line="", mode="gold", study_hint_gold_per_point=100, extra_notes=()) -> str:
     """caps: profession -> target (default Blacksmithing and Enchanting to the stock's target).
     alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
     character, reading: the profile.Character and Working Overtime reading, for the talent lines.
@@ -106,7 +106,8 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
     trainer_note: why trainers are left out, said once at the top.
     saving_line: what a route planned at the Forever listing could cost less ("": none).
     mode: "gold" or "value", the measure the route was planned for (a row's cost per point is in it).
-    study_hint_gold_per_point: a row of the lowest profession at this many gold a point gets a Dedicated Study hint."""
+    study_hint_gold_per_point: a row of the lowest profession at this many gold a point gets a Dedicated Study hint.
+    extra_notes: lines for the Notes section (a character's stock file that was left out of the plan)."""
     caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
@@ -125,14 +126,16 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
         out += [trainer_note, ""]
     for line in talent_lines(character, reading, plan, caps, stock) + ([saving_line] if saving_line else []):
         out += [line, ""]
-    _keep(out, plan, gd, market)
+    from yap_forever.shopping import mailed  # shopping imports this module
+    by_mail = mailed(plan, gd, stock) if plan.used_mail else {}  # the shopping list's counts
+    _keep(out, plan, gd, market, by_mail)
     hint = _StudyHint(lowest_profession(caps, stock), mode, study_hint_gold_per_point, character)
     _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint)
-    from yap_forever.shopping import mailed, render_shopping  # shopping imports this module
+    from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)
     _notes(out, plan, market, gatherer=bool(stock.mining or plan.farm),
-           mailed=mailed(plan, gd, stock) if plan.used_mail else None, gd=gd)
+           mailed=by_mail, gd=gd, notes=extra_notes)
     return "\n".join(out) + "\n"
 
 
@@ -148,8 +151,10 @@ def _less(counts: dict, minus: dict) -> dict:
     return {i: q for i, q in out.items() if q > 1e-9}
 
 
-def _keep(out, plan, gd, market) -> None:
-    need, bank, mail = {}, {}, {}
+def _keep(out, plan, gd, market, by_mail=None) -> None:
+    """by_mail: item -> (character, count) mailed by your other characters, as the shopping list counts it."""
+    need, bank = {}, {}
+    mail = {i: sum(n for _who, n in sources) for i, sources in (by_mail or {}).items()}
     rows, seen = _whole(plan, gd), set()
     for s in plan.steps:
         row = rows.get(id(s))
@@ -159,7 +164,6 @@ def _keep(out, plan, gd, market) -> None:
             seen.add(id(row))
             _add(need, _less(row["need"], row["tools"]))  # a bought tool is no material to keep
         _add(bank, s.from_stock)
-        _add(mail, s.from_mail)
     groups: dict[str, list] = {}
     for item, q in need.items():
         groups.setdefault(source_group(item, gd), []).append(item)
@@ -461,9 +465,11 @@ def _money(out, plan, stock) -> None:
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 
-def _notes(out, plan, market, gatherer=True, mailed=None, gd=None) -> None:
-    """mailed: item -> (character, count) your other characters are asked to mail (shopping.mailed)."""
+def _notes(out, plan, market, gatherer=True, mailed=None, gd=None, notes=()) -> None:
+    """mailed: item -> (character, count) your other characters are asked to mail (shopping.mailed).
+    notes: further lines the caller wants said (a character's file that was left out)."""
     out += ["## Notes", ""]
+    out += [f"- {line}" for line in notes]
     if mailed and gd is not None:
         out += [f"- From your other characters, by mail: {mail_text(mailed, gd.name)}.", f"- {SHARED_NOTE}"]
     for reason in plan.stall_reasons.values():
