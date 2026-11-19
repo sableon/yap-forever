@@ -24,6 +24,7 @@ UNCONFIRMED = " (title unconfirmed in the data)"
 class RemoteStop:
     text: str
     found: bool  # False: the sentence says the data has no such trainer
+    services_known: bool = False  # every trainer named is in the character's capital or has a Nearby line
 
 
 @dataclass(frozen=True)
@@ -58,17 +59,18 @@ def _confirmed_first(found: list[Trainer]) -> list[tuple[Trainer, str]]:
     return sure or [(t, UNCONFIRMED) for t in found]
 
 
-def _place(t: Trainer, flag: str, info: TrainerInfo) -> str:
+def _place(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
+    """The trainer's place, and whether it says what services are there."""
     data = info.data
     zone = data.zone_name(t.zone)
     if t.coords is None:
         parent = data.parent_zone(t.zone)
-        return f"{t.name}{flag}, inside {zone}" + (f" ({data.zone_name(parent)})" if parent else "") + "."
+        return f"{t.name}{flag}, inside {zone}" + (f" ({data.zone_name(parent)})" if parent else "") + ".", False
     place = f"{t.name}{flag}, {zone} ({t.coords[0]:.1f}, {t.coords[1]:.1f})."
     if t.zone in CAPITALS[info.faction]:  # a capital has a bank, an auction house and a mailbox
-        return place
+        return place, True
     near = trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS)
-    return f"{place} {services_text(near)}"
+    return f"{place} {services_text(near)}", True
 
 
 def remote_stop(info: TrainerInfo | None, profession: int, cap: int) -> RemoteStop | None:
@@ -82,8 +84,9 @@ def remote_stop(info: TrainerInfo | None, profession: int, cap: int) -> RemoteSt
     if not found:
         return RemoteStop(_no_trainer(rank, profession), False)
     named = _confirmed_first(found)[:MAX_REMOTE]
-    return RemoteStop(" ".join(("Or " if i else "") + _place(t, flag, info) for i, (t, flag) in enumerate(named)),
-                      True)
+    places = [_place(t, flag, info) for t, flag in named]
+    return RemoteStop(" ".join(("Or " if i else "") + text for i, (text, _known) in enumerate(places)),
+                      True, all(known for _text, known in places))
 
 
 def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:

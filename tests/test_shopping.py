@@ -275,6 +275,16 @@ class EssencePackingTests(unittest.TestCase):
         self.assertIn("pack 90 Lesser Astral Essence into 30 Greater Astral Essence", text)
         self.assertIn("4 bag slots", text)
 
+    def test_bring_text_town_clause_goes_when_the_row_says_what_is_near(self):
+        from yap_forever.shopping import bring_text
+        from yap_forever.trips import Trip
+        trip = Trip(100, 333, "rank", "Enchanting rank to 225")
+        clause = "the town may have no auction house, mailbox or bank"
+        self.assertIn(clause, bring_text(self.plan(), essence_gd(10), trip, None))
+        known = bring_text(self.plan(), essence_gd(10), trip, None, services_known=True)
+        self.assertNotIn(clause, known)
+        self.assertTrue(known.endswith("); buy and collect before you go."), known)
+
     def test_bring_list_fits_more_when_packed(self):
         from yap_forever.shopping import bring_list
         from yap_forever.trips import Trip

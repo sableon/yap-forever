@@ -226,7 +226,8 @@ def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, trainer_
         else:
             where = f"{stop.text} {learn}" if stop.found else stop.text
         return (f"- **Trip:** {t.what}: {where}"
-                + (bring_text(plan, gd, t, bag_slots, owned) if plan is not None else ""))
+                + (bring_text(plan, gd, t, bag_slots, owned, bool(stop and stop.services_known))
+                   if plan is not None else ""))
     if t.kind == "vendor":
         line = (f"- **Trip:** buy the pattern for {t.what} from a vendor (patterns are sold in particular "
                 "towns); buy every vendor pattern the route uses on one visit: patterns can be bought before "

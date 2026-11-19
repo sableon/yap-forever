@@ -251,8 +251,13 @@ class TrainerRowTests(unittest.TestCase):
 
     def route(self, ranks, faction="alliance", events=(), learn_log=(), recipes=None, steps=None, **kw):
         from yap_forever.planner import Plan, Step
-        rs = recipes or base_recipes()
-        p = Plan(steps=steps or [Step(BS, 1, 300, 1, "BS basic", 299, 0, 0, {toy.COPPER_BAR: 299})],
+        rs = (recipes or base_recipes()) + [toy.recipe(11, "BS two", BS, {toy.COPPER_BAR: 1}),
+                                            toy.recipe(12, "BS three", BS, {toy.COPPER_BAR: 1}),
+                                            toy.recipe(22, "Ench two", ENCH, {toy.ROD: 1})]
+        steps = steps or [Step(BS, 1, 200, 1, "BS basic", 199, 0, 0, {toy.COPPER_BAR: 199}),
+                          Step(BS, 200, 275, 11, "BS two", 75, 0, 0, {toy.COPPER_BAR: 75}),
+                          Step(BS, 275, 300, 12, "BS three", 25, 0, 0, {toy.COPPER_BAR: 25})]
+        p = Plan(steps=steps, bought={toy.COPPER_BAR: 299},
                  ranks=[(BS, s, cap, 450) for s, cap in ranks], learn_log=list(learn_log),
                  events=[f"Blacksmithing {s}: train rank up to {cap} (4s 50c)" for s, cap in ranks] + list(events),
                  final_skill={BS: 300})
@@ -306,6 +311,41 @@ class TrainerRowTests(unittest.TestCase):
         text = self.route([(60, 150)], faction="alliance")
         (row,) = self.lines(text, "- Train ")
         self.assertIn("the planner has no Expert Blacksmith trainer for your faction in its data.", row)
+
+    CLAUSE = "the town may have no auction house, mailbox or bank"
+
+    def trip_row(self, text, what):
+        (row,) = [l for l in self.lines(text, "- **Trip:**") if what in l]
+        self.assertIn("Bring:", row)
+        return row
+
+    def test_bring_clause_dropped_for_a_capital_trainer(self):
+        row = self.trip_row(self.route([(60, 150), (200, 225)]), "rank to 225")
+        self.assertNotIn(self.CLAUSE, row)
+        self.assertTrue(row.endswith("buy and collect before you go."), row)
+
+    def test_bring_clause_dropped_when_the_nearby_line_is_printed(self):
+        row = self.trip_row(self.route([(60, 150), (200, 225), (275, 300)]), "rank to 300")
+        self.assertIn("Nearby:", row)
+        self.assertNotIn(self.CLAUSE, row)
+
+    def test_bring_clause_kept_when_nothing_better_is_known(self):
+        for faction in ("", "horde"):  # no faction; and no Artisan trainer for the faction in the data
+            row = self.trip_row(self.route([(60, 150), (200, 225)], faction=faction), "rank to 225")
+            self.assertIn(self.CLAUSE, row, faction)
+
+    def test_bring_clause_kept_for_an_instance_trainer(self):
+        from yap_forever.planner import Plan, Step
+        p = Plan(steps=[Step(333, 1, 250, 2, "Ench basic", 249, 0, 0, {toy.ROD: 249}),
+                        Step(333, 250, 300, 22, "Ench two", 50, 0, 0, {toy.ROD: 50})],
+                 ranks=[(333, 250, 300, 450)], bought={toy.ROD: 299},
+                 events=["Enchanting 250: train rank up to 300 (4s 50c)"], final_skill={333: 300})
+        gd = toy.gamedata(base_recipes() + [toy.recipe(22, "Ench two", 333, {toy.ROD: 1})])
+        text = render_guide(p, gd, toy.market(BARS), toy.stock(skills={333: 1}),
+                            caps={333: 300}, trainer_info=self.info("horde"))
+        row = self.trip_row(text, "rank to 300")
+        self.assertIn("inside Uldaman", row)
+        self.assertIn(self.CLAUSE, row)
 
     def test_no_faction_is_todays_text(self):
         with_none = self.route([(60, 150), (200, 225), (275, 300)], faction="")
