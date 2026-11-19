@@ -1,4 +1,5 @@
 """Auction house prices: download a house's snapshot and answer price questions."""
+import datetime
 import json
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from yap_forever import bnet
 from yap_forever import settings
 
 AH_CUT = 0.05
+STALE_DAYS = 3  # an imported scan older than this many days before today gets a warning
 
 
 class Market:
@@ -83,6 +85,23 @@ class Market:
             raise ValueError(f"{path} is damaged ({type(e).__name__}): "
                              f"run {settings.command_hint('prices')}") from None
         return m
+
+
+def source_line(market: "Market", today: datetime.date | None = None) -> str:
+    """The header line for guide and report: where the prices came from. Empty for API prices."""
+    if market.source != "auctionator":
+        return ""
+    line = (f"Prices: Auctionator scan of {market.scan_day or 'unknown date'} (one price per item, no listing "
+            "depth: costs are a lower bound and AH sale limits are approximate).")
+    try:
+        age = ((today or datetime.date.today()) - datetime.date.fromisoformat(market.scan_day)).days
+    except ValueError:
+        age = 0
+    if age > STALE_DAYS:
+        line += f" This scan is {age} days old: scan again for current prices."
+    if market.dropped > 0:
+        line += f" {market.dropped} items older than the scan window left out."
+    return line
 
 
 def fetch(client, house: int, ruleset: int, prices_path: Path, log_path: Path, region: str = "") -> int:

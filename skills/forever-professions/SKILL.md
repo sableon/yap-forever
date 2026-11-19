@@ -39,7 +39,11 @@ player what changed, running the planner, and walking them through the result.
    another character** or sold, and set `keep_greens = true` or `false` in `stock.toml`. A
    character with only a `bags.toml` needs a `stock.toml`: help write one (level, `[items]`,
    `bag_slots`, `[goals]`).
-3. **Refresh prices** with `prices`. Prices update about once an hour.
+3. **Refresh prices** with `prices`. Prices update about once an hour. If the API can't be
+   reached, use a fallback from [references/setup.md](references/setup.md) step 5:
+   `prices --remote` (another machine over ssh) or `prices --auctionator PATH` (Auctionator's
+   saved data). An import has one price per item and no listing depth: say so, and if the guide
+   header warns the scan is old, ask the player to scan again.
 4. **Run the planner** for what they asked: `plan --character NAME --prof NAME:TARGET` (once per
    profession). Show the comparison table it prints and explain the two routes in a sentence each:
    **least gold** counts what the player owns as free; **least total value** counts owned

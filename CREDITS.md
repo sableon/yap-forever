@@ -11,6 +11,7 @@ when it first plans; none of that data is stored in this repository.
 | Quests (spec quests, quest-taught plans) | [Questie/QuestieDB](https://github.com/Questie/QuestieDB) (`data/Forever/foreverQuestDB.lua`) | GPLv3 for new contributions; older content per the project's `LICENSE.md` (forks allowed under GPLv3 by the team's statement) | commit `ae4404b01a45163d3ef05909395b29aafc437bc2` |
 | Items, item quality, stack sizes, tools, recipe skill lines | [wago.tools](https://wago.tools) DB2 exports of the WoW: Forever client (`ItemSparse`, `Item`, `SpellTotems`, `TotemCategory`, `SkillLineAbility`) | Blizzard Entertainment's game data | build `1.60.1.70862` |
 | Auction house prices | Blizzard Battle.net API, with **your own** API client | Blizzard API terms; prices stay on your machine | live |
+| Auction house prices (alternative) | [Auctionator](https://github.com/Auctionator/Auctionator) addon's saved-variables file (`Auctionator.lua`): a saved-data format this project reads, with its own small decoder. No Auctionator code or data is included | the file is the player's own data | the addon's price database version 8 |
 
 ## Kept in this repository (`yap_forever/data_static/`)
 

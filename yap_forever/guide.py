@@ -7,6 +7,7 @@ from yap_forever.config import STATIC_DIR
 from yap_forever.costmodel import BARS, ORES, STONES
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
+from yap_forever.prices import source_line
 from yap_forever.trips import trips
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
@@ -89,11 +90,14 @@ def _title(caps, route) -> str:
     return title + (f" — {route} route" if route else "")
 
 
-def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None) -> str:
+def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None, today=None) -> str:
     """caps: profession -> target (default Blacksmithing and Enchanting to the stock's target).
-    alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives."""
+    alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
+    today: the date the staleness of imported prices is judged against (default: today)."""
     caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
+    if source_line(market, today):
+        out += [source_line(market, today), ""]
     if comparison:
         out += [comparison, ""]
     intro = []
@@ -390,4 +394,8 @@ def _notes(out, plan, market, gatherer=True) -> None:
     if gatherer:
         out += ["- Leather is costed as bought on the AH; since you skin, gather it instead.",
                 "- Stones are counted as mined along with the ore."]
-    out += [f"- Prices: your AH snapshot of {market.snapshot_time or 'unknown time'}.", ""]
+    if market.source == "auctionator":  # the limits of an import are stated at the top of the guide
+        out.append(f"- Prices: Auctionator scan of {market.scan_day or 'unknown date'}.")
+    else:
+        out.append(f"- Prices: your AH snapshot of {market.snapshot_time or 'unknown time'}.")
+    out.append("")
