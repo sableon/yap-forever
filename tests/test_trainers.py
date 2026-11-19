@@ -691,6 +691,49 @@ class NoteRowTests(unittest.TestCase):
         self.assertTrue(trainer_text.remote_stop(info, BS, 300, 60).services_known)
 
 
+class NoteNearbyTests(unittest.TestCase):
+    """Services the owner found in play count as near, whatever the radius says."""
+    @classmethod
+    def setUpClass(cls):
+        cls.data = fixture_data()
+
+    def text(self, nearby, npc=90001, cap=300, faction="alliance", profession=BS):
+        notes = Notes({npc: TrainerNote(nearby=nearby)}, {})
+        info = trainer_text.TrainerInfo(faction, self.data, notes)
+        return trainer_text.remote_stop(info, profession, cap).text
+
+    def lone(self, nearby, mailboxes=(), rows=None):
+        t = Trainer(1, "Lone Smith", BS, "Master", "AH", 33, (30.0, 70.0), True)
+        data = trainers.TrainerData([t], rows or {}, list(mailboxes), {33: "Somewhere"})
+        info = trainer_text.TrainerInfo("alliance", data, Notes({1: TrainerNote(nearby=nearby)}, {}))
+        return trainer_text.remote_stop(info, BS, 300).text
+
+    def test_a_listed_service_replaces_nothing_within_a_short_walk(self):
+        far = [(33, 90, 90)]  # a mailbox in the zone, far away: the closest-service text would say so
+        self.assertEqual(self.lone((), far), "Lone Smith, Somewhere (30.0, 70.0). Nearby: nothing within a short "
+                                             "walk; the closest is the mailbox.")
+        self.assertEqual(self.lone(("mail",), far),
+                         "Lone Smith, Somewhere (30.0, 70.0). Nearby: mailbox; no bank or auction house.")
+
+    def test_listed_services_add_to_what_the_data_finds(self):
+        self.assertEqual(self.lone(("bank", "auction"), [(33, 30.5, 70)]),
+                         "Lone Smith, Somewhere (30.0, 70.0). Nearby: bank, auction house, mailbox.")
+
+    def test_a_listed_service_the_data_finds_is_said_once(self):
+        self.assertEqual(self.lone(("mail",), [(33, 30.5, 70)]),
+                         "Lone Smith, Somewhere (30.0, 70.0). Nearby: mailbox; no bank or auction house.")
+
+    def test_a_found_neutral_auction_house_stays_neutral(self):
+        self.assertIn("neutral AH", self.text(("auction",)))
+
+    def test_no_listed_services_changes_nothing(self):
+        self.assertEqual(self.text(()), trainer_text.remote_stop(
+            trainer_text.TrainerInfo("alliance", self.data), BS, 300).text)
+
+    def test_a_capital_trainer_still_has_no_nearby_line(self):
+        self.assertNotIn("Nearby", self.text(("mail",), npc=90002, cap=225))
+
+
 class CityTipTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -704,6 +747,18 @@ class CityTipTests(unittest.TestCase):
         got = self.row({1519: "A tip."}, profession=TAILOR, cap=75)
         self.assertEqual(got, "Train Tailoring to 75 at any Journeyman Tailor in a capital "
                               "(for example Olla Stitchwell, Stormwind City). A tip.")
+
+    def test_a_tip_for_some_professions_shows_only_on_their_rows(self):
+        notes = Notes({}, {1519: "A tip."}, {1519: frozenset({TAILOR})})
+        info = trainer_text.TrainerInfo("alliance", self.data, notes)
+        self.assertTrue(trainer_text.city_row(info, TAILOR, 75).endswith("Stormwind City). A tip."))
+        self.assertNotIn("A tip", trainer_text.city_row(trainer_text.TrainerInfo("horde", self.data, notes), BS, 150))
+        ts = [Trainer(1, "Smith", BS, "Expert", "A", 1519, (1, 1), True)]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City"})
+        self.assertNotIn("A tip", trainer_text.city_row(trainer_text.TrainerInfo("alliance", data, notes), BS, 150))
+
+    def test_a_tip_without_professions_shows_on_every_profession(self):
+        self.assertIn("A tip.", self.row({1519: "A tip."}, profession=TAILOR, cap=75))
 
     def test_a_city_without_a_tip_is_unchanged(self):
         plain = trainer_text.city_row(trainer_text.TrainerInfo("horde", self.data), BS, 150)

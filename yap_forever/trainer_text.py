@@ -3,6 +3,7 @@
 Everything here returns None (or "") when the player's faction or the trainer data is missing, so
 the guide then says what it said before trainers were named.
 """
+import dataclasses
 import urllib.error
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,6 +110,10 @@ def _where(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
     if t.zone in CAPITALS[info.faction]:  # a capital has a bank, an auction house and a mailbox
         return place, True
     near = trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS)
+    listed = info.notes.trainers[t.npc_id].nearby if info.notes and t.npc_id in info.notes.trainers else ()
+    if listed:  # facts from play beat the radius
+        near = dataclasses.replace(near, bank=near.bank or "bank" in listed,
+                                   auction=near.auction or "auction" in listed, mail=near.mail or "mail" in listed)
     closest = None if near.bank or near.auction or near.mail else \
         trainers.closest_service(t, data.npc_rows, data.mailboxes)
     return f"{place} {services_text(near, closest)}", True
@@ -147,8 +152,9 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
         return f"Train {name} to {cap} at {where} (no {rank} {PERSON.get(profession, name)} in a capital in the data)."
     text = f"Train {name} to {cap} at any {rank} {PERSON.get(profession, name)} in a capital"
     text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")."
-    tips = [info.notes.cities[z] for z in dict.fromkeys(t.zone for t, _flag in examples) if z in info.notes.cities] \
-        if info.notes else []
+    notes = info.notes
+    tips = [notes.cities[z] for z in dict.fromkeys(t.zone for t, _flag in examples)
+            if notes and z in notes.cities and profession in notes.city_professions.get(z, {profession})]
     return " ".join([text] + tips)
 
 

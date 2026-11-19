@@ -6,10 +6,13 @@
 #   reach_level  = the character level from which the first trip is comfortable
 #   flight_path  = true when a flight path makes repeat visits easy
 #   note         = one short plain sentence
+#   nearby       = services known from play to be near, whatever the data's radius finds:
+#                  a list of "bank", "auction", "mail"
 # For a trainer inside an instance, use group_level and solo_level (both) instead of reach_level.
 #
-# [cities] holds tips for a capital, keyed by the AreaTable zone ID; they are said once on a city
-# row and never change the route. Specialisation trainers are left out on purpose.
+# [cities] holds tips for a capital, keyed by the AreaTable zone ID: `1657 = "tip"`, or a table
+# `[cities.1519]` with `tip` and `professions` (names like "alchemy"; the tip then shows only on
+# rows of those professions). A tip is said once on a city row and never changes the route. Specialisation trainers are left out on purpose.
 
 [trainers.7948]  # Kylanna Windwhisper, Master Alchemy, Alliance, Feralas
 reach_level = 35
@@ -34,7 +37,7 @@ solo_level = 52
 note = "A group can go from about 35, but groups are easier to find from 37–39 and full runs from 42."
 
 [trainers.11072]  # Kitta Firewind, Artisan Enchanting, Alliance, Elwynn Forest
-note = "Close to Stormwind; the mailbox is the closest service."
+note = "Close to Stormwind."
 
 [trainers.11074]  # Hgarth, Artisan Enchanting, Horde, Stonetalon Mountains
 reach_level = 20
@@ -55,13 +58,16 @@ note = "Some danger on the road the first time."
 
 [trainers.11052]  # Timothy Worthington, Master Tailoring, Alliance, Theramore
 reach_level = 20
-note = "A safe town with a mailbox nearby; a long first trip for Alliance."
+nearby = ["mail"]  # the data finds no mailbox within the radius; in play it is close
+note = "A safe town; a long first trip for Alliance."
 
 [trainers.2399]  # Daryl Stack, Master Tailoring, Horde, Hillsbrad Foothills
 reach_level = 18
 flight_path = true
-note = "A mailbox nearby."
 
 [cities]
 1657 = "The bank and the AH are far apart."  # Darnassus
-1519 = "The Alchemy and Engineering trainers are a long walk from the bank and the AH."  # Stormwind City
+
+[cities.1519]  # Stormwind City
+tip = "The Alchemy and Engineering trainers are a long walk from the bank and the AH."
+professions = ["alchemy", "engineering"]

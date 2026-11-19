@@ -4,13 +4,15 @@ The file ships with the planner, so a mistake in it is a mistake to fix in the f
 names the key and what is wrong with it.
 """
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from yap_forever.config import STATIC_DIR
+from yap_forever.config import PROFESSION_IDS, STATIC_DIR
 
 MAX_LEVEL = 60
-_TRAINER_KEYS = {"reach_level", "flight_path", "note", "group_level", "solo_level"}
+_TRAINER_KEYS = {"reach_level", "flight_path", "note", "group_level", "solo_level", "nearby"}
+_CITY_KEYS = {"tip", "professions"}
+SERVICES = ("bank", "auction", "mail")  # what `nearby` may name
 _FILE = "trainer_notes.toml"
 
 
@@ -21,12 +23,14 @@ class TrainerNote:
     note: str = ""
     group_level: int | None = None  # an instance trainer: the level to go with a group ...
     solo_level: int | None = None  # ... and to go alone
+    nearby: tuple[str, ...] = ()  # services known from play to be near, whatever the radius finds (SERVICES)
 
 
 @dataclass(frozen=True)
 class Notes:
     trainers: dict[int, TrainerNote]  # by NPC ID
     cities: dict[int, str]  # tips by the capital's AreaTable zone ID
+    city_professions: dict[int, frozenset[int]] = field(default_factory=dict)  # skill lines a tip is for; none listed: all
 
 
 def _bad(why: str) -> ValueError:
@@ -62,13 +66,17 @@ def _trainer(npc: int, table: object) -> TrainerNote:
     note = table.get("note", "")
     if not isinstance(note, str) or ("note" in table and not note.strip()):
         raise _bad(f"{where} note must be a non-empty sentence, not {note!r}")
+    nearby = table.get("nearby", [])
+    if (not isinstance(nearby, list) or ("nearby" in table and not nearby) or len(set(nearby)) != len(nearby)
+            or any(n not in SERVICES for n in nearby)):
+        raise _bad(f"{where} nearby must be a list of different services from {', '.join(SERVICES)}, not {nearby!r}")
     if (group is None) != (solo is None):
         raise _bad(f"{where} needs group_level and solo_level together")
     if group is not None and reach is not None:
         raise _bad(f"{where} has reach_level as well as group_level and solo_level: use one kind")
     if group is not None and solo < group:
         raise _bad(f"{where} solo_level ({solo}) is below group_level ({group})")
-    return TrainerNote(reach, flight, note, group, solo)
+    return TrainerNote(reach, flight, note, group, solo, tuple(nearby))
 
 
 def load_notes(path: Path | None = None) -> Notes:
@@ -93,9 +101,22 @@ def load_notes(path: Path | None = None) -> Notes:
     if not isinstance(cities, dict):
         raise _bad("cities must be a table of <zone ID> = \"tip\" lines")
     out_t = {_id(k, "trainers"): _trainer(_id(k, "trainers"), v) for k, v in trainers.items()}
-    out_c = {}
+    out_c, out_p = {}, {}
     for k, v in cities.items():
-        if not isinstance(v, str) or not v.strip():
-            raise _bad(f"cities.{k} must be a non-empty sentence, not {v!r}")
-        out_c[_id(k, "cities")] = v
-    return Notes(out_t, out_c)
+        zone, where = _id(k, "cities"), f"cities.{k}"
+        table = v if isinstance(v, dict) else {"tip": v}
+        unknown = sorted(set(table) - _CITY_KEYS)
+        if unknown:
+            raise _bad(f"{where} has unknown key(s) {', '.join(unknown)}; known: {', '.join(sorted(_CITY_KEYS))}")
+        tip = table.get("tip")
+        if not isinstance(tip, str) or not tip.strip():
+            raise _bad(f"{where} must be a non-empty sentence (or a table with a non-empty tip), not {tip!r}")
+        out_c[zone] = tip
+        if "professions" in table:
+            names = table["professions"]
+            if (not isinstance(names, list) or not names or len(set(names)) != len(names)
+                    or any(n not in PROFESSION_IDS for n in names)):
+                raise _bad(f"{where} professions must be a list of different names from "
+                           f"{', '.join(PROFESSION_IDS)}, not {names!r}")
+            out_p[zone] = frozenset(PROFESSION_IDS[n] for n in names)
+    return Notes(out_t, out_c, out_p)
