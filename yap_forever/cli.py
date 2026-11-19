@@ -60,9 +60,16 @@ def _client(paths: Paths, prof: profile.Profile) -> bnet.Client:
 
 def cmd_check(paths: Paths, offline: bool) -> int:
     lines, missing = [], False
+    try:
+        imported = prices.Market.load(paths.prices).source == "auctionator" if paths.prices.exists() else False
+    except ValueError:  # the prices line reports it below
+        imported = False
 
-    def line(name: str, ok: bool, text: str):
+    def line(name: str, ok: bool, text: str, needed: bool = True):
         nonlocal missing
+        if not ok and not needed:  # imported prices need no API client and no house
+            lines.append(f"{name:<12} not needed with imported prices")
+            return
         missing |= not ok
         lines.append(f"{name:<12} {'OK' if ok else 'MISSING:'} {text}")
 
@@ -81,12 +88,12 @@ def cmd_check(paths: Paths, offline: bool) -> int:
         creds_ok = True
         line("credentials", True, str(paths.credentials))
     except FileNotFoundError:
-        line("credentials", False, f"no {paths.credentials}: run {command_hint('init')}")
+        line("credentials", False, f"no {paths.credentials}: run {command_hint('init')}", needed=not imported)
     except ValueError:
         line("credentials", False, f"put your API client ID and secret into {paths.credentials} "
-                                   f"(create a client at {API_CLIENTS})")
+                                   f"(create a client at {API_CLIENTS})", needed=not imported)
     except PermissionError as e:
-        line("credentials", False, f"{e} ({paths.credentials})")
+        line("credentials", False, f"{e} ({paths.credentials})", needed=not imported)
     if offline:
         lines.append(f"{'API token':<12} skipped (--offline)")
     elif creds_ok and prof:
@@ -98,7 +105,7 @@ def cmd_check(paths: Paths, offline: bool) -> int:
     try:
         line("house", True, str(profile.load_house(paths.house)))
     except (FileNotFoundError, ValueError) as e:
-        line("house", False, str(e))
+        line("house", False, str(e), needed=not imported)
     if paths.prices.exists():
         try:
             line("prices", True, prices.Market.load(paths.prices).snapshot_time or "saved")
@@ -131,8 +138,31 @@ def cmd_prices_auctionator(paths: Paths, file: Path, realm: str | None) -> int:
         return 1
     m.save(paths.prices)
     print(f"Saved {len(m.listings)} items from Auctionator, scan day {m.scan_day or 'unknown'} "
-          f"({m.dropped} left out: not listed or older than {auctionator.FRESH_DAYS} days).")
+          f"({m.dropped} left out: {prices.dropped_reason()}).")
     return 0
+
+
+def _remote_accept(paths: Paths):
+    """The check for a copied prices file: its region and ruleset are the profile's, and its house is the
+    saved house when there is one. Returns the reason to refuse it, or None. Nothing is compared when the
+    profile can't be read (the plan checks the house later)."""
+    try:
+        prof = profile.load_profile(paths.profile)
+    except (FileNotFoundError, ValueError):
+        return lambda m: None
+    try:
+        house = profile.load_house(paths.house)
+    except (FileNotFoundError, ValueError):
+        house = None
+
+    def accept(m: prices.Market) -> str | None:
+        for field, theirs, ours in (("region", m.region, prof.region), ("ruleset", m.ruleset, prof.ruleset),
+                                    ("house", m.house, house)):
+            if ours is not None and theirs != ours:
+                return (f"the copied prices are for {field} {theirs if theirs not in (None, '') else 'unknown'}, "
+                        f"but yours is {ours}")
+        return None
+    return accept
 
 
 def cmd_prices_remote(paths: Paths, host: str | None) -> int:
@@ -151,7 +181,7 @@ def cmd_prices_remote(paths: Paths, host: str | None) -> int:
         print(f"no remote machine set: write host = \"...\" in {paths.remote} "
               "(see references/setup.md), or pass --host HOST")
         return 1
-    return remote.fetch_remote(saved, paths.prices)
+    return remote.fetch_remote(saved, paths.prices, accept=_remote_accept(paths))
 
 
 def cmd_prices(paths: Paths) -> int:

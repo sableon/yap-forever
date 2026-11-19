@@ -97,11 +97,23 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
     found = trainers.trainers_for(info.data.trainers, profession, rank, info.faction)
     if not found:
         return f"Train {name} to {cap}: {_no_trainer(rank, profession)}"
-    examples = _confirmed_first([t for t in found if t.zone in CAPITALS[info.faction]])[:MAX_EXAMPLES]
+    capital = [t for t in found if t.zone in CAPITALS[info.faction]]
+    examples = _confirmed_first(capital)[:MAX_EXAMPLES]
+    if not examples:  # no trainer of the rank in a capital: say where they are, never "in a capital"
+        where = " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}"
+                            for t, flag in _confirmed_first(found)[:MAX_EXAMPLES])
+        return f"Train {name} to {cap} at {where} (no {rank} {PERSON.get(profession, name)} in a capital in the data)."
     text = f"Train {name} to {cap} at any {rank} {PERSON.get(profession, name)} in a capital"
-    if examples:
-        text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")"
+    text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")"
     return text + "."
+
+
+def add_note(text: str, note: str) -> str:
+    """Put a " (...)" note inside the row's closing parenthesis ("(trainer 45s; inferred: ...)"),
+    or after the text when it has none."""
+    if note and text.endswith(")") and note.startswith(" ("):
+        return f"{text[:-1]}; {note[2:]}"
+    return text + note
 
 
 def inferred_note(classic_skill: int, next_recipe: str | None) -> str:

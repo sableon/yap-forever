@@ -69,7 +69,7 @@ and who has another machine that can fetch prices:
 
 ```toml
 host = "me@my-vps"                  # required: an ssh host
-key = "~/.ssh/id_example"           # optional: ssh key file; ~ is expanded
+key = "~/.ssh/id_example"           # optional: ssh key file, an absolute path or one starting with ~
 command = "cd yap-forever && git pull -q && python3 -m yap_forever prices"  # default, run there
 remote_file = ".yap-forever/cache/prices.json"  # default: where that machine leaves its prices
 ```
@@ -90,6 +90,10 @@ If the API can't be reached at all (timeouts), the player's network may block it
 for prices are in step 5: another machine over ssh, or Auctionator's saved data.
 
 ## 4. Find the auction house
+
+If you use a price fallback from step 5 (`--remote` or `--auctionator`), skip this step. `check`
+will keep showing credentials and house as missing (once the prices are imported from Auctionator,
+it says "not needed with imported prices" instead), and `plan` doesn't need them.
 
 The API does not say which auction house belongs to which realm and faction, so the player marks
 theirs:
@@ -113,8 +117,12 @@ Windows 10 and later (an optional feature on some builds), macOS and Linux) and 
 reach the API and has this tool set up. Write `remote.toml` in the home folder (the keys are in step
 2), then run `<python> -m yap_forever prices --remote`. It runs the remote command over ssh, copies
 the prices file back and replaces the saved prices only when the copy is a valid prices file with
-listings. The ssh login must work without a prompt (ssh-agent or an unencrypted key), because the
-command asks for no passphrase or password and fails at once if one is needed. `--host NAME`
+listings, for the profile's region and ruleset (and for the saved auction house, when `house.json`
+exists). A copy for another region, ruleset or house is refused and the saved prices stay.
+Run `ssh HOST` once by hand first, so the machine's host key is known: the command refuses an
+unknown key instead of asking. The ssh login must work without a prompt (ssh-agent or an
+unencrypted key), because the command asks for no passphrase or password and fails at once if one
+is needed. `--host NAME`
 replaces the host from `remote.toml` for one run (the other keys stay; without a `remote.toml` the
 defaults apply). Keep the host and key path to the player's own machine; never paste them anywhere
 public.
@@ -130,7 +138,8 @@ none, scan the auction house with Auctionator first.
 
 What an Auctionator import can't give: one price and one count per item, no listing depth. The
 planner buys the whole quantity at that one price, so costs are a lower bound, and sale limits
-that depend on listing counts use the day's quantity, so they are approximate. Items whose latest
-count is more than 3 days older than the newest scan, or zero, are left out, and the guide and
+that depend on listing counts use the day's quantity, so they are approximate. The scan day is the day
+most items were last seen (the full scan), so a later partial scan doesn't hide it. Items whose latest
+count is more than 3 days older than that day, or zero, are left out, and the guide and
 report say how many. The guide and report header names the scan day and warns when it is more
 than 3 days old: tell the player to scan again before relying on the numbers.

@@ -75,6 +75,12 @@ class SourceLineTests(unittest.TestCase):
         self.assertNotIn("left out", self.line(scan_day="2026-11-18", dropped="3"))
         self.assertNotIn("left out", self.line(scan_day="2026-11-18", dropped=True))
 
+    def test_dropped_count_uses_the_cli_wording(self):
+        from yap_forever import prices
+        self.assertIn(" 4 items left out: " + prices.dropped_reason() + ".",
+                      self.line(scan_day="2026-11-18", dropped=4))
+        self.assertEqual(prices.dropped_reason(), "not listed or older than 3 days")
+
     def test_known_scan_day_has_no_unknown_note(self):
         self.assertNotIn("unknown", self.line(scan_day="2026-11-18"))
 

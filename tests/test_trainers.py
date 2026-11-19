@@ -123,6 +123,67 @@ class LoadTests(unittest.TestCase):
             self.assertIn("damaged", str(cm.exception))
 
 
+def _npc_text(*rows):
+    return "QuestieDB.npcData = [[return {\n" + "\n".join(rows) + "\n}]]"
+
+
+GOOD_ROW = "[1] = {'Good One',1,1,1,1,0,{[12]={{1,2}}},nil,12,nil,nil,12,\"A\",\"Master Tailor\",17},"
+
+
+class BadRowTests(unittest.TestCase):
+    """A row with a wrong value type is skipped; the rest of the data still loads."""
+
+    def load(self, bad_row):
+        rows = trainers.parse_npc_rows(_npc_text(GOOD_ROW, bad_row))
+        return [t.npc_id for t in trainers.load_trainers(rows)]
+
+    def test_string_coordinates(self):
+        self.assertEqual(self.load("[2] = {'X',1,1,1,1,0,{[12]={{\"a\",\"b\"}}},nil,12,nil,nil,12,\"A\","
+                                   "\"Master Tailor\",17},"), [1])
+
+    def test_string_flags(self):
+        self.assertEqual(self.load("[2] = {'X',1,1,1,1,0,{[12]={{1,2}}},nil,12,nil,nil,12,\"A\","
+                                   "\"Master Tailor\",\"x\"},"), [1])
+
+    def test_a_number_in_place_of_spawn_points(self):
+        self.assertEqual(self.load("[2] = {'X',1,1,1,1,0,{[12]=5},nil,12,nil,nil,12,\"A\","
+                                   "\"Master Tailor\",17},"), [1])
+
+    def test_a_list_as_the_zone(self):
+        self.assertEqual(self.load("[2] = {'X',1,1,1,1,0,{[12]={{1,2}}},nil,{1,2},nil,nil,12,\"A\","
+                                   "\"Master Tailor\",17},"), [1])
+
+    def test_a_number_as_the_faction_sides(self):
+        self.assertEqual(self.load("[2] = {'X',1,1,1,1,0,{[12]={{1,2}}},nil,12,nil,nil,12,7,"
+                                   "\"Master Tailor\",17},"), [1])
+
+    def test_a_number_as_the_name(self):
+        self.assertEqual(self.load("[2] = {5,1,1,1,1,0,{[12]={{1,2}}},nil,12,nil,nil,12,\"A\","
+                                   "\"Master Tailor\",17},"), [1])
+
+    def test_nearby_ignores_service_rows_of_the_wrong_types(self):
+        rows = trainers.parse_npc_rows(_npc_text(
+            "[2] = {'Bank',1,1,1,1,0,{[12]={{\"a\",2}}},nil,12,nil,nil,12,\"A\",\"Banker\",256},",
+            "[3] = {'Bank2',1,1,1,1,0,{[12]=5},nil,12,nil,nil,12,\"A\",\"Banker\",256},",
+            "[4] = {'Bank3',1,1,1,1,0,{[12]={{1,2}}},nil,12,nil,nil,12,\"A\",\"Banker\",\"x\"},"))
+        t = Trainer(1, "T", TAILOR, "Master", "A", 12, (1, 2), True)
+        near = trainers.nearby(t, rows, [(12, 1, 2)], 5.0)
+        self.assertEqual(near, Services(False, False, True))  # only the mailbox counts
+
+    def test_a_bad_mailbox_row_is_skipped(self):
+        boxes = trainers.load_mailboxes(
+            "QuestieDB.objectData = [[return {\n"
+            "[1] = {\"Mailbox\",1,1,{[12]=5}},\n[2] = {\"Mailbox\",1,1,{[12]={{\"a\",1},{3,4}}}},\n}]]")
+        self.assertEqual(boxes, [(12, 3, 4)])
+
+    def test_load_trainer_data_turns_type_errors_into_the_damaged_message(self):
+        for exc in (TypeError, KeyError, IndexError):
+            with unittest.mock.patch("yap_forever.trainers.load_trainers", side_effect=exc("x")):
+                with self.assertRaises(ValueError) as cm:
+                    trainers.load_trainer_data(FIX)
+            self.assertIn("damaged", str(cm.exception), exc)
+
+
 class ChooseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -370,10 +431,15 @@ class TextTests(unittest.TestCase):
         self.assertEqual(text, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
                                "(for example Grom Anvilhand, Orgrimmar).")
 
-    def test_city_row_without_a_capital_trainer_drops_the_parenthesis(self):
-        data = trainers.TrainerData([Trainer(1, "Far Smith", BS, "Expert", "A", 33, (1, 1), True)], {}, [], {})
+    def test_city_row_with_no_capital_trainer_names_the_others_plainly(self):
+        data = trainers.TrainerData([Trainer(1, "Far Smith", BS, "Expert", "A", 33, (1, 1), True),
+                                     Trainer(2, "Odd Smith", BS, "Expert", "A", 34, (1, 1), False)],
+                                    {}, [], {33: "Somewhere", 34: "Elsewhere"})
         text = trainer_text.city_row(trainer_text.TrainerInfo("alliance", data), BS, 150)
-        self.assertEqual(text, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital.")
+        self.assertEqual(text, "Train Blacksmithing to 150 at Far Smith, Somewhere "
+                               "(no Expert Blacksmith in a capital in the data).")
+        self.assertNotIn("in a capital.", text)
+        self.assertNotIn("Odd Smith", text)
 
     def test_city_row_names_at_most_two(self):
         ts = [Trainer(i, f"Smith {i}", BS, "Expert", "A", z, (1, 1), True)
@@ -382,6 +448,14 @@ class TextTests(unittest.TestCase):
         text = trainer_text.city_row(trainer_text.TrainerInfo("alliance", data), BS, 150)
         self.assertEqual(text, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
                                "(for example Smith 1, Stormwind City or Smith 2, Ironforge).")
+
+    def test_add_note_joins_into_one_parenthesis(self):
+        note = trainer_text.inferred_note(35, None)
+        self.assertEqual(trainer_text.add_note("Learn X (trainer 1s 0c)", note),
+                         "Learn X (trainer 1s 0c; inferred: the trainer may ask up to 35; if it isn't offered, "
+                         "come back at 35)")
+        self.assertEqual(trainer_text.add_note("Learn X", note), "Learn X" + note)
+        self.assertEqual(trainer_text.add_note("Learn X (a)", ""), "Learn X (a)")
 
     def test_city_row_no_trainer_for_faction(self):
         self.assertEqual(trainer_text.city_row(self.info("alliance"), BS, 150),

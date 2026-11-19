@@ -5,15 +5,15 @@ holding CBOR bytes: a map of item ID -> {m: latest minimum buyout in copper, a: 
 available}, h: {day: high}, l: {day: low}}, plus a "version" key. Days count from 2020-01-01.
 The file is not valid UTF-8, so everything here works on bytes. Stdlib only.
 """
+import collections
 import datetime
 import re
 import struct
 from pathlib import Path
 
-from yap_forever.prices import Market
+from yap_forever.prices import FRESH_DAYS, Market
 
 EPOCH = datetime.date(2020, 1, 1)
-FRESH_DAYS = 3  # an item whose latest quantity is older than this, before the newest scan, is not listed
 NO_DATABASE = "no price database in Auctionator.lua: open the AH with Auctionator and scan first"
 
 _TABLE = re.compile(rb"AUCTIONATOR_PRICE_DATABASE\s*=\s*\{")
@@ -154,8 +154,10 @@ def _days(x) -> dict[int, object]:
 def load_auctionator(path: Path, realm: str | None) -> Market:
     """Build a Market from Auctionator.lua: one price (m) and one quantity (latest day of a) per item.
 
-    scan_day is the newest day in any item's a, h or l. An item is kept when its latest a day is within
-    FRESH_DAYS of that day and its quantity there is above 0; the rest count in Market.dropped.
+    scan_day is the bulk day: the most common latest-a day among the items (a tie goes to the newer day),
+    which is the day of the full scan. A later partial scan doesn't move it. An item is kept when its latest
+    a day is within FRESH_DAYS of that day or newer, and its quantity there is above 0 and it has a usable
+    price; the rest count in Market.dropped.
     """
     raw = Path(path).read_bytes()
     keys = realms(raw)
@@ -174,23 +176,19 @@ def load_auctionator(path: Path, realm: str | None) -> Market:
             raise ValueError("the realm's data is not a map")
         items = {k: v for k, v in data.items() if isinstance(k, str) and k.isascii() and k.isdigit()}
         parsed = {}
-        newest = None
         for k, v in items.items():
             if not isinstance(v, dict):
                 parsed[int(k)] = None
                 continue
-            a = _days(v.get("a"))
-            for src in (a, _days(v.get("h")), _days(v.get("l"))):
-                if src:
-                    top = max(src)
-                    newest = top if newest is None else max(newest, top)
-            parsed[int(k)] = (v.get("m"), a)
+            parsed[int(k)] = (v.get("m"), _days(v.get("a")))
+        latest = collections.Counter(max(e[1]) for e in parsed.values() if e is not None and e[1])
+        anchor = max(latest, key=lambda day: (latest[day], day)) if latest else None
         scan_day = ""
-        if newest is not None:
+        if anchor is not None:
             try:
-                scan_day = (EPOCH + datetime.timedelta(days=newest)).isoformat()
+                scan_day = (EPOCH + datetime.timedelta(days=anchor)).isoformat()
             except OverflowError:
-                raise ValueError(f"Auctionator day {newest} is out of range") from None
+                raise ValueError(f"Auctionator day {anchor} is out of range") from None
     except ValueError as e:
         raise ValueError(f"Auctionator.lua is damaged ({e}): scan again with Auctionator") from None
     listings: dict[int, list[tuple[int, int]]] = {}
@@ -200,7 +198,7 @@ def load_auctionator(path: Path, realm: str | None) -> Market:
         m, a = entry
         last = max(a)
         qty = a[last]
-        if (newest - last <= FRESH_DAYS and isinstance(qty, int) and not isinstance(qty, bool) and qty > 0
+        if (last >= anchor - FRESH_DAYS and isinstance(qty, int) and not isinstance(qty, bool) and qty > 0
                 and isinstance(m, int) and not isinstance(m, bool) and m > 0):
             listings[item_id] = [(m, qty)]
     market = Market(listings, scan_day)

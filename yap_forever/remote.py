@@ -30,9 +30,10 @@ def _step(run, name: str, argv: list[str], timeout: int, **kwargs) -> bool:
     return True
 
 
-def fetch_remote(remote: Remote, dest: Path, run=subprocess.run) -> int:
+def fetch_remote(remote: Remote, dest: Path, run=subprocess.run, accept=None) -> int:
     """Run the remote command over ssh, copy its prices file back with scp, and replace `dest` with it
-    only when it loads as a prices file with listings. Returns an exit code."""
+    only when it loads as a prices file with listings and `accept(market)` (when given) returns None;
+    a returned string is why the copy is refused (it must not name the host). Returns an exit code."""
     if shutil.which("ssh") is None or shutil.which("scp") is None:
         print(NEEDS_OPENSSH)
         return 1
@@ -74,6 +75,10 @@ def fetch_remote(remote: Remote, dest: Path, run=subprocess.run) -> int:
         if not m.listings:
             print("remote fetch: the prices file copied from the remote machine has no listings; "
                   "your saved prices are unchanged")
+            return 1
+        why = accept(m) if accept else None
+        if why:
+            print(f"remote fetch: {why}; your saved prices are unchanged")
             return 1
         try:
             os.replace(tmp, dest)

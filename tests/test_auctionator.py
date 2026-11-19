@@ -231,17 +231,48 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(m.buy_cost(2840, 3), 3750)
         self.assertIsNone(m.buy_cost(2840, 4))
 
-    def test_scan_day_is_newest_over_a_h_and_l(self):
+    def test_scan_day_is_the_bulk_day_of_the_latest_a_days(self):
         m = load_auctionator(self.write({"TestRealm": payload()}), None)
         self.assertEqual(m.scan_day, "2026-11-18")
         self.assertEqual(m.snapshot_time, "2026-11-18")
-        # the newest day appears only in an item's h here
-        data = {"1": item(5, {NEWEST - 2: 1}, h={NEWEST: 9})}
+        # h and l days don't count: only the latest a day of each item does
+        data = {"1": item(5, {NEWEST - 2: 1}, h={NEWEST: 9}, l={NEWEST + 1: 9})}
+        m = load_auctionator(self.write({"R": payload(data)}), None)
+        self.assertEqual(m.scan_day, "2026-11-16")
+        self.assertEqual(list(m.listings), [1])
+
+    def test_tie_between_two_days_goes_to_the_newer_day(self):
+        data = {"1": item(5, {NEWEST - 1: 1}), "2": item(5, {NEWEST: 1})}
         m = load_auctionator(self.write({"R": payload(data)}), None)
         self.assertEqual(m.scan_day, "2026-11-18")
-        data = {"1": item(5, {NEWEST - 2: 1}, l={NEWEST + 1: 9})}
+        data = {"1": item(5, {NEWEST - 2: 1}), "2": item(5, {NEWEST - 2: 1}), "3": item(5, {NEWEST: 1}),
+                "4": item(5, {NEWEST: 1})}
         m = load_auctionator(self.write({"R": payload(data)}), None)
-        self.assertEqual(m.scan_day, "2026-11-19")
+        self.assertEqual(m.scan_day, "2026-11-18")
+        self.assertEqual(sorted(m.listings), [1, 2, 3, 4])
+
+    def test_one_later_partial_scan_keeps_the_full_scan(self):
+        data = {str(i): item(10, {NEWEST: 3}) for i in range(1, 501)}
+        data["900"] = item(10, {NEWEST + 4: 3})
+        m = load_auctionator(self.write({"R": payload(data)}), None)
+        self.assertEqual(len(m.listings), 501)
+        self.assertEqual((m.scan_day, m.dropped), ("2026-11-18", 0))
+
+    def test_several_partial_days_after_the_bulk_day_keep_the_bulk_day_as_anchor(self):
+        data = {str(i): item(10, {NEWEST: 3}) for i in range(1, 101)}
+        for n, day in enumerate((NEWEST + 1, NEWEST + 2, NEWEST + 5, NEWEST + 9)):
+            data[str(1000 + n)] = item(10, {day: 3})
+        data["2000"] = item(10, {NEWEST - 4: 3})  # more than 3 days before the bulk day: dropped
+        m = load_auctionator(self.write({"R": payload(data)}), None)
+        self.assertEqual(len(m.listings), 104)
+        self.assertEqual((m.scan_day, m.dropped), ("2026-11-18", 1))
+
+    def test_the_window_edge_is_three_days_before_the_anchor(self):
+        data = {"1": item(5, {NEWEST: 1}), "2": item(5, {NEWEST: 1}), "3": item(5, {NEWEST - 3: 1}),
+                "4": item(5, {NEWEST - 4: 1})}
+        m = load_auctionator(self.write({"R": payload(data)}), None)
+        self.assertEqual(sorted(m.listings), [1, 2, 3])
+        self.assertEqual(m.dropped, 1)
 
     def test_old_and_empty_items_are_dropped_and_counted(self):
         m = load_auctionator(self.write({"TestRealm": payload()}), None)
@@ -375,10 +406,38 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("5 items", out)
         self.assertIn("2026-11-18", out)
-        self.assertIn("2 left out", out)
+        self.assertIn("2 left out: not listed or older than 3 days", out)
         m = Market.load(self.paths.prices)
         self.assertEqual((m.source, m.scan_day, m.dropped, m.house), ("auctionator", "2026-11-18", 2, None))
         self.assertEqual(m.min_price(2840), 1250)
+
+    def test_check_after_an_import_does_not_ask_for_credentials_or_house(self):
+        run(["init"], self.paths)
+        run(["prices", "--auctionator", self.file({"TestRealm": payload()})], self.paths)
+        code, out = run(["check", "--offline"], self.paths)
+        self.assertEqual(code, 0, out)
+        for name in ("credentials", "house"):
+            line = next(l for l in out.splitlines() if l.startswith(name))
+            self.assertIn("not needed with imported prices", line)
+            self.assertNotIn("MISSING", line)
+
+    def test_check_still_asks_for_them_with_api_prices(self):
+        run(["init"], self.paths)
+        self.paths.prices.write_text('{"snapshot_time": "t", "listings": {}}', encoding="utf-8")
+        code, out = run(["check", "--offline"], self.paths)
+        self.assertEqual(code, 1)
+        for name in ("credentials", "house"):
+            self.assertIn("MISSING", next(l for l in out.splitlines() if l.startswith(name)))
+
+    def test_check_keeps_ok_lines_after_an_import(self):
+        from yap_forever import profile
+        run(["init"], self.paths)
+        self.paths.credentials.write_text('{"client_id": "x", "client_secret": "y", "region": "eu"}',
+                                          encoding="utf-8")
+        profile.save_house(self.paths.house, 11, "eu", 2)
+        run(["prices", "--auctionator", self.file({"TestRealm": payload()})], self.paths)
+        _code, out = run(["check", "--offline"], self.paths)
+        self.assertNotIn("not needed", out)
 
     def test_import_needs_no_profile_or_credentials(self):
         self.assertFalse(self.paths.profile.exists())

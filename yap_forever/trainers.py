@@ -112,16 +112,34 @@ def parse_npc_rows(npc_lua: str) -> dict[int, list]:
     return {k: r for k, r in rows.items() if isinstance(k, int) and isinstance(r, list) and len(r) > _FLAGS}
 
 
+def _number(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def _flags(row: list) -> int:
+    """The NPC flags of a row; 0 when the field is empty or not a number."""
+    f = row[_FLAGS]
+    return f if isinstance(f, int) and not isinstance(f, bool) else 0
+
+
 def _spawn_points(spawns, zone: int | None = None):
-    """(zone, x, y) for each placed spawn; unplaced ones (-1, -1) are skipped."""
+    """(zone, x, y) for each placed spawn; unplaced ones (-1, -1) and malformed ones are skipped."""
     if not isinstance(spawns, dict):
         return
     for z, points in spawns.items():
         if zone is not None and z != zone:
             continue
-        for p in points or []:
-            if isinstance(p, list) and len(p) >= 2 and p[0] >= 0 and p[1] >= 0:
+        for p in points if isinstance(points, list) else []:
+            if isinstance(p, list) and len(p) >= 2 and _number(p[0]) and _number(p[1]) and p[0] >= 0 and p[1] >= 0:
                 yield z, p[0], p[1]
+
+
+def _well_formed(spawns) -> bool:
+    """True when spawns is {zone: [[x, y, ...], ...]} with numeric points ((-1, -1) is a number too)."""
+    return (isinstance(spawns, dict) and bool(spawns) and all(
+        isinstance(z, int) and isinstance(points, list)
+        and all(isinstance(p, list) and len(p) >= 2 and _number(p[0]) and _number(p[1]) for p in points)
+        for z, points in spawns.items()))
 
 
 def _classify(title: object) -> tuple[int, str, bool] | None:
@@ -138,16 +156,18 @@ def load_trainers(npc_lua: str | dict) -> list[Trainer]:
     rows = parse_npc_rows(npc_lua) if isinstance(npc_lua, str) else npc_lua
     out = []
     for npc_id, r in sorted(rows.items()):
-        if not (r[_FLAGS] or 0) & TRAINER_FLAG:
+        if not _flags(r) & TRAINER_FLAG:
             continue
         found = _classify(r[_TITLE_AT])
-        spawns = r[_SPAWNS]
-        if found is None or not isinstance(spawns, dict) or not spawns:
+        spawns, sides, zone = r[_SPAWNS], r[_FRIENDLY] or "AH", r[_ZONE]
+        if found is None or not _well_formed(spawns) or not isinstance(r[_NAME], str):
             continue
-        zone = r[_ZONE] if r[_ZONE] in spawns else next(iter(spawns))
+        if not isinstance(sides, str) or (zone is not None and not isinstance(zone, int)):
+            continue
+        zone = zone if zone in spawns else next(iter(spawns))
         first = next(_spawn_points(spawns, zone), None)  # None: only (-1, -1), i.e. an instance
         profession, rank, confirmed = found
-        out.append(Trainer(npc_id, r[_NAME], profession, rank, r[_FRIENDLY] or "AH", zone,
+        out.append(Trainer(npc_id, r[_NAME], profession, rank, sides, zone,
                            first[1:] if first else None, confirmed, r[_TITLE_AT]))
     return out
 
@@ -188,7 +208,7 @@ def nearby(trainer: Trainer, npc_lua_rows: dict[int, list], mailboxes: list[tupl
         return any((px - x) ** 2 + (py - y) ** 2 <= radius ** 2 for _, px, py in points)
 
     def npcs(flag: int) -> bool:
-        return close(p for r in npc_lua_rows.values() if (r[_FLAGS] or 0) & flag
+        return close(p for r in npc_lua_rows.values() if _flags(r) & flag
                      for p in _spawn_points(r[_SPAWNS], trainer.zone))
 
     return Services(bank=npcs(BANKER_FLAG), auction=npcs(AUCTIONEER_FLAG),
@@ -234,10 +254,17 @@ def _read(path: Path) -> str:
 def load_trainer_data(d: Path | None = None) -> TrainerData:
     """Read the NPC DB, object DB and AreaTable from the game data folder."""
     d = Path(d) if d is not None else settings.paths().gamedata
-    rows = parse_npc_rows(_read(d / "foreverNpcDB.lua"))
-    boxes = load_mailboxes(_read(d / "foreverObjectDB.lua"))
+    try:  # a row of the wrong shape that got past the checks: say the file is damaged, no traceback
+        rows = parse_npc_rows(_read(d / "foreverNpcDB.lua"))
+        found = load_trainers(rows)
+    except (TypeError, KeyError, IndexError) as e:
+        raise _damaged("foreverNpcDB.lua", e) from None
+    try:
+        boxes = load_mailboxes(_read(d / "foreverObjectDB.lua"))
+    except (TypeError, KeyError, IndexError) as e:
+        raise _damaged("foreverObjectDB.lua", e) from None
     try:
         zones, parents = load_areas(d / "AreaTable.csv")
     except (KeyError, ValueError) as e:  # includes a UnicodeDecodeError
         raise _damaged("AreaTable.csv", e) from None
-    return TrainerData(load_trainers(rows), rows, boxes, zones, parents)
+    return TrainerData(found, rows, boxes, zones, parents)

@@ -58,7 +58,7 @@ class PricesHeaderTests(unittest.TestCase):
     def test_stale_auctionator_scan_counts_dropped_items(self):
         text = self.render(datetime.date(2026, 11, 25), source="auctionator", scan_day="2026-11-18", dropped=5)
         self.assertEqual(text.splitlines()[2], AUCTIONATOR_LINE + " This scan is 7 days old: scan again for "
-                         "current prices. 5 items older than the scan window left out.")
+                         "current prices. 5 items left out: not listed or older than 3 days.")
 
 
 class RenderTests(unittest.TestCase):

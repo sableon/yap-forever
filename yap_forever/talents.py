@@ -4,7 +4,6 @@ from yap_forever.gamedata import PROFESSIONS
 from yap_forever.profile import MAX_OVERTIME
 
 
-
 def talent_lines(character, reading, plan, caps, stock) -> list[str]:
     """Plain sentences for the guide header and the report notes; none for a talent not taken."""
     out: list[str] = []
