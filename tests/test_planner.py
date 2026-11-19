@@ -221,6 +221,7 @@ class WorkingOvertimeTests(unittest.TestCase):
 
         def disenchants_per_point(p):
             de = [s for s in p.steps if s.profession == ENCH and s.spell_id == 0]
+            self.assertTrue(de)
             return sum(s.crafts for s in de) / sum(s.skill_to - s.skill_from for s in de)
         self.assertLess(disenchants_per_point(fast), disenchants_per_point(base))
 

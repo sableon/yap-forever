@@ -72,7 +72,8 @@ def candidates(gd, market, stock, favor, caps, craft_once, quests, overtime=0, r
     charged in full."""
     out = []
     for mode, full in (("value", False), ("gold", False), ("gold", True)):
-        out += _rounds(gd, market, stock, favor, caps, craft_once, mode, quests, frozenset(), full, overtime, reading)
+        out += _rounds(gd, market, stock, favor, caps, craft_once, mode, quests, frozenset(), full,
+                       overtime, reading)
     return out
 
 
@@ -88,18 +89,22 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     quests = load_quest_plans()
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
-    routes, same = settle_routes(candidates(gd, market, stock, favor, caps, once, quests, overtime, reading), caps)
+    routes, same = settle_routes(
+        candidates(gd, market, stock, favor, caps, once, quests, overtime, reading), caps)
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
     table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same)
     today = date.today().isoformat()
     paths.reports.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
     for m, route in routes.items():
-        alts = trip_alternatives(route, gd, market, stock, favor, caps, once, m, quests, overtime, reading)
+        alts = trip_alternatives(route, gd, market, stock, favor, caps, once, m, quests,
+                                 overtime, reading)
         full = paths.reports / f"{today}-plan-{m}.md"
-        full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps), encoding="utf-8")
+        full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps,
+                               character, reading), encoding="utf-8")
         guide = paths.reports / f"{today}-guide-{m}.md"
-        guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts),
+        guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
+                                       character, reading),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
     return table, files

@@ -28,7 +28,10 @@ Fill in `profile.toml` with the player:
   default `0`) and `dedicated_study` (`true` if the character has taken Dedicated Study,
   default `false`).
 - Optional, once at the top of the file: `working_overtime_reading = "relative"` (default) or
-  `"points"`, how the player reads the Working Overtime bonus.
+  `"points"`, how the player reads the Working Overtime bonus: `relative` adds 4% of the base
+  chance per rank, `points` adds 4 percentage points per rank. `plan` uses the rank for every
+  skill-up (disenchanting too) and names the rank and reading in the guide header; a character with
+  `dedicated_study` gets one guide line about the free daily point.
 
 ```toml
 working_overtime_reading = "relative"

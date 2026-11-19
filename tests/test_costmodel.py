@@ -39,6 +39,12 @@ class ChanceTests(unittest.TestCase):
             self.assertEqual(skillup_chance(200, t, 5, reading), 0.0)
             self.assertEqual(skillup_chance(5, t, 5, reading), 0.0)
 
+    def test_unknown_reading_is_refused(self):
+        with self.assertRaises(ValueError):
+            skillup_chance(90, (1, 70, 90, 110), 5, "percent")
+        with self.assertRaises(ValueError):
+            skillup_chance(90, (1, 70, 90, 110), 0, "percent")
+
     def test_rank_zero_is_todays_chance(self):
         t = (1, 70, 90, 110)
         for s in range(0, 130):
