@@ -91,6 +91,10 @@ for prices are in step 5: another machine over ssh, or Auctionator's saved data.
 
 ## 4. Find the auction house
 
+If you use a price fallback from step 5 (`--remote` or `--auctionator`), skip this step. `check`
+will keep showing credentials and house as missing (once the prices are imported from Auctionator,
+it says "not needed with imported prices" instead), and `plan` doesn't need them.
+
 The API does not say which auction house belongs to which realm and faction, so the player marks
 theirs:
 

@@ -411,6 +411,34 @@ class CliTests(unittest.TestCase):
         self.assertEqual((m.source, m.scan_day, m.dropped, m.house), ("auctionator", "2026-11-18", 2, None))
         self.assertEqual(m.min_price(2840), 1250)
 
+    def test_check_after_an_import_does_not_ask_for_credentials_or_house(self):
+        run(["init"], self.paths)
+        run(["prices", "--auctionator", self.file({"TestRealm": payload()})], self.paths)
+        code, out = run(["check", "--offline"], self.paths)
+        self.assertEqual(code, 0, out)
+        for name in ("credentials", "house"):
+            line = next(l for l in out.splitlines() if l.startswith(name))
+            self.assertIn("not needed with imported prices", line)
+            self.assertNotIn("MISSING", line)
+
+    def test_check_still_asks_for_them_with_api_prices(self):
+        run(["init"], self.paths)
+        self.paths.prices.write_text('{"snapshot_time": "t", "listings": {}}', encoding="utf-8")
+        code, out = run(["check", "--offline"], self.paths)
+        self.assertEqual(code, 1)
+        for name in ("credentials", "house"):
+            self.assertIn("MISSING", next(l for l in out.splitlines() if l.startswith(name)))
+
+    def test_check_keeps_ok_lines_after_an_import(self):
+        from yap_forever import profile
+        run(["init"], self.paths)
+        self.paths.credentials.write_text('{"client_id": "x", "client_secret": "y", "region": "eu"}',
+                                          encoding="utf-8")
+        profile.save_house(self.paths.house, 11, "eu", 2)
+        run(["prices", "--auctionator", self.file({"TestRealm": payload()})], self.paths)
+        _code, out = run(["check", "--offline"], self.paths)
+        self.assertNotIn("not needed", out)
+
     def test_import_needs_no_profile_or_credentials(self):
         self.assertFalse(self.paths.profile.exists())
         code, _ = run(["prices", "--auctionator", self.file({"TestRealm": payload()})], self.paths)

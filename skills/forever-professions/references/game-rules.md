@@ -15,14 +15,9 @@ say so.
   hold (a recipe learnable about 25 points earlier than in Classic), some don't (a recipe missing
   from the trainer 30 points past its inferred level). When a route leans on such a recipe, flag
   it and give a fallback craft.
-- Alliance trainer locations (Questie Forever NPC data):
-  - Artisan Blacksmithing: Bengus Deepforge, Ironforge (52.6, 41.5).
-  - Artisan Enchanting: Kitta Firewind, Tower of Azora, Elwynn Forest (64.9, 70.7).
-  - Master Blacksmithing: Brikk Keencraft, Booty Bay (29.0, 75.6), neutral town.
-  - Master Enchanting: Annora, inside Uldaman (Badlands).
-  - Artisan Tailoring: Georgio Bolero, Stormwind (53.1, 81.4); Master: Timothy Worthington,
-    Theramore (66.2, 51.8).
-  - Horde locations: not collected yet.
+- Trainer places are not listed here: the guide's trainer rows come from the Questie Forever NPC
+  data, for the character's faction. Facts the data lacks: Booty Bay is a neutral town, and the
+  Alliance Master Enchanting trainer is inside Uldaman (Badlands), which has no map coordinates.
 
 ## Bags, bank and mail
 

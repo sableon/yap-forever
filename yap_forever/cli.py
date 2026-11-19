@@ -60,9 +60,16 @@ def _client(paths: Paths, prof: profile.Profile) -> bnet.Client:
 
 def cmd_check(paths: Paths, offline: bool) -> int:
     lines, missing = [], False
+    try:
+        imported = prices.Market.load(paths.prices).source == "auctionator" if paths.prices.exists() else False
+    except ValueError:  # the prices line reports it below
+        imported = False
 
-    def line(name: str, ok: bool, text: str):
+    def line(name: str, ok: bool, text: str, needed: bool = True):
         nonlocal missing
+        if not ok and not needed:  # imported prices need no API client and no house
+            lines.append(f"{name:<12} not needed with imported prices")
+            return
         missing |= not ok
         lines.append(f"{name:<12} {'OK' if ok else 'MISSING:'} {text}")
 
@@ -81,12 +88,12 @@ def cmd_check(paths: Paths, offline: bool) -> int:
         creds_ok = True
         line("credentials", True, str(paths.credentials))
     except FileNotFoundError:
-        line("credentials", False, f"no {paths.credentials}: run {command_hint('init')}")
+        line("credentials", False, f"no {paths.credentials}: run {command_hint('init')}", needed=not imported)
     except ValueError:
         line("credentials", False, f"put your API client ID and secret into {paths.credentials} "
-                                   f"(create a client at {API_CLIENTS})")
+                                   f"(create a client at {API_CLIENTS})", needed=not imported)
     except PermissionError as e:
-        line("credentials", False, f"{e} ({paths.credentials})")
+        line("credentials", False, f"{e} ({paths.credentials})", needed=not imported)
     if offline:
         lines.append(f"{'API token':<12} skipped (--offline)")
     elif creds_ok and prof:
@@ -98,7 +105,7 @@ def cmd_check(paths: Paths, offline: bool) -> int:
     try:
         line("house", True, str(profile.load_house(paths.house)))
     except (FileNotFoundError, ValueError) as e:
-        line("house", False, str(e))
+        line("house", False, str(e), needed=not imported)
     if paths.prices.exists():
         try:
             line("prices", True, prices.Market.load(paths.prices).snapshot_time or "saved")

@@ -26,7 +26,9 @@ player what changed, running the planner, and walking them through the result.
 ## Workflow
 
 1. **Setup, if needed.** Run `check --offline`. For every `MISSING` line, follow
-   [references/setup.md](references/setup.md) with the player, one step at a time.
+   [references/setup.md](references/setup.md) with the player, one step at a time. A player who
+   uses a price fallback from setup step 5 skips the probe: `check` keeps showing credentials and
+   house as missing, and `plan` doesn't need them.
 2. **Ask what changed** since the last plan: level, profession skills, gold, Favor standing,
    free bag slots, and what has piled up (greens to disenchant, leftover materials). Update their
    character's `stock.toml` with what they confirm, including the `[skills]` table: the plan
@@ -58,11 +60,21 @@ player what changed, running the planner, and walking them through the result.
 
 - Any crafting profession, one or two at once, each to its own target (a skill up to 300 or one
   recipe crafted once), from the character's `stock.toml`; two routes side by side.
-- The route in trainer stages; trips away from home (Artisan and Master trainers, vendor
-  patterns, the Favor vendor) are marked, with the cost of skipping a recipe trip. The planner
-  doesn't know where trainers and vendors are yet.
+- The route in trainer stages. Trips away from home (Artisan and Master trainers, vendor
+  patterns, the Favor vendor) are marked, with the cost of skipping a recipe trip. The guide
+  names the trainer for the character's faction (from the profile) with the zone and map
+  coordinates, and says what is nearby (bank, auction house, mailbox). The Expert rank names
+  capital trainers. A trainer recipe whose skill requirement is only inferred from Classic gets a
+  fallback note on its learn row.
 - Merchant's Favor recipes for the character's standing (Alliance, Blacksmithing and
   Enchanting).
-- A shopping list in every guide; mailbox trips when `stock.toml` gives `bag_slots`.
-- Not yet: trainer names and places, legacy talents, gathering while levelling, keep-or-sell
-  advice, budget targets, gear. Say so when asked, rather than guessing.
+- A shopping list in every guide; mailbox trips when `stock.toml` gives `bag_slots`, and a reagent
+  bag when it gives `reagent_slots` (materials fill it first).
+- Owned patterns: a pattern in the character's stock teaches its recipe at no cost, and is left
+  off the shopping list and the "Sell now" list.
+- Legacy talents from the profile: Working Overtime (a higher skill-up chance) and Dedicated Study
+  (the guide says how many days of the free daily point would cover the last points).
+- Two price fallbacks when the API can't be reached: `prices --remote` (another machine over
+  ssh) and `prices --auctionator PATH` (Auctionator's saved data).
+- Not yet: gathering while levelling, keep-or-sell advice, budget targets, gear. Say so when
+  asked, rather than guessing.
