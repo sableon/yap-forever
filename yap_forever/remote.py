@@ -1,4 +1,5 @@
 """Fetch prices through another machine over the system OpenSSH, when this one can't reach the API."""
+import contextlib
 import os
 import shutil
 import subprocess
@@ -43,7 +44,10 @@ def fetch_remote(remote: Remote, dest: Path, run=subprocess.run) -> int:
         print("remote fetch: the host can't start with '-'")
         return 1
     # scp runs in dest's folder, so a key given as a relative path must be made absolute first
-    key_args = ["-i", os.path.abspath(remote.key), "-o", "IdentitiesOnly=yes"] if remote.key else []
+    # BatchMode: a passphrase or password prompt fails at once instead of hanging a script
+    key_args = ["-o", "BatchMode=yes"]
+    if remote.key:
+        key_args += ["-i", os.path.abspath(remote.key), "-o", "IdentitiesOnly=yes"]
     dest = Path(dest)
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +81,7 @@ def fetch_remote(remote: Remote, dest: Path, run=subprocess.run) -> int:
             print(f"remote fetch: can't write {dest.name}: {e.strerror or e}")
             return 1
     finally:
-        tmp.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
     print(f"Saved {len(m.listings)} items from the remote machine, snapshot {m.snapshot_time or 'unknown'}.")
     return 0

@@ -1,9 +1,10 @@
+import datetime
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from yap_forever.prices import Market
+from yap_forever.prices import Market, source_line
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -52,3 +53,31 @@ class MarketTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceLineTests(unittest.TestCase):
+    TODAY = datetime.date(2026, 11, 20)
+
+    def line(self, **fields):
+        m = Market({})
+        m.source = "auctionator"
+        for k, v in fields.items():
+            setattr(m, k, v)
+        return source_line(m, self.TODAY)
+
+    def test_api_prices_have_no_line(self):
+        self.assertEqual(source_line(Market({}), self.TODAY), "")
+
+    def test_unknown_scan_day_says_so(self):
+        for day in ("", "garbage", None, 5):
+            line = self.line(scan_day=day)
+            self.assertIn("Scan date unknown: scan again for current prices.", line, repr(day))
+            self.assertNotIn("days old", line)
+
+    def test_null_or_odd_fields_in_a_hand_edited_file_do_not_crash(self):
+        self.assertNotIn("left out", self.line(scan_day="2026-11-18", dropped=None))
+        self.assertNotIn("left out", self.line(scan_day="2026-11-18", dropped="3"))
+        self.assertNotIn("left out", self.line(scan_day="2026-11-18", dropped=True))
+
+    def test_known_scan_day_has_no_unknown_note(self):
+        self.assertNotIn("unknown", self.line(scan_day="2026-11-18"))

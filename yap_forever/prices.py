@@ -91,16 +91,20 @@ def source_line(market: "Market", today: datetime.date | None = None) -> str:
     """The header line for guide and report: where the prices came from. Empty for API prices."""
     if market.source != "auctionator":
         return ""
-    line = (f"Prices: Auctionator scan of {market.scan_day or 'unknown date'} (one price per item, no listing "
+    # a hand-edited prices file can hold anything in these fields
+    scan_day = market.scan_day if isinstance(market.scan_day, str) else ""
+    dropped = market.dropped if isinstance(market.dropped, int) and not isinstance(market.dropped, bool) else 0
+    line = (f"Prices: Auctionator scan of {scan_day or 'unknown date'} (one price per item, no listing "
             "depth: costs are a lower bound and AH sale limits are approximate).")
     try:
-        age = ((today or datetime.date.today()) - datetime.date.fromisoformat(market.scan_day)).days
+        age = ((today or datetime.date.today()) - datetime.date.fromisoformat(scan_day)).days
     except ValueError:
-        age = 0
-    if age > STALE_DAYS:
-        line += f" This scan is {age} days old: scan again for current prices."
-    if market.dropped > 0:
-        line += f" {market.dropped} items older than the scan window left out."
+        line += " Scan date unknown: scan again for current prices."
+    else:
+        if age > STALE_DAYS:
+            line += f" This scan is {age} days old: scan again for current prices."
+    if dropped > 0:
+        line += f" {dropped} items older than the scan window left out."
     return line
 
 

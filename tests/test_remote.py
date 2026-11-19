@@ -53,6 +53,15 @@ class FetchRemoteTests(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
+    def assertNoSecrets(self, out):
+        self.assertTrue(self.r.host and self.r.command)  # the check below must have something to look for
+        self.assertNotIn(self.r.host, out)
+        self.assertNotIn(self.r.command, out)
+
+    def test_the_secrets_check_has_teeth(self):
+        with self.assertRaises(AssertionError):
+            self.assertNoSecrets(f"remote fetch failed at the ssh step ({self.r.host})")
+
     def go(self, run, r=None):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -64,12 +73,12 @@ class FetchRemoteTests(unittest.TestCase):
         run = FakeRun()
         code, out = self.go(run)
         self.assertEqual(code, 0, out)
-        self.assertEqual(run.calls[0], ["ssh", "alice-box.test", "run-it"])
-        self.assertEqual(run.calls[1][:2], ["scp", "alice-box.test:out/prices.json"])
+        self.assertEqual(run.calls[0], ["ssh", "-o", "BatchMode=yes", "alice-box.test", "run-it"])
+        self.assertEqual(run.calls[1][:4], ["scp", "-o", "BatchMode=yes", "alice-box.test:out/prices.json"])
         self.assertEqual(Market.load(self.dest).min_price(2840), 10)
         self.assertEqual(os.listdir(self.dest.parent), ["prices.json"])  # temp file gone
         self.assertIn("1 items", out)
-        self.assertNotIn("example.test", out)
+        self.assertNoSecrets(out)
 
     @with_openssh
     def test_scp_runs_in_the_destination_folder_with_a_bare_target(self):
@@ -101,7 +110,7 @@ class FetchRemoteTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn(f"the {step} step", out)
             self.assertIn("timed out", out)
-            self.assertNotIn("example.test", out)
+            self.assertNoSecrets(out)
 
     @with_openssh
     def test_key_arguments(self):
@@ -109,9 +118,18 @@ class FetchRemoteTests(unittest.TestCase):
         key = str(self.dir / "k")
         code, _ = self.go(run, Remote("h.test", key, "run-it", "f.json"))
         self.assertEqual(code, 0)
-        self.assertEqual(run.calls[0], ["ssh", "-i", key, "-o", "IdentitiesOnly=yes", "h.test", "run-it"])
-        self.assertEqual(run.calls[1][:5], ["scp", "-i", key, "-o", "IdentitiesOnly=yes"])
-        self.assertEqual(run.calls[1][5], "h.test:f.json")
+        self.assertEqual(run.calls[0], ["ssh", "-o", "BatchMode=yes", "-i", key, "-o", "IdentitiesOnly=yes",
+                                        "h.test", "run-it"])
+        self.assertEqual(run.calls[1][:7], ["scp", "-o", "BatchMode=yes", "-i", key, "-o", "IdentitiesOnly=yes"])
+        self.assertEqual(run.calls[1][7], "h.test:f.json")
+
+    @with_openssh
+    def test_a_relative_key_becomes_absolute(self):
+        # scp runs in another folder, so "k" would point somewhere else
+        run = FakeRun()
+        self.go(run, Remote("h.test", "k", "run-it", "f.json"))
+        self.assertEqual(run.calls[0][run.calls[0].index("-i") + 1], os.path.abspath("k"))
+        self.assertEqual(run.calls[1][run.calls[1].index("-i") + 1], os.path.abspath("k"))
 
     @with_openssh
     def test_damaged_copy_leaves_dest_untouched(self):
@@ -179,13 +197,19 @@ class FetchRemoteTests(unittest.TestCase):
         self.assertIn("host", out)
 
     @with_openssh
+    def test_an_unlink_error_does_not_hide_the_result(self):
+        with mock.patch("yap_forever.remote.Path.unlink", side_effect=PermissionError(13, "in use")):
+            code, _ = self.go(FakeRun(codes=(255, 0)))
+        self.assertEqual(code, 1)
+
+    @with_openssh
     def test_failing_step_is_named_and_stops(self):
         run = FakeRun(codes=(255, 0))
         code, out = self.go(run)
         self.assertEqual((code, len(run.calls)), (1, 1))
         self.assertIn("ssh", out)
         self.assertNotIn("scp", out)
-        self.assertNotIn("example.test", out)
+        self.assertNoSecrets(out)
         self.assertFalse(self.dest.exists())
         run = FakeRun(codes=(0, 1))
         code, out = self.go(run)

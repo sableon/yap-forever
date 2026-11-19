@@ -35,8 +35,9 @@ def render(plan, verdict_text, market, gd, stock, favor, caps=None, today=None) 
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
-    if source_line(market, today):
-        out += [source_line(market, today), ""]
+    prices_line = source_line(market, today)
+    if prices_line:
+        out += [prices_line, ""]
 
     def section(name):
         out.extend(["", f"## {name}", ""])

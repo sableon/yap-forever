@@ -72,8 +72,10 @@ class PricesHeaderTests(unittest.TestCase):
     def test_unknown_scan_day_does_not_crash(self):
         text = self.render(auctionator_market(scan_day=""), datetime.date(2026, 11, 20))
         self.assertIn("Auctionator scan of unknown date", text)
+        self.assertIn("Scan date unknown: scan again for current prices.", text)
         text = self.render(auctionator_market(scan_day="garbage"), datetime.date(2026, 11, 20))
         self.assertNotIn("days old", text)
+        self.assertIn("Scan date unknown: scan again for current prices.", text)
 
 
 class GoldTests(unittest.TestCase):

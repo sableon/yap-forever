@@ -96,8 +96,9 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
     today: the date the staleness of imported prices is judged against (default: today)."""
     caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
-    if source_line(market, today):
-        out += [source_line(market, today), ""]
+    prices_line = source_line(market, today)
+    if prices_line:
+        out += [prices_line, ""]
     if comparison:
         out += [comparison, ""]
     intro = []
