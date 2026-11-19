@@ -24,6 +24,19 @@ Fill in `profile.toml` with the player:
 - One section per character, under its full name in quotes (Forever names are two words):
   `[characters."Aldra Stoneward"]`, with `favor_standing` (`Neutral`, `Friendly`, `Honored`,
   `Revered` or `Exalted`). Pass the same name to `plan --character "Aldra Stoneward"`.
+  Optional per character: `working_overtime` (rank of the Working Overtime talent, `0` to `5`,
+  default `0`) and `dedicated_study` (`true` if the character has taken Dedicated Study,
+  default `false`).
+- Optional, once at the top of the file: `working_overtime_reading = "relative"` (default) or
+  `"points"`, how the player reads the Working Overtime bonus.
+
+```toml
+working_overtime_reading = "relative"
+[characters."Aldra Stoneward"]
+favor_standing = "Honored"
+working_overtime = 2
+dedicated_study = true
+```
 
 Each character planned gets `characters/<Name>/stock.toml`:
 
@@ -34,6 +47,7 @@ cash_gold = 25       # soft budget
 mining = 0           # Mining skill, if the character mines
 short_farm_ore = 0
 bag_slots = 40       # free bag slots while crafting; gives mailbox trips (leave out to skip them)
+reagent_slots = 0    # slots in a reagent bag; 0 = none
 keep_greens = false  # without Enchanting: keep green crafts to disenchant on another character
 [goals]              # one or two professions: a skill up to 300, or a recipe to craft once
 blacksmithing = 225
@@ -46,6 +60,18 @@ enchanting = 95
 ```
 
 `plan --prof NAME:TARGET` overrides `[goals]` for one run.
+
+Optional `remote.toml` in the home folder, for a player whose own network cannot reach the API
+and who has another machine that can fetch prices:
+
+```toml
+host = "me@my-vps"                  # required: an ssh host
+key = "~/.ssh/id_example"           # optional: ssh key file; ~ is expanded
+command = "cd yap-forever && git pull -q && python3 -m yap_forever prices"  # default, run there
+remote_file = ".yap-forever/cache/prices.json"  # default: where that machine leaves its prices
+```
+
+Without the file nothing changes. An empty `host` is refused.
 
 ## 3. Blizzard API client
 
