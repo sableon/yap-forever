@@ -39,6 +39,9 @@ Write it for that.
 - Each trip lists what to take from the mail **including patterns bought on the auction house**,
   what to buy from the vendor (thread, salt, dyes, vials), and what is already in the bags.
 - Mark mailbox pickups on the route rows. The mailbox can be far from the trainer.
+- Carried lesser essences are packed 3 to 1 into greater ones when that saves slots (all of them
+  on a tie), and unpacked as they are used. Trips and bring lists count slots packed and say
+  what to pack; the shopping list still buys the lesser ones the route uses.
 
 ## Crafted items
 
@@ -55,4 +58,4 @@ Write it for that.
   and 300 (Artisan and Master trainers sit in set towns), vendor-sold patterns and the Merchant's
   Favor vendor. Say a trip is needed, how to avoid a second one (buy every vendor pattern on one
   visit; patterns can be bought before they can be learned), and what to bring to keep levelling
-  at a remote trainer. Don't give places until the planner knows them.
+  at a remote trainer, with the bag slots it takes. Don't give places until the planner knows them.

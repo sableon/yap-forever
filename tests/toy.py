@@ -7,6 +7,7 @@ from yap_forever.prices import Market
 COPPER_BAR, IRON_BAR, IRON_ORE, DUST, ESSENCE, SHARD = 2840, 3575, 2772, 10940, 10998, 10978
 BELT, VEST, STONE, ROD, ROD_TOOL, SCROLL, ODD = 2857, 2851, 2862, 6217, 6218, 5555, 1234
 HAMMER = 5956
+GREATER_ESSENCE = 11082
 
 
 def item(i, name, quality=1, ilvl=10, cls=7, sell=10, buy=40):
@@ -25,6 +26,7 @@ def gamedata(recipes, quest_items=()):
         item(IRON_ORE, "Iron Ore", sell=20),
         item(DUST, "Strange Dust", sell=5),
         item(ESSENCE, "Lesser Astral Essence", sell=30),
+        item(GREATER_ESSENCE, "Greater Astral Essence", sell=90),
         item(SHARD, "Small Glimmering Shard", sell=50),
         item(BELT, "Runed Copper Belt", quality=2, ilvl=22, cls=4, sell=100),
         item(VEST, "Copper Chain Vest", quality=1, ilvl=8, cls=4, sell=20),

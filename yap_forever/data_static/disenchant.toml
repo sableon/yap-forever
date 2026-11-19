@@ -9,6 +9,15 @@
 # Matches play: about 19 disenchants to reach 20, 46 to 40, 73 to 50, 190 to 60.
 skill_ups = [1, 20, 40, 60]
 
+# Essences pack 3 lesser -> 1 greater and back (right-click in the bags): lesser ID = greater ID.
+# Carried essences are packed when that saves bag slots.
+[essence_pairs]
+10938 = 10939  # Magic
+10998 = 11082  # Astral
+11134 = 11135  # Mystic
+11174 = 11175  # Nether
+16202 = 16203  # Eternal
+
 [[band]]
 max_ilvl = 15
 skill = 1

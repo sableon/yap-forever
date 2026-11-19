@@ -7,6 +7,7 @@ crafts' worth: nothing is left over that is too little for another craft.
 import dataclasses
 import math
 
+from yap_forever.disenchant import ESSENCE_PAIRS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
 
@@ -15,11 +16,51 @@ BRING_POINTS = 25  # without a bag count, bring enough for this many points (or 
 
 
 def stacks(gd, items) -> dict[int, int]:
+    items = set(items) | {ESSENCE_PAIRS[i] for i in items if i in ESSENCE_PAIRS}  # packed essences
     return {i: (gd.items[i].stack if i in gd.items else 1) for i in items}
 
 
 def slots(counts: dict, stack: dict) -> int:
     return sum(math.ceil(q / stack.get(i, 1) - 1e-9) for i, q in counts.items() if q > 1e-9)
+
+
+def pack(counts: dict, stack: dict) -> dict:
+    """What you carry: lesser essences packed 3 -> 1 greater as far as it saves bag slots (packing
+    all of them on a tie); a greater essence the route needs shares the packed stacks."""
+    out = {i: q for i, q in counts.items() if q > 1e-9}
+    for lesser, greater in ESSENCE_PAIRS.items():
+        whole = math.ceil(out.get(lesser, 0) - 1e-6)
+        if whole < 3:
+            continue
+        had = out.get(greater, 0)
+
+        def cost(k):
+            return slots({lesser: whole - 3 * k, greater: had + k}, stack)
+
+        k = min(range(whole // 3 + 1), key=lambda k: (cost(k), -k))
+        if k:
+            out[greater] = had + k
+            out[lesser] = whole - 3 * k
+            if not out[lesser]:
+                del out[lesser]
+    return out
+
+
+def carried_slots(counts: dict, stack: dict) -> int:
+    """Bag slots for carrying `counts`, essences packed."""
+    return slots(pack(counts, stack), stack)
+
+
+def pack_note(gd, counts: dict, stack: dict, unpack: str) -> str:
+    """'to save slots, pack 90 Lesser X into 30 Greater X (3 to 1) and unpack ...', or ''."""
+    packed = pack(counts, stack)
+    parts = []
+    for lesser, greater in ESSENCE_PAIRS.items():
+        k = packed.get(greater, 0) - counts.get(greater, 0)
+        if k > 1e-9:
+            k = round(k)
+            parts.append(f"{3 * k} {gd.name(lesser)} into {k} {gd.name(greater)}")
+    return f"to save slots, pack {', '.join(parts)} (3 to 1) and unpack {unpack}" if parts else ""
 
 
 def batch_size(per_craft: dict, output, stack: dict, free: int) -> int:
@@ -135,7 +176,7 @@ def group_trips(rows, cap: int, stack: dict) -> list[list[dict]]:
         trial = dict(need)
         for i, q in r["need"].items():
             trial[i] = trial.get(i, 0) + q
-        if trips[-1] and slots(trial, stack) > max(cap, slots(need, stack)):  # rows adding no stacks stay
+        if trips[-1] and carried_slots(trial, stack) > max(cap, carried_slots(need, stack)):  # rows adding no stacks stay
             trips.append([])
             trial = dict(r["need"])
         trips[-1].append(r)
@@ -193,7 +234,12 @@ def bring_text(plan, gd, trip, bag_slots) -> str:
         return ""
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
     parts = [f"{n} {gd.name(i)} ({where[src]})" for i, n, src in items]
-    return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer; the town may have "
+    total = _sum({i: n} for i, n, _src in items)
+    stack = stacks(gd, total)
+    n_slots = carried_slots(total, stack)
+    note = pack_note(gd, total, stack, "them at the trainer")
+    return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
+            f"({n_slots} bag slot{'s' if n_slots != 1 else ''}{'; ' + note if note else ''}); the town may have "
             "no auction house, mailbox or bank, so buy and collect before you go.")
 
 
@@ -249,9 +295,12 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
         for r in trip:
             for i, q in r["need"].items():
                 need[i] = need.get(i, 0) + q
+        whole = {i: math.ceil(q - 1e-6) for i, q in need.items()}
+        note = pack_note(gd, whole, stack, "them as you craft")
         lines.append(f"- 📬 **Trip {t}** (skill {first.skill_from}–{last.skill_to}, "
-                     f"{slots({i: math.ceil(q - 1e-6) for i, q in need.items()}, stack)} stacks)."
+                     f"{carried_slots(whole, stack)} stacks)."
                      + (f" From the mail: {', '.join(parts['mail'])}." if parts["mail"] else "")
                      + (f" From a vendor: {', '.join(parts['vendor'])}." if parts["vendor"] else "")
-                     + (f" From the bank: {', '.join(parts['bank'])}." if parts["bank"] else ""))
+                     + (f" From the bank: {', '.join(parts['bank'])}." if parts["bank"] else "")
+                     + (f" {note[0].upper()}{note[1:]}." if note else ""))
     return lines + [""], len(trips)
