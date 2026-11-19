@@ -142,10 +142,14 @@ def cmd_prices_remote(paths: Paths, host: str | None) -> int:
         print(e)
         return 1
     if host is not None:
+        host = host.strip()
+        if not host:
+            print("--host is empty: give the machine to use, e.g. --host user@machine")
+            return 1
         saved = dataclasses.replace(saved, host=host) if saved else settings.Remote(host)
     if saved is None:
         print(f"no remote machine set: write host = \"...\" in {paths.remote} "
-              f"(see references/setup.md), or pass --host HOST")
+              "(see references/setup.md), or pass --host HOST")
         return 1
     return remote.fetch_remote(saved, paths.prices)
 
