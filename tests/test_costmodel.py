@@ -91,6 +91,12 @@ class ValuerTests(unittest.TestCase):
         self.assertEqual(v.output_value(toy.VEST, 0), 950)
         self.assertEqual(v.output_value(toy.VEST, 5), 20)  # vendor price after 5
 
+    def test_ah_value_capped_at_listing_depth(self):
+        v = self.valuer({toy.VEST: [(1000, 3)]})
+        self.assertEqual(v.output_value(toy.VEST, 2), 950)
+        self.assertEqual(v.output_value(toy.VEST, 3), 20)  # only 3 are listed: the rest go to a vendor
+        self.assertNotIn("ah", v.output_options(toy.VEST, 3))
+
     def test_quest_items_not_capped(self):
         v = self.valuer({toy.VEST: [(1000, 50)]}, quest=[toy.VEST])
         self.assertEqual(v.output_value(toy.VEST, 6), 950)
@@ -131,12 +137,12 @@ class QuestSalesLimitTests(unittest.TestCase):
         return Valuer(toy.market({toy.VEST: [(500, depth)]}), gd, st)
 
     def test_quest_item_limit(self):
-        v = self.valuer(10)
+        v = self.valuer(10, depth=30)
         self.assertIn("ah", v.output_options(toy.VEST, 9))
         self.assertNotIn("ah", v.output_options(toy.VEST, 10))
 
     def test_no_limit_by_default(self):
-        self.assertIn("ah", self.valuer(None).output_options(toy.VEST, 500))
+        self.assertIn("ah", self.valuer(None, depth=1000).output_options(toy.VEST, 500))
 
     def test_sale_value_uses_limit(self):
         from yap_forever.planner import sale_value

@@ -88,7 +88,7 @@ class Valuer:
         info = self.gd.items.get(item)
         opts = {"vendor": info.sell_price if info else 0}
         ns = self.market.net_sell(item)
-        if ns and n_already < self.sale_limit(item):
+        if ns and n_already < min(self.sale_limit(item), self.market.depth(item)):
             opts["ah"] = ns
         if info and de_skill_needed(info.item_level) <= 225:
             dv = sum(n * self.material_value(m) for m, n in de_yield(info).items())
@@ -97,7 +97,9 @@ class Valuer:
         return opts
 
     def sale_limit(self, item: int) -> float:
-        """How many of a crafted item the AH takes: 5, or the quest-item setting for quest items."""
+        """How many of a crafted item the AH takes: 5, or the quest-item setting for quest items.
+
+        Callers also cap this at what is listed today (`market.depth`): more would not sell at that price."""
         if item in self.gd.quest_items:
             limit = self.stock.quest_item_sales
             return math.inf if limit is None else limit
