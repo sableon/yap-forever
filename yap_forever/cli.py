@@ -131,7 +131,7 @@ def cmd_prices_auctionator(paths: Paths, file: Path, realm: str | None) -> int:
         return 1
     m.save(paths.prices)
     print(f"Saved {len(m.listings)} items from Auctionator, scan day {m.scan_day or 'unknown'} "
-          f"({m.dropped} left out: not listed or older than {auctionator.FRESH_DAYS} days).")
+          f"({m.dropped} left out: {prices.dropped_reason()}).")
     return 0
 
 

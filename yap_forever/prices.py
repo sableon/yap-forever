@@ -7,7 +7,13 @@ from yap_forever import bnet
 from yap_forever import settings
 
 AH_CUT = 0.05
+FRESH_DAYS = 3  # an item whose latest quantity is older than this, before the scan day, is not listed
 STALE_DAYS = 3  # an imported scan older than this many days before today gets a warning
+
+
+def dropped_reason() -> str:
+    """Why an Auctionator item is left out; the CLI message and the header line both use it."""
+    return f"not listed or older than {FRESH_DAYS} days"
 
 
 class Market:
@@ -104,7 +110,7 @@ def source_line(market: "Market", today: datetime.date | None = None) -> str:
         if age > STALE_DAYS:
             line += f" This scan is {age} days old: scan again for current prices."
     if dropped > 0:
-        line += f" {dropped} items older than the scan window left out."
+        line += f" {dropped} items left out: {dropped_reason()}."
     return line
 
 

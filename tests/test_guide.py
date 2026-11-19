@@ -52,10 +52,10 @@ class PricesHeaderTests(unittest.TestCase):
 
     def test_dropped_items_are_counted_in_the_same_line(self):
         text = self.render(auctionator_market(dropped=3), datetime.date(2026, 11, 19))
-        self.assertIn(LINE + " 3 items older than the scan window left out.", text)
+        self.assertIn(LINE + " 3 items left out: not listed or older than 3 days.", text)
         text = self.render(auctionator_market(dropped=3), datetime.date(2026, 11, 30))
         self.assertIn(LINE + " This scan is 12 days old: scan again for current prices. "
-                      "3 items older than the scan window left out.", text)
+                      "3 items left out: not listed or older than 3 days.", text)
 
     def test_api_prices_keep_todays_header(self):
         recipes = base_recipes()

@@ -130,7 +130,8 @@ none, scan the auction house with Auctionator first.
 
 What an Auctionator import can't give: one price and one count per item, no listing depth. The
 planner buys the whole quantity at that one price, so costs are a lower bound, and sale limits
-that depend on listing counts use the day's quantity, so they are approximate. Items whose latest
-count is more than 3 days older than the newest scan, or zero, are left out, and the guide and
+that depend on listing counts use the day's quantity, so they are approximate. The scan day is the day
+most items were last seen (the full scan), so a later partial scan doesn't hide it. Items whose latest
+count is more than 3 days older than that day, or zero, are left out, and the guide and
 report say how many. The guide and report header names the scan day and warns when it is more
 than 3 days old: tell the player to scan again before relying on the numbers.
