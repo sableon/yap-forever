@@ -1,11 +1,12 @@
 """Greedy route: at each skill point, craft the recipe with the lowest net cost."""
 import dataclasses
+import math
 from dataclasses import dataclass, field
 
 from yap_forever.costmodel import VENDOR_TOOLS, Cost, Pools, bars_to_ore, money, skillup_chance
 from yap_forever.disenchant import DE_THRESHOLDS, de_skill_needed, de_yield
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS
-from yap_forever.shared import mail_used
+from yap_forever.shared import allocate, mail_used
 
 START_CAP = 75  # Apprentice
 DISENCHANT = 0  # Step.spell_id of an Enchanting skill-up from disenchanting
@@ -42,6 +43,7 @@ class Step:
     # quest hand-ins and a crafted tool's materials
     tools_bought: dict[int, float] = field(default_factory=dict)  # tools bought for this step (AH or vendor)
     from_mail: dict[int, float] = field(default_factory=dict)  # part of materials mailed by your other characters
+    tools_mailed: dict[int, float] = field(default_factory=dict)  # tools another of your characters mails you
 
 
 @dataclass
@@ -197,6 +199,9 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         if item is None:
             return None
         opts = []
+        mailed = next((i for i in sorted(pools.mail) if pools.mail[i] >= 1 and gd.satisfies(i, cat)), None)
+        if mailed is not None:  # a tool another of your characters holds: no cash, and it is not used up
+            opts.append({"how": "mail", "item": mailed, "cost": Cost(), "requests": [], "recipe": None})
         if item in VENDOR_TOOLS and item in gd.items:
             c = gd.items[item].buy_price
             opts.append({"how": "vendor", "item": item, "cost": Cost(c, c), "requests": [], "recipe": None})
@@ -220,6 +225,8 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             return None
         return min(opts, key=lambda o: o["cost"].economic + (o["peek"].score if "peek" in o else 0))
 
+    held_where: dict[int, str] = {}  # held item -> where it came from, said when it is disenchanted
+
     def release_held(where=""):
         released = False
         if not has_ench:
@@ -231,28 +238,42 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
                 for mat, per in de_yield(gd.items[item]).items():
                     pools.made[mat] = pools.made.get(mat, 0) + n * per
                     p.de_materials[mat] = p.de_materials.get(mat, 0) + n * per
-                p.events.append(f"Enchanting {skill[ENCH]}: disenchant {n:.0f} {gd.name(item)}{where}")
+                p.events.append(f"Enchanting {skill[ENCH]}: disenchant {n:.0f} {gd.name(item)}"
+                                f"{held_where.pop(item, where)}")
                 de_skillups(n)
                 released = True
         return released
 
     def disenchant_bank():
         """Greens in the bank are disenchanted first, all at once: a green you can disenchant is not a
-        lost sale, and each one is a chance at an Enchanting skill-up below 60."""
+        lost sale, and each one is a chance at an Enchanting skill-up below 60. Then the greens another of
+        your characters can mail you, after your own (their source is named)."""
         if not has_ench or skill[ENCH] >= ench_cap:
             return
-        greens = {i: n for i, n in pools.stock.items() if n >= 1 and (info := gd.items.get(i))
-                  and de_yield(info) and de_skill_needed(info.item_level) <= ench_cap}
-        if not greens:
+
+        def greens_of(pool):
+            return {i: n for i, n in pool.items() if n >= 1 and (info := gd.items.get(i))
+                    and de_yield(info) and de_skill_needed(info.item_level) <= ench_cap}
+
+        greens, mailed = greens_of(pools.stock), greens_of(pools.mail)
+        if not greens and not mailed:
             return
         for i, n in greens.items():
             del pools.stock[i]
             held[i] = held.get(i, 0) + n
         first = len(p.steps)
-        release_held(" from your bank")
+        if greens:
+            release_held(" from your bank")
+        for i, n in mailed.items():  # each one says whose it is
+            del pools.mail[i]
+            held[i] = held.get(i, 0) + n
+            who = ", ".join(name for name, _n in allocate(getattr(stock, "shared", {}), i, math.ceil(n - 1e-9)))
+            held_where[i] = f" (mail from {who})"
+            release_held()
         if len(p.steps) > first:  # show the greens on the first disenchant step and in the keep table
-            p.steps[first].materials = dict(greens)
+            p.steps[first].materials = {**greens, **mailed}
             p.steps[first].from_stock = dict(greens)
+            p.steps[first].from_mail = dict(mailed)
 
     def de_skillups(n):
         """Disenchanting n items gives Enchanting skill-ups at the expected rate."""
@@ -339,11 +360,17 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
 
     def get_tools(tools, s, name):
         """Craft or buy the tools a step needs; their materials are taken with the step's.
-        Returns (cost, the crafted tools' materials, the tools bought)."""
-        cost, extra, bought = Cost(), {}, {}
+        Returns (cost, the crafted tools' materials, the tools bought, the tools mailed by your other
+        characters)."""
+        cost, extra, bought, mailed = Cost(), {}, {}, {}
         for t in tools:
             item = t["item"]
-            if t["how"] == "craft":
+            if t["how"] == "mail":
+                if item not in pools.tools and pools.mail.get(item, 0) >= 1:
+                    pools.mail[item] -= 1  # it is yours now: held for the rest of the route
+                    mailed[item] = mailed.get(item, 0) + 1
+                    p.events.append(f"{name} {s}: Use tool {gd.name(item)} (mailed by another of your characters)")
+            elif t["how"] == "craft":
                 tr = t["recipe"]
                 if tr.spell_id not in learned:
                     cost += learn_now(tr, learn_option(tr), s, PROFESSIONS[tr.skill_line])
@@ -357,7 +384,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
                 bought[item] = bought.get(item, 0) + 1
                 p.events.append(f"{name} {s}: Buy tool {gd.name(item)} ({t['how']} {money(t['cost'].cash)})")
             pools.tools.add(item)
-        return cost, extra, bought
+        return cost, extra, bought, mailed
 
     def craft_once_step(prof, spell):
         """The goal recipe, learned and crafted once at the end of its profession's route."""
@@ -386,7 +413,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         step_cost = Cost()
         if spell not in learned:
             step_cost += learn_now(r, lo, s, name)
-        tool_cost, extra, bought = get_tools(tools, s, name)
+        tool_cost, extra, bought, tools_mailed = get_tools(tools, s, name)
         step_cost += tool_cost
         for i, q in lo[3]:
             extra[i] = extra.get(i, 0) + q
@@ -397,7 +424,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             pools.made[r.output[0]] = pools.made.get(r.output[0], 0) + r.output[1]
         spent += step_cost
         p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
-                            mats, from_stock, used_made, 1, extra, bought, from_mail))
+                            mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
         p.events.append(f"{name} {s}: craft {r.name} once")
 
     disenchant_bank()
@@ -501,7 +528,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             for i, q in lo[3]:
                 extra[i] = extra.get(i, 0) + q
             step_cost += learn_now(r, lo, s, name)
-        tool_cost, tool_extra, bought = get_tools(tools, s, name)
+        tool_cost, tool_extra, bought, tools_mailed = get_tools(tools, s, name)
         step_cost += tool_cost
         for i, q in tool_extra.items():
             extra[i] = extra.get(i, 0) + q
@@ -534,13 +561,13 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             last.economic += step_cost.economic
             for mine, new in ((last.materials, mats), (last.from_stock, from_stock), (last.used_made, used_made),
                               (last.extra, extra), (last.tools_bought, bought),
-                              (last.from_mail, from_mail)):
+                              (last.from_mail, from_mail), (last.tools_mailed, tools_mailed)):
                 for i, q in new.items():
                     mine[i] = mine.get(i, 0) + q
         else:
             p.steps.append(Step(prof, s, s + 1, r.spell_id, r.name, crafts, step_cost.cash, step_cost.economic,
                                 mats, from_stock, used_made, crafts * buffer_factor(crafts), extra, bought,
-                                from_mail))
+                                from_mail, tools_mailed))
         skill[prof] = s + 1
         made_something = release_held() or made_something
         for other in profs:

@@ -145,7 +145,8 @@ def merged_steps(plan, gd) -> list[tuple]:
                 cash=sum(p.cash for p in parts), economic=sum(p.economic for p in parts),
                 materials=_sum(p.materials for p in parts), from_stock=_sum(p.from_stock for p in parts),
                 used_made=_sum(p.used_made for p in parts), extra=_sum(p.extra for p in parts),
-                tools_bought=_sum(p.tools_bought for p in parts), from_mail=_sum(p.from_mail for p in parts)), parts)
+                tools_bought=_sum(p.tools_bought for p in parts), from_mail=_sum(p.from_mail for p in parts),
+                tools_mailed=_sum(p.tools_mailed for p in parts)), parts)
         else:
             latest[st.profession] = len(out)
             out.append((st, [st]))
@@ -167,7 +168,7 @@ def route_rows(plan, gd) -> list[dict]:
     for st, parts in merged:
         r, k = gd.recipes[st.spell_id], step_factor(st)
         row = {"st": st, "parts": parts, "n": math.ceil(st.crafts * k - 1e-9), "more": 0, "need": {}, "here": {},
-               "earlier": {}, "tools": {i: math.ceil(q - 1e-6) for i, q in st.tools_bought.items()}}
+               "earlier": {}, "tools": {i: math.ceil(q - 1e-6) for i, q in _sum([st.tools_bought, st.tools_mailed]).items()}}
         demand = {i: q * row["n"] for i, q in r.reagents.items()}  # whole crafts, buffered
         planned = {i: q * st.crafts for i, q in r.reagents.items()}  # what the planner took per craft
         for i, q in st.extra.items():  # taken once: quest hand-ins, a crafted tool's materials
@@ -192,7 +193,7 @@ def route_rows(plan, gd) -> list[dict]:
                 row["earlier"][i] = row["earlier"].get(i, 0) + rest  # yours: crafted in the batch below
             else:
                 row["need"][i] = row["need"].get(i, 0) + rest
-        for i, q in row["tools"].items():  # bought, never crafted here
+        for i, q in row["tools"].items():  # bought or mailed, never crafted here
             row["need"][i] = row["need"].get(i, 0) + q
         if r.output:
             pool[r.output[0]] = pool.get(r.output[0], 0) + row["n"] * r.output[1]
@@ -257,16 +258,20 @@ def from_character(src: str) -> str | None:
 
 def _mail(plan, whole_pool: bool = False) -> dict[int, list[list]]:
     """What your other characters can mail you: item -> [[name, count]] in name order.
-    The planner's own use of it; with whole_pool, everything they could mail (the buffer comes from there
-    while it lasts, as from the bank)."""
+    The planner's own use of it; with whole_pool, everything they hold of the items the planner drew from
+    them (the buffer comes from there while it lasts, as from the bank). An item the planner did not take
+    by mail is never named, whatever the others hold."""
+    drawn = set(plan.used_mail)
+    for st in plan.steps:
+        drawn |= set(st.from_mail) | set(st.tools_mailed)
     if whole_pool:
-        items = {i for held in plan.shared.values() for i in held}
-        want = {i: sum(held.get(i, 0) for held in plan.shared.values()) for i in items}
+        want = {i: sum(held.get(i, 0) for held in plan.shared.values()) for i in drawn}
     else:
         want = {}
         for st in plan.steps:
-            for i, q in st.from_mail.items():
-                want[i] = want.get(i, 0) + q
+            for d in (st.from_mail, st.tools_mailed):
+                for i, q in d.items():
+                    want[i] = want.get(i, 0) + q
         want = {i: math.ceil(q - 1e-6) for i, q in want.items()}
     return {i: [[name, n] for name, n in allocate(plan.shared, i, int(n))] for i, n in want.items()}
 

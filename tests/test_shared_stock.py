@@ -117,13 +117,60 @@ class MailPoolTests(unittest.TestCase):
         p = run(toy.stock(shared={"Ann": {S: 3}}))
         self.assertEqual(bars_used(p), 3)
 
-    def test_a_tool_another_character_holds_is_not_counted(self):
+    def tool_case(self, shared_items):
         rs = [toy.recipe(1, "BS tooled", BS, {S: 1}, (toy.STONE, 1), tools=[162])]
         market = {**BARS, toy.HAMMER: [(500, 1)]}
-        alone = run(toy.stock(), market, rs=rs)
-        with_mate = run(toy.stock(shared={"Ann": {toy.HAMMER: 1}}), market, rs=rs)
-        self.assertEqual(with_mate.used_mail.get(toy.HAMMER), None)  # nothing is said to be mailed
-        self.assertEqual(with_mate.cash_total, alone.cash_total)  # the hammer is bought as before
+        gd = toy.gamedata(rs)
+        st = dataclasses.replace(toy.stock(shared=shared_items), bag_slots=60)
+        p = plan(gd, Valuer(toy.market(market), gd, st, mode="gold"), st, toy.NO_FAVOR, caps={BS: 30})
+        lines, _ = render_shopping(p, gd, toy.market(market), st)
+        return p, gd, st, lines
+
+    def test_a_mates_tool_is_used_and_the_lists_name_it(self):
+        bought, _gd, _st, bought_lines = self.tool_case({})
+        p, gd, st, lines = self.tool_case({"Ann": {toy.HAMMER: 1}})
+        self.assertEqual(p.used_mail, {toy.HAMMER: [("Ann", 1)]})
+        self.assertEqual(p.cash_total, bought.cash_total - gd.items[toy.HAMMER].buy_price)  # no cash for the hammer
+        self.assertEqual(p.bought.get(toy.HAMMER, 0), 0)
+        self.assertEqual(p.vendor_bought.get(toy.HAMMER, 0), 0)
+        self.assertTrue(any("Use tool Blacksmith Hammer (mailed by another of your characters)" in e
+                            for e in p.events))
+        text = "\n".join(lines)
+        self.assertNotIn("| Blacksmith Hammer |", text)  # nothing to buy
+        trip = next(l for l in lines if l.startswith("- 📬"))
+        self.assertIn("Mailed by your other characters: 1 Blacksmith Hammer (mail from Ann)", trip)
+        self.assertEqual(shopping.mailed(p, gd, st), {toy.HAMMER: [("Ann", 1)]})
+        self.assertTrue(any(l.startswith("| Blacksmith Hammer |") for l in bought_lines))  # bought when nobody holds it
+
+    def test_a_tool_nobody_holds_is_bought_and_not_said_to_be_mailed(self):
+        p, gd, st, lines = self.tool_case({})
+        self.assertEqual(p.used_mail, {})
+        self.assertGreater(p.vendor_bought.get(toy.HAMMER, 0), 0)
+        self.assertTrue(any(l.startswith("| Blacksmith Hammer |") for l in lines))
+        self.assertNotIn("mail from", "\n".join(lines))
+
+    def test_your_own_tool_comes_before_a_mates(self):
+        p, *_ = self.tool_case({"Ann": {toy.HAMMER: 1}})
+        rs = [toy.recipe(1, "BS tooled", BS, {S: 1}, (toy.STONE, 1), tools=[162])]
+        gd = toy.gamedata(rs)
+        st = toy.stock({toy.HAMMER: 1}, shared={"Ann": {toy.HAMMER: 1}})
+        own = plan(gd, Valuer(toy.market(BARS), gd, st, mode="gold"), st, toy.NO_FAVOR, caps={BS: 30})
+        self.assertEqual(own.used_mail, {})
+
+    def test_a_soulbound_tool_is_not_mailed(self):
+        gd = toy.gamedata([])
+        gd.items[toy.HAMMER].bonding = 1
+        group = shared.Group(2, "alliance", others={"Ann": toy.stock({toy.HAMMER: 1})})
+        self.assertEqual(group.shared_items(gd), {})
+
+    def test_the_lists_never_name_what_the_planner_did_not_draw_by_mail(self):
+        # Ann holds bars the route never needs, and a hammer: only the hammer is named
+        p, gd, st, lines = self.tool_case({"Ann": {toy.HAMMER: 1, T: 50, toy.ROD: 9}})
+        self.assertEqual(sorted(p.used_mail), [toy.HAMMER])
+        self.assertEqual(sorted(shopping.mailed(p, gd, st)), [toy.HAMMER])
+        text = "\n".join(lines)
+        self.assertNotIn("Iron Bar", text)
+        self.assertNotIn("Copper Rod (mail", text)
 
 
 class OwnItemsFirstTests(unittest.TestCase):
@@ -265,7 +312,7 @@ class SourceTextTests(unittest.TestCase):
         # Ann's 20 and Bob's 5 bars go to the first trip; the second needs more and must not name "0" from them
         p = Plan(steps=[Step(BS, 1, 11, 1, "BS one", 10, 0, 0, {S: 30}, from_mail={S: 25}, buffered=10),
                         Step(BS, 11, 21, 2, "BS two", 10, 0, 0, {T: 30}, buffered=10)],
-                 final_skill={BS: 21}, shared={"Bob": {S: 5}, "Ann": {S: 20}})
+                 final_skill={BS: 21}, shared={"Bob": {S: 5}, "Ann": {S: 20}}, used_mail={S: [("Ann", 20), ("Bob", 5)]})
         gd = toy.gamedata([toy.recipe(1, "BS one", BS, {S: 3}), toy.recipe(2, "BS two", BS, {S: 3, T: 3})])
         gd.items[S].stack = gd.items[T].stack = 20
         st = dataclasses.replace(toy.stock(shared=p.shared), bag_slots=14)  # 4 free slots: one row a trip
