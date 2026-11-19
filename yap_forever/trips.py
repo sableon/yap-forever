@@ -33,7 +33,8 @@ def trips(plan, gd) -> list["Trip"]:
     return sorted(out, key=lambda t: (t.skill, t.kind != "vendor" and t.kind != "favor", t.profession))
 
 
-def trip_alternatives(base, gd, market, stock, favor, caps, craft_once, mode, quests) -> dict[int, float | None]:
+def trip_alternatives(base, gd, market, stock, favor, caps, craft_once, mode, quests, overtime=0,
+                      reading="relative") -> dict[int, float | None]:
     """For vendor and Favor trips (the costliest few): what the route costs more without that recipe,
     in the route's own measure; None when the targets can't be reached without it."""
     from yap_forever.plan import plan_route  # plan imports this module
@@ -44,7 +45,8 @@ def trip_alternatives(base, gd, market, stock, favor, caps, craft_once, mode, qu
                    key=lambda t: -t.cost)[:MAX_TRIP_ALTS]
     out: dict[int, float | None] = {}
     for t in picks:
-        alt = plan_route(gd, market, stock, favor, caps, craft_once, mode, quests, exclude=frozenset({t.spell}))
+        alt = plan_route(gd, market, stock, favor, caps, craft_once, mode, quests, exclude=frozenset({t.spell}),
+                         overtime=overtime, reading=reading)
         reached = all(alt.final_skill.get(p, 0) >= base.final_skill.get(p, 0) for p in caps)
         out[t.spell] = measure(alt) - measure(base) if reached else None
     return out

@@ -15,6 +15,36 @@ class ChanceTests(unittest.TestCase):
         self.assertEqual(skillup_chance(110, t), 0.0)
         self.assertEqual(skillup_chance(0, t), 0.0)
 
+    def test_working_overtime_readings(self):
+        t = (1, 70, 90, 110)  # skill 90 is yellow: base chance 0.5
+        self.assertAlmostEqual(skillup_chance(90, t, 5, "relative"), 0.6)
+        self.assertAlmostEqual(skillup_chance(90, t, 5, "points"), 0.7)
+        self.assertAlmostEqual(skillup_chance(90, t, 1, "relative"), 0.52)
+        self.assertAlmostEqual(skillup_chance(90, t, 1, "points"), 0.54)
+        self.assertAlmostEqual(skillup_chance(90, t, 5), 0.6)  # relative is the default
+
+    def test_working_overtime_caps_at_one(self):
+        t = (1, 70, 90, 110)
+        self.assertEqual(skillup_chance(50, t, 5, "relative"), 1.0)  # orange
+        self.assertEqual(skillup_chance(50, t, 5, "points"), 1.0)
+        self.assertEqual(skillup_chance(75, t, 5, "points"), 1.0)  # 0.875 + 0.2 caps
+        self.assertEqual(skillup_chance(75, t, 5, "relative"), 1.0)  # 0.875 * 1.2 caps
+        self.assertAlmostEqual(skillup_chance(80, t, 5, "relative"), 0.9)
+        self.assertAlmostEqual(skillup_chance(100, t, 5, "relative"), 0.25 * 1.2)
+
+    def test_working_overtime_grey_and_below_orange_stay_zero(self):
+        t = (10, 70, 90, 110)
+        for reading in ("relative", "points"):
+            self.assertEqual(skillup_chance(110, t, 5, reading), 0.0)
+            self.assertEqual(skillup_chance(200, t, 5, reading), 0.0)
+            self.assertEqual(skillup_chance(5, t, 5, reading), 0.0)
+
+    def test_rank_zero_is_todays_chance(self):
+        t = (1, 70, 90, 110)
+        for s in range(0, 130):
+            for reading in ("relative", "points"):
+                self.assertEqual(skillup_chance(s, t, 0, reading), skillup_chance(s, t))
+
 
 class ValuerTests(unittest.TestCase):
     def valuer(self, listings=None, stock=None, quest=()):

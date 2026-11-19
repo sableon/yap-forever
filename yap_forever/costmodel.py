@@ -25,13 +25,24 @@ def craft_margin(skill: int) -> float:
     return 0.90 + 0.05 * (min(max(skill, 1), 300) - 1) / 299
 
 
-def skillup_chance(skill: int, t: tuple[int, int, int, int]) -> float:
+OVERTIME_STEP = 0.04  # Working Overtime: per rank, on every tradeskill (rank 0-5)
+
+
+def skillup_chance(skill: int, t: tuple[int, int, int, int], overtime: int = 0, reading: str = "relative") -> float:
+    """Chance of a skill-up for one craft. overtime = Working Overtime rank; `reading` says how its
+    4% per rank applies: "relative" scales the base chance, "points" adds to it. Both cap at 1;
+    a craft that can't skill up (grey, or below orange) stays at 0."""
     orange, yellow, _green, grey = t
     if skill < orange or skill >= grey:
         return 0.0
     if skill < yellow:
         return 1.0
-    return (grey - skill) / (grey - yellow)
+    p = (grey - skill) / (grey - yellow)
+    if not overtime or p <= 0:
+        return p
+    if reading == "points":
+        return min(1.0, p + OVERTIME_STEP * overtime)
+    return min(1.0, p * (1 + OVERTIME_STEP * overtime))
 
 
 def money(c: float) -> str:
