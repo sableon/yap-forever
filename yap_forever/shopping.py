@@ -102,7 +102,7 @@ def merged_steps(plan, gd) -> list[tuple]:
                 buffered=sum(p.crafts * step_factor(p) for p in parts),
                 cash=sum(p.cash for p in parts), economic=sum(p.economic for p in parts),
                 materials=_sum(p.materials for p in parts), from_stock=_sum(p.from_stock for p in parts),
-                used_made=_sum(p.used_made for p in parts)), parts)
+                used_made=_sum(p.used_made for p in parts), extra=_sum(p.extra for p in parts)), parts)
         else:
             latest[st.profession] = len(out)
             out.append((st, [st]))
@@ -124,8 +124,12 @@ def route_rows(plan, gd) -> list[dict]:
     for st, parts in merged:
         r, k = gd.recipes[st.spell_id], step_factor(st)
         row = {"st": st, "parts": parts, "n": math.ceil(st.crafts * k - 1e-9), "more": 0, "need": {}, "here": {}, "earlier": {}}
-        for i, q in r.reagents.items():
-            d = q * row["n"]
+        demand = {i: q * row["n"] for i, q in r.reagents.items()}  # whole crafts, buffered
+        planned = {i: q * st.crafts for i, q in r.reagents.items()}  # what the planner took per craft
+        for i, q in st.extra.items():  # taken once: quest hand-ins, a crafted tool's materials, bought tools
+            demand[i] = demand.get(i, 0) + math.ceil(q - 1e-6)
+            planned[i] = planned.get(i, 0) + q
+        for i, d in demand.items():
             if i in makes and i in craftable:
                 own = min(d, pool.get(i, 0))
             else:  # disenchanted reagents: the planner's expected count, buffered
@@ -135,7 +139,7 @@ def route_rows(plan, gd) -> list[dict]:
                 if i in pool:
                     pool[i] -= own
             rest = d - own
-            planner_made = q * st.crafts - st.materials.get(i, 0) - st.used_made.get(i, 0)
+            planner_made = planned[i] - st.materials.get(i, 0) - st.used_made.get(i, 0)
             if rest <= 0:
                 continue
             if i in makes and i in craftable and not (st.materials.get(i, 0) > 1e-6 and planner_made <= 0.01):
@@ -211,12 +215,18 @@ def _split(rows, plan, gd=None, left=None) -> dict[tuple[int, str], int]:
     return out
 
 
-def bring_list(plan, gd, trip, bag_slots: int | None) -> tuple[int, list[tuple[int, int, str]]]:
-    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items)."""
-    rows = [r for r in route_rows(plan, gd)
-            if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill]
+def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None) -> tuple[int, list[tuple[int, int, str]]]:
+    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
+    owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
+    the trip use the bank first, as on the shopping list."""
+    every = route_rows(plan, gd)
+    at = next((k for k, r in enumerate(every)
+               if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
+    rows = [r for r in every[at:] if r["st"].profession == trip.profession]
     if not rows:
         return trip.skill, []
+    left = {i: float(n) for i, n in owned.items()} if owned is not None else _bank(plan)
+    _split(every[:at], plan, gd, left)  # the bank the rows before the trip use
     if bag_slots:
         items = {i for r in rows for i in r["need"]}
         rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items))[0]
@@ -224,12 +234,12 @@ def bring_list(plan, gd, trip, bag_slots: int | None) -> tuple[int, list[tuple[i
         later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
         limit = min([trip.skill + BRING_POINTS] + later)
         rows = [r for r in rows if r["st"].skill_to <= limit] or rows[:1]
-    split = _split(rows, plan, gd)
+    split = _split(rows, plan, gd, left)
     return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
 
 
-def bring_text(plan, gd, trip, bag_slots) -> str:
-    reach, items = bring_list(plan, gd, trip, bag_slots)
+def bring_text(plan, gd, trip, bag_slots, owned=None) -> str:
+    reach, items = bring_list(plan, gd, trip, bag_slots, owned)
     if not items:
         return ""
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
@@ -267,7 +277,7 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
     for (i, src), n in sorted(split.items(), key=lambda x: (x[0][1], gd.name(x[0][0]))):
         if src == "bank":
             continue
-        cost = (gd.vendor_prices.get(i, 0) * n if src == "vendor"
+        cost = ((gd.vendor_prices.get(i) or (gd.items[i].buy_price if i in gd.items else 0)) * n if src == "vendor"
                 else market.buy_cost(i, n) or (market.min_price(i) or 0) * n)
         total += cost
         lines.append(f"| {gd.name(i)} | {n} | {'vendor' if src == 'vendor' else 'AH'} | {gold(cost)} |")

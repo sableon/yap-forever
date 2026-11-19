@@ -67,7 +67,7 @@ def parse_goal(value: int | str) -> Goal:
 
 def _profession_id(name: str) -> int:
     key = str(name).strip().lower()
-    if key.isdigit():
+    if key.isdigit() and int(key) in PROFESSION_IDS.values():
         return int(key)
     if key in PROFESSION_IDS:
         return PROFESSION_IDS[key]

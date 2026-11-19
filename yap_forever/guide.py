@@ -205,12 +205,12 @@ def _group_notes(group, items, gd) -> list[str]:
 
 
 # --- route ---------------------------------------------------------------------
-def _trip_line(t, alts, plan=None, gd=None, bag_slots=None) -> str:
+def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None) -> str:
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
         return (f"- **Trip:** {t.what}: the trainer is in a set town (the planner doesn't say where yet). "
                 "While there, learn the trainer recipes your skill allows."
-                + (bring_text(plan, gd, t, bag_slots) if plan is not None else ""))
+                + (bring_text(plan, gd, t, bag_slots, owned) if plan is not None else ""))
     if t.kind == "vendor":
         line = (f"- **Trip:** buy the pattern for {t.what} from a vendor (patterns are sold in particular "
                 "towns); buy every vendor pattern the route uses on one visit: patterns can be bought before "
@@ -289,7 +289,7 @@ def _route(out, plan, gd, caps, stock, alts) -> None:
     for t in trips(plan, gd):
         if t.profession in caps:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
-                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots)))
+                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items)))
 
     out += ["## Route", ""]
     for k in sorted({k for k, _p in lines}):
@@ -310,11 +310,13 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
     seen = set()
     for s in steps:
         row = (rows or {}).get(id(s))
+        here = {}
         if row and id(row) in seen:  # a later part of a run already counted with its first part
             crafts, mats, own = 0, {}, {}
         elif row:
             seen.add(id(row))
             crafts, mats, own = row["n"] + row["more"], dict(row["need"]), dict(row["earlier"])
+            here = dict(row["here"])
         else:
             k = step_factor(s)
             crafts = s.crafts * k
@@ -326,9 +328,10 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
             last["crafts"] += crafts
             _add(last["mats"], mats)
             _add(last["own"], own)
+            _add(last["here"], here)
         else:
             out.append({"spell": s.spell_id, "name": recipe_name(s.spell_id, s.name, gd), "from": s.skill_from,
-                        "to": s.skill_to, "crafts": crafts, "mats": mats, "own": own})
+                        "to": s.skill_to, "crafts": crafts, "mats": mats, "own": own, "here": here})
     return out
 
 
@@ -340,6 +343,8 @@ def _range_line(r, gd, used_by, for_de, quest_limit=None, kept=frozenset()) -> s
     line = f"- **{r['from']}–{r['to']}** · {n}× {r['name']}"
     if mats:
         line += " — " + ", ".join(mats)
+    if r.get("here"):  # intermediates still missing, crafted on the spot from the materials listed
+        line += "; first craft " + ", ".join(f"{count(q)} {gd.name(i)}" for i, q in r["here"].items())
     recipe = gd.recipes.get(r["spell"])
     if recipe and recipe.output:
         item = recipe.output[0]

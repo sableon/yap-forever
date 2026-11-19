@@ -167,6 +167,9 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
             print("plan one or two different professions at a time (one --prof each)")
             return 1
         goals = dict(flags) or config.load_stock(stock).goals
+        if len(goals) > 2:
+            print(f"{stock} has goals for {len(goals)} professions: plan one or two at a time (one --prof each)")
+            return 1
     except ValueError as e:
         print(e)
         return 1

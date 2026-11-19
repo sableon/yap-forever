@@ -172,7 +172,7 @@ class PlannerTests(unittest.TestCase):
               toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
         p = run(rs, BARS)
         self.assertEqual(p.final_skill[BS], 225)
-        self.assertIn("Buy tool Blacksmith Hammer (vendor 0s 18c)", p.events)
+        self.assertTrue(any(e.endswith(": Buy tool Blacksmith Hammer (vendor 0s 18c)") for e in p.events))
 
     def test_stock_used_and_totals(self):
         p = run(base_recipes(), BARS, stock=toy.stock({toy.COPPER_BAR: 10}))
@@ -402,4 +402,4 @@ class CraftOnceToolTests(unittest.TestCase):
         last = p.steps[-1]
         self.assertEqual((last.spell_id, last.crafts), (5, 1))
         self.assertGreaterEqual(last.cash, 700 + 18)  # the Blacksmith Hammer from a vendor
-        self.assertIn("Buy tool Blacksmith Hammer (vendor 0s 18c)", p.events)
+        self.assertTrue(any(e.endswith(": Buy tool Blacksmith Hammer (vendor 0s 18c)") for e in p.events))
