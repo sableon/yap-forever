@@ -135,6 +135,112 @@ class CliTests(unittest.TestCase):
         for name in ("guide-gold", "guide-value", "plan-gold", "plan-value"):
             self.assertTrue(list(self.paths.reports.glob(f"*-{name}.md")), name)
 
+    def add_character(self, name, stock_text="level = 20\n[items]\n"):
+        text = self.paths.profile.read_text(encoding="utf-8")
+        self.paths.profile.write_text(text + f'\n[characters."{name}"]\nfavor_standing = "Neutral"\n',
+                                      encoding="utf-8")
+        stock = self.paths.character(name) / "stock.toml"
+        stock.parent.mkdir(parents=True)
+        stock.write_text(stock_text, encoding="utf-8")
+
+    def report_names(self):
+        return sorted(f.name for f in self.paths.reports.glob("*.md"))
+
+    def test_plan_reports_carry_the_characters_name(self):
+        from datetime import date
+        self.ready_home()
+        run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        today = date.today().isoformat()
+        self.assertEqual(self.report_names(), sorted(
+            f"{today}-firstname-lastname-{kind}-{mode}.md" for kind in ("guide", "plan")
+            for mode in ("gold", "value")))
+
+    def test_plan_for_two_characters_keeps_both_sets_of_reports(self):
+        self.ready_home()
+        self.add_character("Testy Example")
+        for name in ("Firstname Lastname", "Testy Example"):
+            code, out = run(["plan", "--character", name, "--prof", "blacksmithing:20"], self.paths)
+            self.assertEqual(code, 0, out)
+        names = self.report_names()
+        self.assertEqual(len(names), 8)
+        self.assertEqual(sum("testy-example" in n for n in names), 4)
+
+    def test_plan_for_names_that_clash_gives_each_its_own_hash(self):
+        import hashlib
+        self.ready_home()
+        self.add_character("firstname  lastname")
+        for name in ("Firstname Lastname", "firstname  lastname"):
+            code, out = run(["plan", "--character", name, "--prof", "blacksmithing:20"], self.paths)
+            self.assertEqual(code, 0, out)
+        names = self.report_names()
+        self.assertEqual(len(names), 8)
+        for name in ("Firstname Lastname", "firstname  lastname"):
+            h = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+            self.assertEqual(sum(f"-lastname-{h}-" in n for n in names), 4, name)
+
+    def test_write_reports_without_a_character_keeps_the_old_names(self):
+        from datetime import date
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Goal
+        stock = self.ready_home()
+        plan_mod.write_reports(self.paths, stock, "Neutral", {164: Goal(skill=20)})
+        today = date.today().isoformat()
+        self.assertEqual(self.report_names(), sorted(
+            f"{today}-{kind}-{mode}.md" for kind in ("guide", "plan") for mode in ("gold", "value")))
+
+    def bags_only_home(self, bags_text='profs = ["blacksmithing"]\nbag_slots = 25\n[items]\n2835 = 3\n'):
+        stock = self.ready_home()
+        stock.unlink()
+        bags = stock.parent / "bags.toml"
+        bags.write_text(bags_text, encoding="utf-8")
+        return stock, bags
+
+    def test_plan_converts_a_bags_file_once_and_says_what_to_fill_in(self):
+        stock, bags = self.bags_only_home()
+        code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertTrue(stock.exists())
+        self.assertTrue(bags.exists())
+        lines = [l for l in out.splitlines() if str(stock) in l and "bags.toml" in l]
+        self.assertEqual(len(lines), 1, out)
+        for word in ("level", "cash_gold", "[skills]", "[goals]"):
+            self.assertIn(word, lines[0])
+        self.assertIn("name the professions to plan", out)
+        again_code, again = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(again_code, 1)
+        self.assertNotIn("bags.toml", again)
+        self.assertIn("name the professions to plan", again)
+
+    def test_plan_with_a_converted_bags_file_plans_with_prof_flags(self):
+        stock, _ = self.bags_only_home()
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0, out)
+        self.assertIn(str(stock), out)
+        self.assertEqual(len(self.report_names()), 4)
+
+    def test_plan_leaves_a_stock_file_alone_when_a_bags_file_sits_beside_it(self):
+        stock, bags = self.bags_only_home()
+        stock.write_text("level = 20\n[items]\n", encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("bags.toml", out)
+        self.assertEqual(stock.read_text(encoding="utf-8"), "level = 20\n[items]\n")
+
+    def test_plan_with_a_damaged_bags_file_names_it(self):
+        stock, bags = self.bags_only_home("profs = [")
+        code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertIn(str(bags), out)
+        self.assertFalse(stock.exists())
+
+    def test_plan_with_neither_file_still_asks_for_a_stock_file(self):
+        stock, bags = self.bags_only_home()
+        bags.unlink()
+        code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertIn("no stock file for Firstname Lastname", out)
+
     def guide_text(self):
         (path,) = self.paths.reports.glob("*-guide-gold.md")
         return path.read_text(encoding="utf-8")

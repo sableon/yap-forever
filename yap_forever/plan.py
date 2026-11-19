@@ -10,6 +10,7 @@ from yap_forever.favor import load_favor
 from yap_forever.guide import render_guide
 from yap_forever.planner import DISENCHANT, plan, resolve_goals
 from yap_forever.prices import Market
+from yap_forever.profile import report_name
 from yap_forever.quests import load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
@@ -78,10 +79,13 @@ def candidates(gd, market, stock, favor, caps, craft_once, quests, overtime=0, r
 
 
 def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, character=None,
-                  reading: str = "relative", faction: str = "") -> tuple[str, dict[str, Path]]:
+                  reading: str = "relative", faction: str = "",
+                  profile_names=()) -> tuple[str, dict[str, Path]]:
     """Plan both routes from the player's prices and stock; return (comparison, written files).
     character: the profile.Character, for its talents; reading: how Working Overtime applies.
-    faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none."""
+    faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none.
+    The files are named for the character (see profile.report_name; profile_names: every character in the
+    profile); without a character they keep the plain names."""
     overtime = character.working_overtime if character else 0
     gamedata.fetch_all(dest=paths.gamedata, skip=gamedata.TRAINER_FILES)
     trainer_info, trainer_note = trainer_text.load_info(paths.gamedata, faction)
@@ -98,13 +102,14 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     today = date.today().isoformat()
     paths.reports.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
+    who = f"{report_name(character.name, profile_names)}-" if character else ""
     for m, route in routes.items():
         alts = trip_alternatives(route, gd, market, stock, favor, caps, once, m, quests,
                                  overtime, reading)
-        full = paths.reports / f"{today}-plan-{m}.md"
+        full = paths.reports / f"{today}-{who}plan-{m}.md"
         full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps,
                                character, reading), encoding="utf-8")
-        guide = paths.reports / f"{today}-guide-{m}.md"
+        guide = paths.reports / f"{today}-{who}guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
                                        character=character, reading=reading,
                                        trainer_info=trainer_info, trainer_note=trainer_note),

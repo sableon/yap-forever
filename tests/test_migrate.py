@@ -26,12 +26,18 @@ class MigrateTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def run_migrate(self):
-        return migrate(self.user, self.data, self.dest, "Ana", {"Bo": self.user / "alt2-bags.toml"})
+        return migrate(self.data, self.dest, {"Ana": self.user / "stock.toml",
+                                              "Bo": self.user / "alt2-bags.toml"})
+
+    def cli_args(self, *characters, extra=()):
+        return ["migrate", "--from-data", str(self.data),
+                *[x for c in characters for x in ("--character", c)], *extra]
 
     def test_migrate_copies_files_into_home_layout(self):
         self.run_migrate()
         self.assertIn("level = 47", (self.dest.character("Ana") / "stock.toml").read_text(encoding="utf-8"))
-        self.assertIn("bag_slots = 30", (self.dest.character("Bo") / "bags.toml").read_text(encoding="utf-8"))
+        self.assertIn("bag_slots = 30", (self.dest.character("Bo") / "stock.toml").read_text(encoding="utf-8"))
+        self.assertFalse((self.dest.character("Bo") / "bags.toml").exists())
         self.assertEqual(profile.load_house(self.dest.house), 4242)
         self.assertTrue(self.dest.prices.exists())
         self.assertTrue((self.dest.gamedata / "Recipes.lua").exists())
@@ -67,32 +73,111 @@ class MigrateTests(unittest.TestCase):
 
 
 
+class SameFilesForEveryCharacterTests(MigrateTests):
+    def test_every_stock_file_gets_goals_by_its_content(self):
+        from yap_forever.config import Goal, load_stock
+        (self.user / "other.toml").write_text("level = 10\ntarget = 150\n[items]\n", encoding="utf-8")
+        migrate(self.data, self.dest, {"Ana": self.user / "stock.toml", "Bo": self.user / "other.toml"})
+        self.assertEqual(load_stock(self.dest.character("Ana") / "stock.toml").goals,
+                         {164: Goal(skill=225), 333: Goal(skill=225)})
+        self.assertEqual(load_stock(self.dest.character("Bo") / "stock.toml").goals,
+                         {164: Goal(skill=150), 333: Goal(skill=150)})
+
+    def test_a_converted_character_gets_no_goals(self):
+        from yap_forever.config import load_stock
+        self.run_migrate()
+        self.assertEqual(load_stock(self.dest.character("Bo") / "stock.toml").goals, {})
+        self.assertEqual(load_stock(self.dest.character("Bo") / "stock.toml").bag_slots, 30)
+
+    def test_two_bags_files_are_both_converted(self):
+        (self.user / "third.toml").write_text('profs = ["alchemy"]\nbag_slots = 10\n', encoding="utf-8")
+        actions = migrate(self.data, self.dest, {"Bo": self.user / "alt2-bags.toml", "Cy": self.user / "third.toml"})
+        for name in ("Bo", "Cy"):
+            self.assertTrue((self.dest.character(name) / "stock.toml").exists(), name)
+        self.assertEqual(set(profile.load_profile(self.dest.profile).characters), {"Bo", "Cy"})
+        self.assertTrue(any("check level, cash_gold" in a for a in actions), actions)
+
+    def test_a_converted_character_keeps_an_existing_stock_file(self):
+        stock = self.dest.character("Bo") / "stock.toml"
+        stock.parent.mkdir(parents=True)
+        stock.write_text("level = 9\n", encoding="utf-8")
+        actions = self.run_migrate()
+        self.assertEqual(stock.read_text(encoding="utf-8"), "level = 9\n")
+        self.assertTrue(any(a.startswith("kept") and str(stock) in a for a in actions), actions)
+
+    def test_a_missing_file_is_skipped(self):
+        actions = migrate(self.data, self.dest, {"Ana": self.user / "nope.toml"})
+        self.assertTrue(any("nope.toml (not found)" in a for a in actions), actions)
+        self.assertEqual(set(profile.load_profile(self.dest.profile).characters), {"Ana"})
+
+
 class NamesWithSpacesTests(MigrateTests):
     def test_names_with_spaces_and_accents_load(self):
-        migrate(self.user, self.data, self.dest, "Ana Brightforge",
-                {"Élise Brightforge": self.user / "alt2-bags.toml"})
+        migrate(self.data, self.dest, {"Ana Brightforge": self.user / "stock.toml",
+                                       "Élise Brightforge": self.user / "alt2-bags.toml"})
         prof = profile.load_profile(self.dest.profile)
         self.assertEqual(set(prof.characters), {"Ana Brightforge", "Élise Brightforge"})
         self.assertTrue((self.dest.character("Ana Brightforge") / "stock.toml").exists())
 
 
 class MigrateCliTests(MigrateTests):
-    def test_cli_migrate_parses_alts(self):
+    def run_cli(self, argv):
         import contextlib, io
         from yap_forever import cli
-        with contextlib.redirect_stdout(io.StringIO()):
-            code = cli.main(["migrate", "--from-user", str(self.user), "--from-data", str(self.data),
-                             "--main", "Ana", "--alt", f"Bo={self.user / 'alt2-bags.toml'}"], self.dest)
-        self.assertEqual(code, 0)
-        self.assertTrue((self.dest.character("Bo") / "bags.toml").exists())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = cli.main(argv, self.dest)
+        return code, out.getvalue()
+
+    def test_cli_migrate_takes_every_character_the_same_way(self):
+        code, out = self.run_cli(self.cli_args(f"Ana={self.user / 'stock.toml'}",
+                                               f"Bo={self.user / 'alt2-bags.toml'}"))
+        self.assertEqual(code, 0, out)
+        for name in ("Ana", "Bo"):
+            self.assertTrue((self.dest.character(name) / "stock.toml").exists(), name)
+
+    def test_cli_migrate_order_and_role_do_not_matter(self):
+        code, out = self.run_cli(self.cli_args(f"Bo={self.user / 'alt2-bags.toml'}",
+                                               f"Ana={self.user / 'stock.toml'}"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("level = 47", (self.dest.character("Ana") / "stock.toml").read_text(encoding="utf-8"))
+        self.assertIn("bag_slots = 30", (self.dest.character("Bo") / "stock.toml").read_text(encoding="utf-8"))
+
+    def test_cli_migrate_needs_a_character(self):
+        import contextlib, io
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.run_cli(self.cli_args())
+
+    def test_cli_migrate_malformed_character_names_the_flag(self):
+        for bad in ("Ana", "=file", "Ana="):
+            code, out = self.run_cli(self.cli_args(bad))
+            self.assertEqual(code, 1, bad)
+            self.assertIn(f"--character needs NAME=FILE, got {bad!r}", out)
+        self.assertFalse(self.dest.root.exists())
+
+    def test_cli_migrate_repeated_name_is_refused(self):
+        code, out = self.run_cli(self.cli_args(f"Ana={self.user / 'stock.toml'}",
+                                               f"Ana={self.user / 'alt2-bags.toml'}"))
+        self.assertEqual(code, 1)
+        self.assertIn("twice", out)
+
+    def test_cli_migrate_old_flags_are_gone(self):
+        import contextlib, io
+        for flag in ("--main", "--alt", "--from-user"):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.run_cli(self.cli_args(f"Ana={self.user / 'stock.toml'}", extra=(flag, "x")))
+
+    def test_cli_migrate_damaged_file_says_which_and_writes_nothing(self):
+        (self.user / "alt2-bags.toml").write_text("profs = [", encoding="utf-8")
+        code, out = self.run_cli(self.cli_args(f"Ana={self.user / 'stock.toml'}",
+                                               f"Bo={self.user / 'alt2-bags.toml'}"))
+        self.assertEqual(code, 1)
+        self.assertIn("alt2-bags.toml", out)
+        self.assertFalse(self.dest.root.exists())
 
     def test_cli_migrate_region_ruleset_faction(self):
-        import contextlib, io
-        from yap_forever import cli
-        with contextlib.redirect_stdout(io.StringIO()):
-            code = cli.main(["migrate", "--from-user", str(self.user), "--from-data", str(self.data),
-                             "--main", "Ana", "--region", "us", "--ruleset", "3", "--faction", "horde"],
-                            self.dest)
+        code, _ = self.run_cli(self.cli_args(f"Ana={self.user / 'stock.toml'}",
+                                             extra=("--region", "us", "--ruleset", "3", "--faction", "horde")))
         self.assertEqual(code, 0)
         prof = profile.load_profile(self.dest.profile)
         self.assertEqual((prof.region, prof.ruleset, prof.faction), ("us", 3, "horde"))
@@ -100,11 +185,7 @@ class MigrateCliTests(MigrateTests):
         self.assertEqual((saved["house"], saved["region"], saved["ruleset"]), (4242, "us", 3))
 
     def test_cli_migrate_defaults_to_eu_alliance(self):
-        import contextlib, io
-        from yap_forever import cli
-        with contextlib.redirect_stdout(io.StringIO()):
-            cli.main(["migrate", "--from-user", str(self.user), "--from-data", str(self.data),
-                      "--main", "Ana"], self.dest)
+        self.run_cli(self.cli_args(f"Ana={self.user / 'stock.toml'}"))
         prof = profile.load_profile(self.dest.profile)
         self.assertEqual((prof.region, prof.ruleset, prof.faction), ("eu", 2, "alliance"))
 
