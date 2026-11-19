@@ -39,8 +39,9 @@ player what changed, running the planner, and walking them through the result.
    Save the answer under `[goals]` in `stock.toml` if the player wants it kept.
    If Enchanting isn't in the plan, ask whether green crafts should be **kept to disenchant on
    another character** or sold, and set `keep_greens = true` or `false` in `stock.toml`. A
-   character with only a `bags.toml` needs a `stock.toml`: help write one (level, `[items]`,
-   `bag_slots`, `[goals]`).
+   character with only a `bags.toml` gets a `stock.toml` made from it the first time `plan` runs
+   (`bag_slots`, `reagent_slots` and `[items]` carry over; the file is never overwritten or
+   deleted): help the player fill in level, gold (`cash_gold`), `[skills]` and `[goals]`.
 3. **Refresh prices** with `prices`. Prices update about once an hour. If the API can't be
    reached, use a fallback from [references/setup.md](references/setup.md) step 5:
    `prices --remote` (another machine over ssh) or `prices --auctionator PATH` (Auctionator's
@@ -50,7 +51,9 @@ player what changed, running the planner, and walking them through the result.
    profession). Show the comparison table it prints and explain the two routes in a sentence each:
    **least gold** counts what the player owns as free; **least total value** counts owned
    materials at what they'd sell for, so it may leave valuable ones to sell, which takes time on
-   the AH. When both are the same route, say so. Ask which guide they want to follow.
+   the AH. When both are the same route, say so. Ask which guide they want to follow. The reports
+   are named for the character (`reports/<date>-<name>-plan-gold.md` and so on), so planning
+   another character doesn't overwrite them.
 5. **Walk through the result** top-down, craft by craft, as laid out in
    [references/list-layout.md](references/list-layout.md). When game data and play experience
    disagree, quote [references/game-rules.md](references/game-rules.md) and go with the rules.

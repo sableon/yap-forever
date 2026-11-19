@@ -1,9 +1,13 @@
 """The player's profile (region, ruleset, faction, characters) and their auction house."""
+import hashlib
 import json
+import re
 import tomllib
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable
 
 from yap_forever.settings import command_hint
 
@@ -29,6 +33,29 @@ class Profile:
     faction: str = ""
     characters: dict[str, Character] = field(default_factory=dict)
     overtime_reading: str = "relative"  # how the Working Overtime bonus reads: "relative" or "points"
+
+
+_WINDOWS_REFUSED = set('<>:"/\\|?*')
+
+
+def _file_part(name: str) -> str:
+    """A character's name as one piece of a file name: in NFC, casefolded, whitespace runs as '-', and the
+    characters Windows refuses (and control characters) dropped. Letters with accents stay."""
+    dashed = re.sub(r"\s+", "-", unicodedata.normalize("NFC", name).strip().casefold())
+    return "".join(c for c in dashed if c not in _WINDOWS_REFUSED and unicodedata.category(c) != "Cc")
+
+
+def report_name(name: str, names: Iterable[str] = ()) -> str:
+    """The part of a report file name that belongs to one character.
+
+    names: every character name in the profile. When nothing is left of the name, or another name
+    gives the same part, the first 8 hex digits of the SHA-1 of the full name are appended, so no two
+    characters share report files."""
+    part = _file_part(name)
+    clash = any(other != name and _file_part(other) == part for other in names)
+    if not part or clash:
+        part += "-" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+    return part
 
 
 def _check(key: str, value, allowed) -> None:

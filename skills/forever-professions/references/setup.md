@@ -41,6 +41,9 @@ working_overtime = 2
 dedicated_study = true
 ```
 
+Every character gets the same file, `characters/<Name>/stock.toml`, and its own reports: the
+planner treats all characters alike, whatever the player calls them.
+
 Each character planned gets `characters/<Name>/stock.toml`:
 
 ```toml
@@ -63,6 +66,32 @@ enchanting = 95
 ```
 
 `plan --prof NAME:TARGET` overrides `[goals]` for one run.
+
+**Report names.** `plan` writes `reports/<date>-<name>-plan-gold.md`, `-plan-value.md`,
+`-guide-gold.md` and `-guide-value.md`, so each character keeps its own set. `<name>` is the
+full name in lower case, with spaces as `-`, characters Windows refuses in file names
+(`< > : " / \ | ? *` and control characters) left out and accented letters kept:
+`Aldra Stoneward` gives `aldra-stoneward`. Two-word names can share a first or a second name, so
+the whole name is used. If nothing is left of a name, or two characters in the profile give the
+same `<name>`, `-` and the first 8 hex digits of the SHA-1 of the full name are added. When a
+character whose name gives the same `<name>` is added to the profile later, both characters' reports
+switch to the hashed names, and files written earlier keep their old names.
+
+**A bags file.** A home from before every character had a `stock.toml` may hold only
+`characters/<Name>/bags.toml` (`profs`, `bag_slots`, `reagent_slots`, `[items]`). The first
+`plan --character "<Name>"` makes a `stock.toml` from it: `bag_slots`, `reagent_slots` and `[items]`
+carry over, the professions become commented lines under `[skills]` and `[goals]`, and a comment at
+the top says what to fill in: `level`, `cash_gold`, `[skills]` and `[goals]`. It prints one line naming
+the new file, and never overwrites a `stock.toml` or deletes the `bags.toml`. Fill the values in
+with the player, then plan.
+
+**Moving an old planner folder.** `<python> -m yap_forever migrate --from-data DIR --character
+"NAME=FILE" [--character "NAME=FILE" ...]` (at least one `--character`; `--region`, `--ruleset` and
+`--faction` set the profile) copies the old data folder's house, prices and game data and gives every
+character `characters/<NAME>/stock.toml`. An existing `stock.toml` is kept, never overwritten. `FILE`
+is a stock file (copied; one without `[goals]` gets Blacksmithing and Enchanting at its `target`) or a bags file (a file with a `profs` key; converted as
+above). Every character is listed in the profile. Credentials are never copied: the player pastes
+them in.
 
 Optional `remote.toml` in the home folder, for a player whose own network cannot reach the API
 and who has another machine that can fetch prices:

@@ -222,6 +222,15 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
               f"run {command_hint('prices')}")
         return 1
     stock = paths.character(character) / "stock.toml"
+    bags = paths.character(character) / "bags.toml"
+    if not stock.exists() and bags.exists():  # a home from before every character got a stock file
+        from yap_forever import migrate
+        try:
+            migrate.bags_to_stock(bags, stock)
+        except ValueError as e:
+            print(e)
+            return 1
+        print(f"made {stock} from {bags}: fill in {migrate.FILL_IN}")
     if not stock.exists():
         print(f"no stock file for {character}: create {stock} (see the skill's setup guide)")
         return 1
@@ -249,7 +258,7 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
     try:
         me = prof.characters[character]
         table, files = plan.write_reports(paths, stock, me.favor_standing, goals, me, prof.overtime_reading,
-                                          faction=prof.faction)
+                                          faction=prof.faction, profile_names=list(prof.characters))
     except (urllib.error.URLError, TimeoutError) as e:
         print(f"could not download game data ({getattr(e, 'reason', e)}): check your network or VPN, "
               f"then run {command_hint('plan --character ' + character)} again")
@@ -266,15 +275,23 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
 
 def cmd_migrate(paths: Paths, args) -> int:
     from yap_forever.migrate import migrate
-    alts = {}
-    for a in args.alt:
-        name, sep, bags = a.partition("=")
-        if not sep:
-            print(f"--alt needs NAME=BAGSFILE, got {a!r}")
+    characters: dict[str, Path] = {}
+    for c in args.character:
+        name, sep, file = c.partition("=")
+        if not (sep and name.strip() and file.strip()):
+            print(f"--character needs NAME=FILE, got {c!r}")
             return 1
-        alts[name] = Path(bags).expanduser()
-    for line in migrate(args.from_user.expanduser(), args.from_data.expanduser(), paths, args.main, alts,
-                        region=args.region, ruleset=args.ruleset, faction=args.faction):
+        if name in characters:
+            print(f"--character {name!r} given twice")
+            return 1
+        characters[name] = Path(file).expanduser()
+    try:
+        actions = migrate(args.from_data.expanduser(), paths, characters,
+                          region=args.region, ruleset=args.ruleset, faction=args.faction)
+    except ValueError as e:
+        print(e)
+        return 1
+    for line in actions:
         print(line)
     print(f"Copy your API client into {paths.credentials} yourself, then run {command_hint('check')}")
     return 0
@@ -302,13 +319,12 @@ def main(argv: list[str], paths: Paths | None = None) -> int:
     pl.add_argument("--prof", action="append", default=[], metavar="NAME:TARGET",
                     help="a profession and its target: a skill 1-300 or a recipe (once or twice)")
     m = sub.add_parser("migrate", help="move a pre-yap-forever planner folder into your home folder")
-    m.add_argument("--from-user", type=Path, required=True, help="folder with stock.toml and bags files")
     m.add_argument("--from-data", type=Path, required=True, help="old data folder (house, prices, game data)")
-    m.add_argument("--main", required=True, help="name of the character stock.toml belongs to")
+    m.add_argument("--character", action="append", required=True, metavar="NAME=FILE",
+                   help="a character and its stock file or bags file (repeat for every character)")
     m.add_argument("--region", choices=profile.REGIONS, default="eu", help="your region (default eu)")
     m.add_argument("--ruleset", type=int, default=2, help="your ruleset ID (default 2)")
     m.add_argument("--faction", choices=profile.FACTIONS, default="alliance", help="default alliance")
-    m.add_argument("--alt", action="append", default=[], metavar="NAME=BAGSFILE")
     args = parser.parse_args(argv)
     paths = paths or settings.paths()
     if args.command == "init":
