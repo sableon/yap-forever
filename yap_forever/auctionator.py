@@ -110,6 +110,7 @@ def _cbor(b: bytes, i: int, depth: int):
     if mt in (2, 3):
         if i + v > len(b):
             raise ValueError("CBOR ends early")
+        # latin-1 on purpose: Auctionator writes byte strings, and every byte must map to a character
         return b[i:i + v].decode("latin-1"), i + v
     if mt == 4:
         out = []
@@ -145,7 +146,7 @@ def _days(x) -> dict[int, object]:
     for k, v in x.items():
         try:
             out[int(k)] = v
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             raise ValueError(f"Auctionator day {k!r} is not a number") from None
     return out
 
@@ -171,7 +172,7 @@ def load_auctionator(path: Path, realm: str | None) -> Market:
         data = cbor_decode(lua_string_at(raw, realm.encode("utf-8")))
         if not isinstance(data, dict):
             raise ValueError("the realm's data is not a map")
-        items = {k: v for k, v in data.items() if isinstance(k, str) and k.isdigit()}
+        items = {k: v for k, v in data.items() if isinstance(k, str) and k.isascii() and k.isdigit()}
         parsed = {}
         newest = None
         for k, v in items.items():
@@ -199,7 +200,7 @@ def load_auctionator(path: Path, realm: str | None) -> Market:
         m, a = entry
         last = max(a)
         qty = a[last]
-        if (newest - last <= FRESH_DAYS and isinstance(qty, int) and qty > 0
+        if (newest - last <= FRESH_DAYS and isinstance(qty, int) and not isinstance(qty, bool) and qty > 0
                 and isinstance(m, int) and not isinstance(m, bool) and m > 0):
             listings[item_id] = [(m, qty)]
     market = Market(listings, scan_day)

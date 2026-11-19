@@ -261,6 +261,32 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(list(m.listings), [5])
         self.assertEqual(m.dropped, 2)
 
+    def test_item_keys_must_be_ascii_digits(self):
+        data = {"5": item(9, {NEWEST: 1}), "\xb2": item(9, {NEWEST: 1}), "1.5": item(9, {NEWEST: 1}),
+                " 7": item(9, {NEWEST: 1})}
+        m = load_auctionator(self.write({"R": payload(data)}), None)
+        self.assertEqual(list(m.listings), [5])
+        self.assertEqual(m.dropped, 0)
+
+    def test_item_without_a_usable_price_is_dropped_and_counted(self):
+        data = {"5": item(9, {NEWEST: 1}), "6": {"a": {str(NEWEST): 1}}, "7": item(0, {NEWEST: 1}),
+                "8": item(True, {NEWEST: 1}), "9": item("12", {NEWEST: 1})}
+        m = load_auctionator(self.write({"R": payload(data)}), None)
+        self.assertEqual(list(m.listings), [5])
+        self.assertEqual(m.dropped, 4)
+
+    def test_boolean_quantity_is_not_a_quantity(self):
+        data = {"5": item(9, {NEWEST: 1}), "6": item(9, {NEWEST: True})}
+        m = load_auctionator(self.write({"R": payload(data)}), None)
+        self.assertEqual(list(m.listings), [5])
+        self.assertEqual(m.dropped, 1)
+
+    def test_a_day_key_that_is_not_a_day_is_a_value_error(self):
+        for bad in (float("inf"), float("nan"), "x"):
+            data = {"5": {"m": 9, "a": {bad: 1}}}
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                load_auctionator(self.write({"R": payload(data)}), None)
+
     def test_several_realms_need_a_choice(self):
         path = self.write({"TestRealm": payload(), "OtherRealm": payload({})})
         with self.assertRaises(ValueError) as cm:
