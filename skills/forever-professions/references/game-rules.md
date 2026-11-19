@@ -29,7 +29,15 @@ say so.
 - Buying is never the limit: auction house purchases wait in the mail for 30 days.
 - The limit is crafting and selling space: each crafted gear piece takes a slot.
 - Bag slots: the backpack (16) plus 4 normal bags and **1 reagent bag**. A reagent bag holds any
-  crafting materials, so materials can sit there while normal slots hold the crafts.
+  crafting materials, so materials can sit there while normal slots hold the crafts. The planner
+  counts them apart: `bag_slots` are free normal slots, `reagent_slots` the slots of the reagent bag.
+  Any item a loaded recipe uses as a reagent, and any trade good (item class 7: crafted
+  intermediates and disenchant materials too), goes in the reagent bag first; gear (weapons,
+  armor), patterns and tools never do. Packed essences count as reagents.
+- A pattern item (`Plans:`, `Pattern:`) in a character's own stock teaches its recipe at no cost, on
+  the main as on the alts: it is used up when learned (no longer owned, sellable or bought, and
+  not on the shopping list), and the recipe's skill requirement still applies. Only recipes taught
+  by a pattern item count; trainer, Favor and quest recipes are unchanged.
 - A mail a player sends holds at most 12 attachments; auction house mail can hold more.
 - Items move in stacks. Usually 20; potions often 5; armor kits 10. The client's `Stackable`
   field has matched every in-game check so far; when an item has none, or two item IDs exist,
@@ -54,8 +62,15 @@ say so.
 
 - **Working Overtime** (up to 5 ranks, 4% each) raises the chance of a skill-up from every
   tradeskill. Guides disagree whether 20% at 5/5 means 20 percentage points or 20% more of the
-  base chance. The planner doesn't model it yet: say so if the player has it.
-- **Dedicated Study** gives one free point a day to the lowest profession.
+  base chance. The planner takes the rank from the profile (`working_overtime`) and the reading
+  from `working_overtime_reading`: `relative` is p x (1 + 0.04 x rank), `points` is p + 0.04 x
+  rank, both capped at 1; a craft that can't skill up stays at 0. It applies to disenchanting too,
+  because those are Enchanting skill-ups. Which reading is right is unconfirmed in game; the guide
+  header and the report's data notes say the rank and the reading used (nothing when the rank is 0).
+- **Dedicated Study** gives one free point a day to the lowest profession. It changes no route:
+  when the character has it, the guide header and the report's data notes add one line, "N days
+  would cover the last N points" of the lower-skill planned profession (on a tie the first of the
+  route), N being that profession's points from its start to its target on the route.
 
 ## Loot
 

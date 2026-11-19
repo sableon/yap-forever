@@ -16,10 +16,12 @@ def base_recipes():
     ]
 
 
-def run(recipes, listings=None, stock=None, favor=toy.NO_FAVOR, quest=(), cap=225, quests=None, reuse=None):
+def run(recipes, listings=None, stock=None, favor=toy.NO_FAVOR, quest=(), cap=225, quests=None, reuse=None,
+        **talents):
     gd = toy.gamedata(recipes, quest_items=quest)
     st = stock or toy.stock()
-    return plan(gd, Valuer(toy.market(listings), gd, st), st, favor, cap=cap, quests=quests, reuse=reuse)
+    return plan(gd, Valuer(toy.market(listings), gd, st), st, favor, cap=cap, quests=quests, reuse=reuse,
+                **talents)
 
 
 BARS = {toy.COPPER_BAR: [(100, 100000)]}
@@ -158,6 +160,64 @@ class PlannerTests(unittest.TestCase):
         self.assertIn(3, {s.spell_id for s in p2.steps})
         self.assertIn("Learn Scroll free (scroll 5s 0c)", " ".join(p2.events))
 
+    def scroll_recipes(self, req=1):
+        return base_recipes() + [toy.recipe(3, "Scroll free", BS, {}, (toy.STONE, 1), req=req,
+                                            source="scroll", scroll=toy.SCROLL)]
+
+    def test_owned_pattern_is_learned_at_no_cost_and_consumed(self):
+        from yap_forever.shopping import render_shopping
+        rs = self.scroll_recipes()
+        st = toy.stock({toy.SCROLL: 1})
+        p = run(rs, BARS, stock=st)  # the pattern is not on the AH: owning it is the only way
+        self.assertNotIn(3, dict(p.skipped))
+        self.assertIn(3, {s.spell_id for s in p.steps})
+        self.assertEqual([how for _p, _s, spell, how in p.learn_log if spell == 3], ["owned"])
+        self.assertIn("Learn Scroll free (your own pattern)", " ".join(p.events))
+        self.assertEqual(p.used_stock.get(toy.SCROLL), 1)  # consumed: not left to sell
+        self.assertNotIn(toy.SCROLL, p.leftovers)
+        self.assertEqual(p.bought.get(toy.SCROLL, 0), 0)
+        gd = toy.gamedata(rs)
+        text = "\n".join(render_shopping(p, gd, toy.market(BARS), st)[0])
+        self.assertNotIn("Plans: Something", text)
+        from yap_forever.trips import trips
+        self.assertEqual([t for t in trips(p, gd) if t.spell == 3], [])  # no vendor or AH pattern trip
+
+    def test_owned_pattern_beats_a_listed_one(self):
+        rs = self.scroll_recipes()
+        market = {**BARS, toy.SCROLL: [(500, 1)]}
+        bought = run(rs, market)
+        owned = run(rs, market, stock=toy.stock({toy.SCROLL: 1}))
+        self.assertEqual([how for *_x, spell, how in bought.learn_log if spell == 3], ["ah"])
+        self.assertEqual([how for *_x, spell, how in owned.learn_log if spell == 3], ["owned"])
+        self.assertLess(owned.cash_total, bought.cash_total)
+
+    def test_owned_pattern_costs_its_sale_value_in_value_mode_but_no_cash(self):
+        rs = self.scroll_recipes()
+        gd = toy.gamedata(rs)
+        totals = []
+        for price in (500, 3000):  # the same pattern, worth more on the second AH
+            market = {**BARS, toy.SCROLL: [(price, 1)]}
+            st = toy.stock({toy.SCROLL: 1})
+            p = run(rs, market, stock=st)
+            self.assertEqual([how for *_x, spell, how in p.learn_log if spell == 3], ["owned"])
+            worth = Valuer(toy.market(market), gd, st).owned_value(toy.SCROLL)
+            totals.append((p.cash_total, p.economic_total, worth))
+        (cash_a, econ_a, worth_a), (cash_b, econ_b, worth_b) = totals
+        self.assertGreater(worth_b, worth_a)
+        self.assertEqual(cash_a, cash_b)  # an owned pattern costs no cash
+        self.assertAlmostEqual(econ_b - econ_a, worth_b - worth_a, places=6)  # but its sale value is given up
+
+    def test_without_the_pattern_nothing_changes(self):
+        rs = self.scroll_recipes()
+        self.assertEqual(run(rs, BARS).skipped, run(rs, BARS, stock=toy.stock({toy.COPPER_BAR: 3})).skipped)
+        self.assertIn((3, "scroll not available: Plans: Something"), run(rs, BARS).skipped)
+
+    def test_owned_pattern_still_needs_the_skill(self):
+        p = run(self.scroll_recipes(req=50), BARS, stock=toy.stock({toy.SCROLL: 1}))
+        steps = [s for s in p.steps if s.spell_id == 3]
+        self.assertTrue(steps)
+        self.assertTrue(all(s.skill_from >= 50 for s in steps))
+
     def test_missing_rod_adds_tool_cost_once(self):
         rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
               toy.recipe(2, "Ench rod-needing", ENCH, {toy.ROD: 1}, tools=[373]),
@@ -180,6 +240,48 @@ class PlannerTests(unittest.TestCase):
         self.assertGreater(p.cash_total, 0)
         self.assertGreaterEqual(p.economic_total, p.cash_total - p.sale_proceeds - p.leftover_value)
 
+
+
+def crafts_of(p, prof, spell=None):
+    return sum(s.crafts for s in p.steps if s.profession == prof and (spell is None or s.spell_id == spell))
+
+
+class WorkingOvertimeTests(unittest.TestCase):
+    def yellow_route(self):
+        # always yellow or green: 1 -> 100 skill at chance (100 - s) / 99 or less
+        return [toy.recipe(1, "BS slow", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1), t=(1, 1, 50, 100)),
+                toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+
+    def test_rank_five_needs_fewer_crafts(self):
+        base = run(self.yellow_route(), BARS, cap=60)
+        for reading in ("relative", "points"):
+            fast = run(self.yellow_route(), BARS, cap=60, overtime=5, reading=reading)
+            self.assertEqual(fast.final_skill[BS], base.final_skill[BS])
+            self.assertLess(crafts_of(fast, BS, 1), crafts_of(base, BS, 1), reading)
+        rel = run(self.yellow_route(), BARS, cap=60, overtime=5, reading="relative")
+        pts = run(self.yellow_route(), BARS, cap=60, overtime=5, reading="points")
+        self.assertLess(crafts_of(pts, BS, 1), crafts_of(rel, BS, 1))
+
+    def test_rank_zero_changes_nothing(self):
+        a = run(self.yellow_route(), BARS, cap=60)
+        for reading in ("relative", "points"):
+            b = run(self.yellow_route(), BARS, cap=60, overtime=0, reading=reading)
+            self.assertEqual(a.steps, b.steps)
+            self.assertEqual((a.cash_total, a.economic_total), (b.cash_total, b.economic_total))
+
+    def test_disenchant_skillups_use_the_talent_too(self):
+        rs = [toy.recipe(1, "Belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),
+              toy.recipe(2, "Ench dust", ENCH, {toy.DUST: 1})]
+        listings = {**BARS, toy.DUST: [(300, 100000)]}
+        base = run(rs, listings, cap=60)
+        fast = run(rs, listings, cap=60, overtime=5, reading="points")
+        self.assertEqual(fast.final_skill[ENCH], base.final_skill[ENCH])
+
+        def disenchants_per_point(p):
+            de = [s for s in p.steps if s.profession == ENCH and s.spell_id == 0]
+            self.assertTrue(de)
+            return sum(s.crafts for s in de) / sum(s.skill_to - s.skill_from for s in de)
+        self.assertLess(disenchants_per_point(fast), disenchants_per_point(base))
 
 
 class BankGreensTests(unittest.TestCase):

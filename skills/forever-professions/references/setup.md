@@ -28,7 +28,10 @@ Fill in `profile.toml` with the player:
   default `0`) and `dedicated_study` (`true` if the character has taken Dedicated Study,
   default `false`).
 - Optional, once at the top of the file: `working_overtime_reading = "relative"` (default) or
-  `"points"`, how the player reads the Working Overtime bonus.
+  `"points"`, how the player reads the Working Overtime bonus: `relative` adds 4% of the base
+  chance per rank, `points` adds 4 percentage points per rank. `plan` uses the rank for every
+  skill-up (disenchanting too) and names the rank and reading in the guide header; a character with
+  `dedicated_study` gets one guide line about the free daily point.
 
 ```toml
 working_overtime_reading = "relative"
@@ -46,8 +49,8 @@ favor = 300          # Merchant's Favor points
 cash_gold = 25       # soft budget
 mining = 0           # Mining skill, if the character mines
 short_farm_ore = 0
-bag_slots = 40       # free bag slots while crafting; gives mailbox trips (leave out to skip them)
-reagent_slots = 0    # slots in a reagent bag; 0 = none
+bag_slots = 40       # free normal bag slots while crafting; gives mailbox trips (leave out to skip them)
+reagent_slots = 0    # slots in a reagent bag (materials only, filled first); 0 = none
 keep_greens = false  # without Enchanting: keep green crafts to disenchant on another character
 [goals]              # one or two professions: a skill up to 300, or a recipe to craft once
 blacksmithing = 225

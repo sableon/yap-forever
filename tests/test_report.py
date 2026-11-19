@@ -167,3 +167,18 @@ class AnyPairReportTests(unittest.TestCase):
     def test_verdict_for_other_pairs(self):
         from yap_forever.planner import Plan
         self.assertEqual(verdict(Plan(), toy.stock(), caps={197: 40}), "Ready to level")
+
+
+class TalentNoteTests(unittest.TestCase):
+    def test_data_notes_state_the_talents(self):
+        from yap_forever.profile import Character
+        p, m, gd, st = sample()
+        none = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        self.assertNotIn("Working Overtime", none)
+        self.assertNotIn("Dedicated Study", none)
+        c = Character("A B", working_overtime=5, dedicated_study=True)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, character=c, reading="points")
+        notes = text[text.index("## Data notes"):]
+        self.assertIn("Working Overtime 5/5, read as +20 percentage points (unconfirmed in game).", notes)
+        self.assertIn("Dedicated Study: one free point a day goes to your lowest profession;", notes)
+        self.assertEqual(text[:text.index("## Data notes")], none[:none.index("## Data notes")])
