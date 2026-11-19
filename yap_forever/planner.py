@@ -225,7 +225,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             return None
         return min(opts, key=lambda o: o["cost"].economic + (o["peek"].score if "peek" in o else 0))
 
-    held_where: dict[int, str] = {}  # held item -> where it came from, said when it is disenchanted
+    held_mail: dict[int, tuple[float, str]] = {}  # held item -> (count mailed by other characters, their names)
 
     def release_held(where=""):
         released = False
@@ -238,8 +238,13 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
                 for mat, per in de_yield(gd.items[item]).items():
                     pools.made[mat] = pools.made.get(mat, 0) + n * per
                     p.de_materials[mat] = p.de_materials.get(mat, 0) + n * per
-                p.events.append(f"Enchanting {skill[ENCH]}: disenchant {n:.0f} {gd.name(item)}"
-                                f"{held_where.pop(item, where)}")
+                if item in held_mail:  # say which part is mailed, and by whom
+                    mailed_n, who = held_mail.pop(item)
+                    src = (f" (mail from {who})" if mailed_n >= n - 1e-9
+                           else f" ({n - mailed_n:.0f} your own, {mailed_n:.0f} mail from {who})")
+                else:
+                    src = where
+                p.events.append(f"Enchanting {skill[ENCH]}: disenchant {n:.0f} {gd.name(item)}{src}")
                 de_skillups(n)
                 released = True
         return released
@@ -268,7 +273,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             del pools.mail[i]
             held[i] = held.get(i, 0) + n
             who = ", ".join(name for name, _n in allocate(getattr(stock, "shared", {}), i, math.ceil(n - 1e-9)))
-            held_where[i] = f" (mail from {who})"
+            held_mail[i] = (n, who)
             release_held()
         if len(p.steps) > first:  # show the greens on the first disenchant step and in the keep table
             p.steps[first].materials = {**greens, **mailed}
@@ -367,9 +372,10 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             item = t["item"]
             if t["how"] == "mail":
                 if item not in pools.tools and pools.mail.get(item, 0) >= 1:
+                    who = ", ".join(name for name, _n in allocate(getattr(stock, "shared", {}), item, 1))
                     pools.mail[item] -= 1  # it is yours now: held for the rest of the route
                     mailed[item] = mailed.get(item, 0) + 1
-                    p.events.append(f"{name} {s}: Use tool {gd.name(item)} (mailed by another of your characters)")
+                    p.events.append(f"{name} {s}: Use tool {gd.name(item)} (mailed by {who})")
             elif t["how"] == "craft":
                 tr = t["recipe"]
                 if tr.spell_id not in learned:

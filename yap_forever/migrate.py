@@ -36,7 +36,7 @@ def _add_goals(stock: Path, actions: list[str]) -> None:
     actions.append(f"added [goals] (Blacksmithing and Enchanting to {target}) to {stock}")
 
 
-FILL_IN = "level, [skills] and [goals]"
+FILL_IN = "level, [skills] and [goals]; gold goes under [gold] in profile.toml"
 _PROFESSION_NAMES = {v: k for k, v in PROFESSION_IDS.items()}
 
 
@@ -88,8 +88,8 @@ def bags_to_stock(bags: Path, stock: Path) -> bool:
             items[int(k)] = v
     except (ValueError, TypeError, AttributeError) as e:
         raise ValueError(str(e) or f"{what}: [items] must be item ID = whole number count") from None
-    out = [f"# Made from {bags.name} by yap-forever. Check before you plan: {FILL_IN}. Gold is shared by the "
-           "characters of one ruleset and faction: set it once under [gold] in profile.toml.",
+    out = [f"# Made from {bags.name} by yap-forever. Check before you plan: {FILL_IN} "
+           "(gold is shared by the characters of one ruleset and faction).",
            "# level = <your level>"]
     out += [f"{k} = {v}" for k, v in slots.items() if v is not None]
     out += ["", "[items]"] + [f"{k} = {v}" for k, v in items.items()]

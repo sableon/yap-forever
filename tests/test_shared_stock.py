@@ -133,7 +133,7 @@ class MailPoolTests(unittest.TestCase):
         self.assertEqual(p.cash_total, bought.cash_total - gd.items[toy.HAMMER].buy_price)  # no cash for the hammer
         self.assertEqual(p.bought.get(toy.HAMMER, 0), 0)
         self.assertEqual(p.vendor_bought.get(toy.HAMMER, 0), 0)
-        self.assertTrue(any("Use tool Blacksmith Hammer (mailed by another of your characters)" in e
+        self.assertTrue(any("Use tool Blacksmith Hammer (mailed by Ann)" in e
                             for e in p.events))
         text = "\n".join(lines)
         self.assertNotIn("| Blacksmith Hammer |", text)  # nothing to buy
@@ -150,7 +150,6 @@ class MailPoolTests(unittest.TestCase):
         self.assertNotIn("mail from", "\n".join(lines))
 
     def test_your_own_tool_comes_before_a_mates(self):
-        p, *_ = self.tool_case({"Ann": {toy.HAMMER: 1}})
         rs = [toy.recipe(1, "BS tooled", BS, {S: 1}, (toy.STONE, 1), tools=[162])]
         gd = toy.gamedata(rs)
         st = toy.stock({toy.HAMMER: 1}, shared={"Ann": {toy.HAMMER: 1}})
@@ -205,6 +204,19 @@ class MailedGreensTests(unittest.TestCase):
         self.assertEqual(p.used_mail, {self.BELT: [("Ann", 20), ("Bob", 5)]})
         self.assertIn("Enchanting 1: disenchant 10 Runed Copper Belt from your bank", p.events)
         self.assertTrue(any(e.endswith("disenchant 25 Runed Copper Belt (mail from Ann, Bob)") for e in p.events))
+
+    def test_a_part_that_is_the_mates_is_labelled_as_such(self):
+        # a green that needs Enchanting 150 waits for it: own and mailed greens are then released together
+        gd = toy.gamedata(self.rs())
+        gd.items[self.BELT].item_level = 50
+        st = toy.stock({self.BELT: 10}, shared={"Ann": {self.BELT: 20}})
+        market = toy.market({**BARS, toy.DUST: [(300, 100000)], self.BELT: [(5000, 10)]})
+        p = plan(gd, Valuer(market, gd, st), st, toy.NO_FAVOR, caps={BS: 40, ENCH: 160})
+        events = [e for e in p.events if "disenchant" in e]
+        self.assertEqual(len(events), 1, events)
+        self.assertTrue(events[0].endswith("disenchant 30 Runed Copper Belt (10 your own, 20 mail from Ann)"),
+                        events[0])
+        self.assertEqual((p.used_stock, p.used_mail), ({self.BELT: 10}, {self.BELT: [("Ann", 20)]}))
 
     def test_without_enchanting_in_the_plan_a_mates_greens_are_left_alone(self):
         p, _gd, _m = self.go(toy.stock(shared={"Ann": {self.BELT: 30}}), caps={BS: 40})
