@@ -215,12 +215,12 @@ def _group_notes(group, items, gd) -> list[str]:
 
 
 # --- route ---------------------------------------------------------------------
-def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None) -> str:
+def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_slots=0) -> str:
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
         return (f"- **Trip:** {t.what}: the trainer is in a set town (the planner doesn't say where yet). "
                 "While there, learn the trainer recipes your skill allows."
-                + (bring_text(plan, gd, t, bag_slots, owned) if plan is not None else ""))
+                + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots) if plan is not None else ""))
     if t.kind == "vendor":
         line = (f"- **Trip:** buy the pattern for {t.what} from a vendor (patterns are sold in particular "
                 "towns); buy every vendor pattern the route uses on one visit: patterns can be bought before "
@@ -299,7 +299,7 @@ def _route(out, plan, gd, caps, stock, alts) -> None:
     for t in trips(plan, gd):
         if t.profession in caps:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
-                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items)))
+                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots)))
 
     out += ["## Route", ""]
     for k in sorted({k for k, _p in lines}):

@@ -49,8 +49,8 @@ favor = 300          # Merchant's Favor points
 cash_gold = 25       # soft budget
 mining = 0           # Mining skill, if the character mines
 short_farm_ore = 0
-bag_slots = 40       # free bag slots while crafting; gives mailbox trips (leave out to skip them)
-reagent_slots = 0    # slots in a reagent bag; 0 = none
+bag_slots = 40       # free normal bag slots while crafting; gives mailbox trips (leave out to skip them)
+reagent_slots = 0    # slots in a reagent bag (materials only, filled first); 0 = none
 keep_greens = false  # without Enchanting: keep green crafts to disenchant on another character
 [goals]              # one or two professions: a skill up to 300, or a recipe to craft once
 blacksmithing = 225
