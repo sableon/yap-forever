@@ -78,7 +78,7 @@ player what changed, running the planner, and walking them through the result.
   off the shopping list and the "Sell now" list.
 - Legacy talents from the profile: Working Overtime (a higher skill-up chance) and Dedicated Study
   (the guide says how many days of the free daily point would cover the last points, and hints at
-  it on route rows that cost over `study_hint_gold_per_point` gold a point).
+  it on route rows that cost at least `study_hint_gold_per_point` gold a point).
 - Two price fallbacks when the API can't be reached: `prices --remote` (another machine over
   ssh) and `prices --auctionator PATH` (Auctionator's saved data).
 - Not yet: gathering while levelling, keep-or-sell advice, budget targets, gear. Say so when

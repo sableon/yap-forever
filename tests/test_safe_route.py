@@ -99,7 +99,7 @@ class SafeRouteTests(unittest.TestCase):
         listed = toy.gamedata(cheap_recipes())
         self.assertEqual(resolve_goals({BS: Goal(recipe="BS cheap")}, listed), ({BS: 20}, {BS: 3}))
 
-    def test_a_craftable_tool_recipe_waits_for_the_safe_skill_too(self):
+    def test_plan_route_on_safe_data_learns_the_trainer_recipe_at_the_inferred_skill(self):
         from yap_forever.plan import plan_route
         gd = safe_requirements(toy.gamedata(cheap_recipes()))
         p = plan_route(gd, toy.market({**BARS, **IRON}), toy.stock(), toy.NO_FAVOR, {BS: 60}, {}, "gold", {})
@@ -349,6 +349,7 @@ class WriteReportsTests(unittest.TestCase):
         texts = self.reports()
         learn = [l for t in (texts["guide-gold"], texts["guide-value"]) for l in t.splitlines()
                  if "Learn Copper Chain Belt" in l]
+        self.assertEqual(len(learn), 2)  # one learn row in each guide
         for row in learn:
             self.assertRegex(row, r"At (3[5-9]|[4-9]\d):")  # never before the inferred 35
             self.assertIn("listed from 30 in the Forever data", row)
@@ -358,6 +359,25 @@ class WriteReportsTests(unittest.TestCase):
         plan_mod.write_reports(self.paths, self.stock, "Neutral", {BS: Goal(recipe="Copper Chain Belt")})
         text = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
         self.assertIn("to 35", text.splitlines()[0])
+
+    def test_the_header_line_goes_to_the_route_it_is_for(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        with mock.patch.object(plan_mod, "listed_savings", return_value={"gold": 1_234_500}):
+            texts = self.reports()
+        line = plan_mod.saving_line(1_234_500)
+        for key in ("guide-gold", "plan-gold"):
+            self.assertEqual(texts[key].count(line), 1, key)
+        for key in ("guide-value", "plan-value"):
+            self.assertNotIn("Forever listing", texts[key])
+
+    def test_no_header_line_when_the_data_has_no_inferred_recipe(self):
+        trainer = self.paths.gamedata / "Trainer.lua"
+        text = trainer.read_text(encoding="utf-8")
+        trainer.write_text(text.split("ns.TrainerInferred")[0], encoding="utf-8")
+        for text in self.reports().values():
+            self.assertNotIn("Forever listing", text)
 
     def test_the_hint_threshold_reaches_the_guide(self):
         self.assertNotIn("Dedicated Study (one free", self.reports()["guide-gold"])
