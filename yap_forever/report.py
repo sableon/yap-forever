@@ -5,6 +5,8 @@ from collections import defaultdict
 from yap_forever.costmodel import Valuer, money
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
 from yap_forever.planner import DISENCHANT, step_factor
+from yap_forever.prices import source_line
+from yap_forever.talents import talent_lines
 
 SECTIONS = ["Verdict", "Farm before switching", "Switch order", "Route", "Merchant's Favor",
             "Totals", "Sell now", "Excluded recipes", "Data notes"]
@@ -30,10 +32,14 @@ def _q(item, gd):
     return " (quest item)" if item in gd.quest_items else ""
 
 
-def render(plan, verdict_text, market, gd, stock, favor, caps=None) -> str:
+def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=None,
+           reading="relative", today=None) -> str:
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
+    prices_line = source_line(market, today)
+    if prices_line:
+        out += [prices_line, ""]
 
     def section(name):
         out.extend(["", f"## {name}", ""])
@@ -68,7 +74,8 @@ def render(plan, verdict_text, market, gd, stock, favor, caps=None) -> str:
     else:
         _switch_order(out, section, held_total)
 
-    _rest(out, section, plan, v, market, gd, stock, favor)
+    pair = caps or {BS: stock.target, ENCH: stock.target}
+    _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, pair, stock))
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
@@ -85,7 +92,7 @@ def _switch_order(out, section, held_total) -> None:
         out.append(f"Disenchanting in this route yields about {held_total:.0f} materials.")
 
 
-def _rest(out, section, plan, v, market, gd, stock, favor) -> None:
+def _rest(out, section, plan, v, market, gd, stock, favor, talents=()) -> None:
     # Route
     section("Route")
     out += ["| Profession | Skill | Craft | Crafts | Cash | Net cost |", "|---|---|---|---|---|---|"]
@@ -212,9 +219,13 @@ def _rest(out, section, plan, v, market, gd, stock, favor) -> None:
 
     # Notes
     section("Data notes")
-    out.append(f"- AH snapshot: {market.snapshot_time or 'unknown'}.")
+    if market.source == "auctionator":  # the limits of an import are stated at the top of the report
+        out.append(f"- Prices: Auctionator scan of {market.scan_day or 'unknown date'}.")
+    else:
+        out.append(f"- AH snapshot: {market.snapshot_time or 'unknown'}.")
     out.append(f"- Recipes: skillup-forever {SKILLUP_SHA[:7]}; client tables wago.tools {WAGO_BUILD}; "
                f"quest items: QuestieDB {QUESTIE_SHA[:7]}.")
     out.append("- Disenchant results use Classic odds (estimates). Favor data is from community guides.")
     out.append("- AH resale of crafted gear counts at most 5 of each item, except quest items.")
     out.append("- Leather is not farmed in this model; any leather is bought.")
+    out += [f"- {line}" for line in talents]

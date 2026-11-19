@@ -3,6 +3,7 @@ import unittest
 
 from tests import toy
 from yap_forever.planner import Plan, Step
+from yap_forever.shopping import CRAFT_ROOM
 
 BS = 164
 S, T, L, K, G = toy.COPPER_BAR, toy.IRON_BAR, toy.ROD, toy.STONE, toy.VEST
@@ -312,3 +313,135 @@ class EssencePackingTests(unittest.TestCase):
         text = "\n".join(lines)
         self.assertIn("| Lesser Astral Essence | 92 | AH | 92s |", text)
         self.assertIn("**Gold to bring: 92s**", text)
+
+
+class ReagentBagTests(unittest.TestCase):
+    """Normal and reagent bag slots are counted apart: materials fill the reagent bag first."""
+
+    def mats_plan(self):
+        """Ten stacks of materials (S, T: 5 stacks each at stack 20) in two rows."""
+        gd = toy.gamedata([toy.recipe(1, "Make A", BS, {S: 1}), toy.recipe(2, "Make B", BS, {T: 1})])
+        for i in (S, T):
+            gd.items[i].stack = 20
+        p = orange(Plan(steps=[Step(BS, 1, 101, 1, "Make A", 100, 0, 0, {S: 100}),
+                               Step(BS, 101, 201, 2, "Make B", 100, 0, 0, {T: 100})],
+                        bought={S: 100, T: 100}, final_skill={BS: 201}))
+        return p, gd
+
+    def test_reagents_are_recipe_materials_and_trade_goods_never_gear_patterns_or_tools(self):
+        from yap_forever.shopping import reagent_items
+        gd = toy.gamedata([toy.recipe(1, "Make", BS, {S: 1, toy.BELT: 1})])
+        self.assertEqual(gd.items[toy.SCROLL].class_id, 7)
+        gd.items[toy.SCROLL].class_id = 9  # a pattern
+        gd.items[toy.ODD].class_id = 0  # not trade goods, in no recipe
+        got = reagent_items(gd)
+        self.assertIn(S, got)  # a recipe reagent
+        self.assertIn(toy.DUST, got)  # trade goods, in no loaded recipe
+        self.assertIn(L, got)  # a crafted intermediate (class 7)
+        self.assertNotIn(toy.BELT, got)  # gear, even as a reagent
+        self.assertNotIn(toy.VEST, got)
+        self.assertNotIn(toy.SCROLL, got)  # patterns
+        self.assertNotIn(toy.ODD, got)
+        self.assertNotIn(toy.HAMMER, got)  # tools
+        self.assertNotIn(toy.ROD_TOOL, got)
+
+    def test_split_fills_the_reagent_bag_first(self):
+        from yap_forever.shopping import carried_slots, carried_slots_split
+        stack = {S: 20, T: 20, toy.BELT: 1}
+        counts = {S: 100, T: 100}  # 10 stacks
+        self.assertEqual(carried_slots_split(counts, stack, {S, T}, 0), carried_slots(counts, stack))
+        self.assertEqual(carried_slots_split(counts, stack, {S, T}, 6), 4)
+        self.assertEqual(carried_slots_split(counts, stack, {S, T}, 10), 0)
+        self.assertEqual(carried_slots_split(counts, stack, {S, T}, 20), 0)  # spare reagent slots help nothing else
+
+    def test_gear_stays_on_normal_slots(self):
+        from yap_forever.shopping import carried_slots_split
+        stack = {S: 20, toy.BELT: 1}
+        self.assertEqual(carried_slots_split({S: 40, toy.BELT: 3}, stack, {S}, 6), 3)  # belts never in the reagent bag
+
+    def test_packed_essences_count_as_reagents(self):
+        from yap_forever.shopping import carried_slots_split
+        stack = {E: 10, GE: 10}
+        # 92 lesser pack to 30 greater + 2 lesser = 4 stacks, all in a 4-slot reagent bag
+        self.assertEqual(carried_slots_split({E: 92}, stack, {E}, 4), 0)
+        self.assertEqual(carried_slots_split({E: 92}, stack, {E}, 1), 3)
+
+    def test_group_trips_use_the_reagent_bag(self):
+        from yap_forever.shopping import group_trips, route_rows
+        p, gd = self.mats_plan()
+        rows = route_rows(p, gd)
+        stack = {S: 20, T: 20}
+        self.assertEqual([len(t) for t in group_trips(rows, 4, stack)], [1, 1])
+        self.assertEqual([len(t) for t in group_trips(rows, 4, stack, {S, T}, 6)], [2])  # 6 reagent + 4 normal
+        self.assertEqual([len(t) for t in group_trips(rows, 4, stack, {S, T}, 0)], [1, 1])
+
+    def test_zero_reagent_slots_change_nothing(self):
+        import dataclasses
+        from yap_forever.shopping import carried_slots, carried_slots_split, group_trips, render_shopping, reagent_items, route_rows
+        gd, p = chain_gd(), chain_plan()
+        stack = {S: 20, T: 20, L: 20}
+        for counts in ({S: 100, T: 7}, {S: 1}, {}, {S: 20, T: 20, L: 21}):
+            self.assertEqual(carried_slots_split(counts, stack, reagent_items(gd), 0), carried_slots(counts, stack))
+        rows = route_rows(p, gd)
+        for cap in (1, 2, 4, 40):
+            self.assertEqual(group_trips(rows, cap, stack, reagent_items(gd), 0), group_trips(rows, cap, stack))
+        m = toy.market({S: [(10, 1000)], T: [(50, 100)]})
+        lines, _trips = render_shopping(p, gd, m, dataclasses.replace(toy.stock(), bag_slots=40, reagent_slots=0))
+        self.assertNotIn("reagent", "\n".join(lines))
+
+    def test_mailbox_trips_one_with_reagent_bag_two_without(self):
+        import dataclasses
+        from yap_forever.shopping import render_shopping
+        p, gd = self.mats_plan()
+        m = toy.market({S: [(10, 1000)], T: [(10, 1000)]})
+        base = dataclasses.replace(toy.stock(), bag_slots=CRAFT_ROOM + 4)
+        _lines, trips = render_shopping(p, gd, m, base)
+        self.assertEqual(trips, 2)
+        lines, trips = render_shopping(p, gd, m, dataclasses.replace(base, reagent_slots=6))
+        self.assertEqual(trips, 1)
+        text = "\n".join(lines)
+        self.assertIn("Planned for 14 free bag slots and 6 reagent bag slots", text)
+        self.assertIn("10 stacks (4 bag, 6 reagent bag)", text)
+
+    def test_bring_list_uses_the_reagent_bag(self):
+        from yap_forever.shopping import bring_list
+        p, gd = rank_trip_plan()
+        from yap_forever.trips import Trip
+        trip = Trip(225, BS, "rank", "Blacksmithing rank to 300")
+        # 16 free slots, 10 kept for crafts: 6 normal slots; 3 more rows fit with a 6-slot reagent bag
+        base, _ = bring_list(p, gd, trip, bag_slots=16)
+        more, _ = bring_list(p, gd, trip, bag_slots=16, reagent_slots=6)
+        none, _ = bring_list(p, gd, trip, bag_slots=16, reagent_slots=0)
+        self.assertEqual(none, base)
+        self.assertGreater(more, base)
+
+    def test_bring_text_names_both_slot_kinds(self):
+        from yap_forever.shopping import bring_text
+        from yap_forever.trips import Trip
+        gd = essence_gd(10)
+        plan = EssencePackingTests().plan()
+        trip = Trip(100, 333, "rank", "Enchanting rank to 225")
+        self.assertIn("(4 bag slots;", bring_text(plan, gd, trip, None))
+        self.assertIn("(4 reagent bag slots;", bring_text(plan, gd, trip, None, reagent_slots=6))
+        self.assertIn("(1 bag slot + 3 reagent bag slots;", bring_text(plan, gd, trip, None, reagent_slots=3))
+
+    def test_batch_size_counts_the_reagent_bag(self):
+        from yap_forever.shopping import batch_size
+        stack = {818: 20, 2318: 20, 4368: 1}
+        args = ({818: 2, 2318: 6}, (4368, 1), stack, 16)
+        self.assertEqual(batch_size(*args), 15)
+        self.assertEqual(batch_size(*args, reagents={818, 2318}, reagent_slots=0), 15)
+        self.assertGreater(batch_size(*args, reagents={818, 2318}, reagent_slots=6), 15)
+
+    def test_guide_passes_the_reagent_slots(self):
+        import dataclasses
+        from yap_forever.guide import render_guide
+        p, gd = rank_trip_plan()
+        stock = dataclasses.replace(toy.stock(skills={BS: 225}), bag_slots=16)
+        market = toy.market({S: [(10, 1000)]})
+        plain = render_guide(p, gd, market, stock, caps={BS: 300})
+        bagged = render_guide(p, gd, market, dataclasses.replace(stock, reagent_slots=6), caps={BS: 300})
+        self.assertNotEqual(plain, bagged)
+        self.assertIn("reagent bag", bagged)
+        self.assertNotIn("reagent bag", plain)
+

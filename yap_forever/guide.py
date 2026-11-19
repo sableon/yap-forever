@@ -8,6 +8,8 @@ from yap_forever.costmodel import BARS, ORES, STONES
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
 from yap_forever import trainer_text
+from yap_forever.prices import source_line
+from yap_forever.talents import talent_lines
 from yap_forever.trips import city_ranks, trips
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
@@ -91,13 +93,18 @@ def _title(caps, route) -> str:
 
 
 def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None,
-                 trainer_info=None, trainer_note="") -> str:
+                 character=None, reading="relative", today=None, trainer_info=None, trainer_note="") -> str:
     """caps: profession -> target (default Blacksmithing and Enchanting to the stock's target).
     alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
+    character, reading: the profile.Character and Working Overtime reading, for the talent lines.
+    today: the date the staleness of imported prices is judged against (default: today).
     trainer_info: trainer_text.TrainerInfo, to name trainers on rank rows (None: say a set town);
     trainer_note: why trainers are left out, said once at the top."""
     caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
+    prices_line = source_line(market, today)
+    if prices_line:
+        out += [prices_line, ""]
     if comparison:
         out += [comparison, ""]
     intro = []
@@ -109,6 +116,8 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
         out += [" ".join(intro), ""]
     if trainer_note:
         out += [trainer_note, ""]
+    for line in talent_lines(character, reading, plan, caps, stock):
+        out += [line, ""]
     _keep(out, plan, gd, market)
     _route(out, plan, gd, caps, stock, alts or {}, trainer_info)
     from yap_forever.shopping import render_shopping  # shopping imports this module
@@ -216,7 +225,8 @@ def _group_notes(group, items, gd) -> list[str]:
 
 
 # --- route ---------------------------------------------------------------------
-def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, trainer_info=None) -> str:
+def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_slots=0,
+               trainer_info=None) -> str:
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
         stop = trainer_text.remote_stop(trainer_info, t.profession, t.cap)
@@ -226,7 +236,7 @@ def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, trainer_
         else:
             where = f"{stop.text} {learn}" if stop.found else stop.text
         return (f"- **Trip:** {t.what}: {where}"
-                + (bring_text(plan, gd, t, bag_slots, owned, bool(stop and stop.services_known))
+                + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots, bool(stop and stop.services_known))
                    if plan is not None else ""))
     if t.kind == "vendor":
         line = (f"- **Trip:** buy the pattern for {t.what} from a vendor (patterns are sold in particular "
@@ -308,7 +318,8 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
     for t in trips(plan, gd):
         if t.profession in caps:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
-                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, trainer_info)))
+                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots,
+                                          trainer_info)))
     for t in city_ranks(plan):
         row = trainer_text.city_row(trainer_info, t.profession, t.cap) if t.profession in caps else None
         if row:
@@ -423,4 +434,8 @@ def _notes(out, plan, market, gatherer=True) -> None:
     if gatherer:
         out += ["- Leather is costed as bought on the AH; since you skin, gather it instead.",
                 "- Stones are counted as mined along with the ore."]
-    out += [f"- Prices: your AH snapshot of {market.snapshot_time or 'unknown time'}.", ""]
+    if market.source == "auctionator":  # the limits of an import are stated at the top of the guide
+        out.append(f"- Prices: Auctionator scan of {market.scan_day or 'unknown date'}.")
+    else:
+        out.append(f"- Prices: your AH snapshot of {market.snapshot_time or 'unknown time'}.")
+    out.append("")

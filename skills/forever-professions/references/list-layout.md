@@ -35,7 +35,9 @@ Write it for that.
 ## Mailbox trips
 
 - Bought materials wait in the mail. Split the route into trips that fit the player's free bag
-  slots, keeping about 10 slots for crafted items.
+  slots, keeping about 10 slots for crafted items. With a reagent bag (`reagent_slots`), materials
+  fill it first and only what does not fit takes normal slots; the 10 crafting slots stay on
+  normal slots. Without `reagent_slots` the trips are the same as before.
 - Each trip lists what to take from the mail **including patterns bought on the auction house**,
   what to buy from the vendor (thread, salt, dyes, vials), and what is already in the bags.
 - Mark mailbox pickups on the route rows. The mailbox can be far from the trainer.

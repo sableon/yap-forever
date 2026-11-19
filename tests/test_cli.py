@@ -168,6 +168,33 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(guide.call_args.kwargs["trainer_info"].faction, "alliance")
 
+    def test_plan_passes_the_characters_talents_and_reading(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        self.ready_home()
+        text = self.paths.profile.read_text(encoding="utf-8")
+        self.paths.profile.write_text(
+            'working_overtime_reading = "points"\n' + text + 'working_overtime = 3\n', encoding="utf-8")
+        with mock.patch.object(plan_mod, "write_reports", return_value=("table", {})) as w:
+            code, _ = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0)
+        args = w.call_args.args
+        self.assertEqual(args[4].working_overtime, 3)
+        self.assertEqual(args[5], "points")
+
+    def test_plan_overtime_rank_zero_leaves_the_guide_unchanged(self):
+        self.ready_home()
+        run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        before = {f.name: f.read_text(encoding="utf-8") for f in self.paths.reports.glob("*.md")}
+        text = self.paths.profile.read_text(encoding="utf-8")
+        self.paths.profile.write_text(
+            'working_overtime_reading = "points"\n' + text + 'working_overtime = 0\n', encoding="utf-8")
+        run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        after = {f.name: f.read_text(encoding="utf-8") for f in self.paths.reports.glob("*.md")}
+        self.assertEqual(before, after)
+        self.assertEqual(len(after), 4)
+
     def test_plan_uses_saved_goals(self):
         stock = self.ready_home()
         stock.write_text("level = 20\n[items]\n\n[goals]\nblacksmithing = 20\n", encoding="utf-8")
