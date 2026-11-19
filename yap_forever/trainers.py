@@ -134,11 +134,10 @@ def load_trainers(npc_lua: str | dict) -> list[Trainer]:
         if found is None or not isinstance(spawns, dict) or not spawns:
             continue
         zone = r[_ZONE] if r[_ZONE] in spawns else next(iter(spawns))
-        first = (spawns[zone] or [None])[0]
-        placed = isinstance(first, list) and len(first) >= 2 and first[0] >= 0 and first[1] >= 0
+        first = next(_spawn_points(spawns, zone), None)  # None: only (-1, -1), i.e. an instance
         profession, rank, confirmed = found
         out.append(Trainer(npc_id, r[_NAME], profession, rank, r[_FRIENDLY] or "AH", zone,
-                           (first[0], first[1]) if placed else None, confirmed, r[_TITLE_AT]))
+                           first[1:] if first else None, confirmed, r[_TITLE_AT]))
     return out
 
 
@@ -154,7 +153,7 @@ def trainers_for(trainers: list[Trainer], profession: int, rank: str, faction: s
     side = "A" if faction == "alliance" else "H"
     chosen = [t for t in trainers
               if t.profession == profession and t.rank in (rank, "") and side in t.sides]
-    return sorted(chosen, key=lambda t: (t.rank == "", t.npc_id))
+    return sorted(chosen, key=lambda t: (t.rank == "", not t.title_confirmed, t.npc_id))
 
 
 def load_mailboxes(object_lua: str) -> list[tuple[int, float, float]]:
@@ -199,17 +198,27 @@ def _cached_zone_names(path: Path) -> dict[int, str]:
 def zone_name(zone: int, names: Mapping[int, str] | None = None) -> str:
     """The area's name; without `names`, from AreaTable.csv in the player's game data cache."""
     if names is None:
-        names = _cached_zone_names(settings.paths().gamedata / "AreaTable.csv")
+        try:
+            names = _cached_zone_names(settings.paths().gamedata / "AreaTable.csv")
+        except OSError:
+            names = {}
     return names.get(zone) or f"zone {zone}"
+
+
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        raise _damaged(path.name, e) from None
 
 
 def load_trainer_data(d: Path | None = None) -> TrainerData:
     """Read the NPC DB, object DB and AreaTable from the game data folder."""
     d = Path(d) if d is not None else settings.paths().gamedata
-    rows = parse_npc_rows((d / "foreverNpcDB.lua").read_text(encoding="utf-8"))
-    boxes = load_mailboxes((d / "foreverObjectDB.lua").read_text(encoding="utf-8"))
+    rows = parse_npc_rows(_read(d / "foreverNpcDB.lua"))
+    boxes = load_mailboxes(_read(d / "foreverObjectDB.lua"))
     try:
         zones = load_zone_names(d / "AreaTable.csv")
-    except (KeyError, ValueError) as e:
+    except (KeyError, ValueError) as e:  # includes a UnicodeDecodeError
         raise _damaged("AreaTable.csv", e) from None
     return TrainerData(load_trainers(rows), rows, boxes, zones)

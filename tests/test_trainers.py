@@ -36,6 +36,13 @@ class LoadTests(unittest.TestCase):
         # spawns in two zones: the NPC's own zoneID wins
         self.assertEqual((self.by_id[90017].zone, self.by_id[90017].coords), (1537, (20, 20)))
 
+    def test_first_placed_spawn_is_used(self):
+        rows = trainers.parse_npc_rows("""QuestieDB.npcData = [[return {
+[1] = {'Late Placed',1,1,1,1,0,{[12]={{-1,-1},{7,8}}},nil,12,nil,nil,12,"A","Master Tailor",17},
+}]]""")
+        (t,) = trainers.load_trainers(rows)
+        self.assertEqual(t.coords, (7, 8))
+
     def test_instance_trainer_has_no_coordinates(self):
         t = self.by_id[90006]
         self.assertEqual((t.zone, t.coords, t.rank), (1337, None, "Master"))
@@ -87,6 +94,19 @@ class LoadTests(unittest.TestCase):
                 trainers.parse_npc_rows(bad)
             self.assertIn("damaged", str(cm.exception))
 
+    def test_file_that_is_not_utf8_is_damaged(self):
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("foreverNpcDB.lua", "foreverObjectDB.lua", "AreaTable.csv"):
+                (Path(d) / name).write_bytes((FIX / name).read_bytes())
+            for name in ("foreverNpcDB.lua", "foreverObjectDB.lua"):
+                good = (Path(d) / name).read_bytes()
+                (Path(d) / name).write_bytes(good + b"\xff\xfe")
+                with self.assertRaises(ValueError) as cm:
+                    trainers.load_trainer_data(Path(d))
+                self.assertIn(name, str(cm.exception))
+                self.assertIn("damaged", str(cm.exception))
+                (Path(d) / name).write_bytes(good)
+
     def test_missing_files_are_a_file_not_found(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(FileNotFoundError):
@@ -120,6 +140,11 @@ class ChooseTests(unittest.TestCase):
         self.assertEqual(self.ids(BS, "Artisan", "horde"), [])  # the caller says so plainly
         self.assertEqual(self.ids(BS, "Expert", "horde"), [90003])
         self.assertEqual(self.ids(BS, "Expert", "alliance"), [])
+
+    def test_unconfirmed_titles_sort_after_confirmed_ones_of_the_same_rank(self):
+        mk = lambda i, ok: Trainer(i, "n", BS, "Expert", "AH", 1519, (1, 1), ok)
+        got = trainers.trainers_for([mk(1, False), mk(2, True), mk(3, False)], BS, "Expert", "alliance")
+        self.assertEqual([t.npc_id for t in got], [2, 1, 3])
 
     def test_rank_less_trainer_is_offered_for_every_rank_after_the_confirmed(self):
         self.assertEqual(self.ids(TAILOR, "Journeyman", "alliance"), [90004, 90005])
@@ -197,6 +222,11 @@ class ZoneNameTests(unittest.TestCase):
 
     def test_unknown_zone_is_never_empty(self):
         self.assertEqual(trainers.zone_name(99999, {}), "zone 99999")
+
+    def test_default_without_a_cache_file_falls_back(self):
+        with tempfile.TemporaryDirectory() as d, \
+                unittest.mock.patch.object(settings, "paths", return_value=settings.Paths(Path(d))):
+            self.assertEqual(trainers.zone_name(1519), "zone 1519")
 
     def test_default_reads_the_players_cache(self):
         with tempfile.TemporaryDirectory() as d, \
