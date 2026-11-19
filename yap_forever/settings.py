@@ -6,6 +6,7 @@ Nothing here is computed at import time, so tests and players can point it elsew
 import json
 import os
 import stat
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +38,10 @@ class Paths:
     @property
     def profile(self) -> Path:
         return self.root / "profile.toml"
+
+    @property
+    def remote(self) -> Path:
+        return self.root / "remote.toml"
 
     @property
     def house(self) -> Path:
@@ -82,3 +87,30 @@ def load_credentials(path: Path | None = None, os_name: str = os.name) -> Creden
     if not cid or not secret:
         raise ValueError(f"fill in client_id and client_secret in {path.name}")
     return Credentials(cid, secret, data.get("region", "eu"))
+
+
+REMOTE_COMMAND = "cd yap-forever && git pull -q && python3 -m yap_forever prices"
+REMOTE_FILE = ".yap-forever/cache/prices.json"
+
+
+@dataclass(frozen=True)
+class Remote:
+    """A machine that fetches prices when this one can't reach the API (remote.toml)."""
+    host: str
+    key: str | None = None  # ssh key file, `~` already expanded
+    command: str = REMOTE_COMMAND
+    remote_file: str = REMOTE_FILE  # where that machine leaves its prices, relative to its login folder
+
+
+def load_remote(path: Path) -> Remote | None:
+    """Read remote.toml; None when the player has none."""
+    path = Path(path)
+    if not path.exists():
+        return None
+    d = tomllib.loads(path.read_text(encoding="utf-8"))
+    host = str(d.get("host", "")).strip()
+    if not host:
+        raise ValueError(f"fill in host in {path.name}")
+    key = d.get("key")
+    return Remote(host, str(Path(key).expanduser()) if key else None,
+                  d.get("command", REMOTE_COMMAND), d.get("remote_file", REMOTE_FILE))

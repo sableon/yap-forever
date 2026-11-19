@@ -10,12 +10,16 @@ from yap_forever.settings import command_hint
 STANDINGS = ("Neutral", "Friendly", "Honored", "Revered", "Exalted")
 REGIONS = ("eu", "us", "kr", "tw")
 FACTIONS = ("alliance", "horde")
+OVERTIME_READINGS = ("relative", "points")
+MAX_OVERTIME = 5
 
 
 @dataclass
 class Character:
     name: str
     favor_standing: str = "Neutral"
+    working_overtime: int = 0  # Working Overtime talent rank, 0-5
+    dedicated_study: bool = False  # Dedicated Study talent taken
 
 
 @dataclass
@@ -24,11 +28,24 @@ class Profile:
     ruleset: int = 2
     faction: str = ""
     characters: dict[str, Character] = field(default_factory=dict)
+    overtime_reading: str = "relative"  # how the Working Overtime bonus reads: "relative" or "points"
 
 
 def _check(key: str, value, allowed) -> None:
     if value not in allowed:
         raise ValueError(f"{key} = {value!r} in profile.toml: use one of {', '.join(map(str, allowed))}")
+
+
+def _overtime(key: str, value) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_OVERTIME:
+        raise ValueError(f"{key} = {value!r} in profile.toml: use a whole number 0-{MAX_OVERTIME}")
+    return value
+
+
+def _flag(key: str, value) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} = {value!r} in profile.toml: use true or false")
+    return value
 
 
 def load_profile(path: Path) -> Profile:
@@ -40,12 +57,16 @@ def load_profile(path: Path) -> Profile:
     faction = d.get("faction", "")
     _check("region", region, REGIONS)
     _check("faction", faction, FACTIONS)
+    reading = d.get("working_overtime_reading", "relative")
+    _check("working_overtime_reading", reading, OVERTIME_READINGS)
     chars = {}
     for name, c in d.get("characters", {}).items():
         standing = c.get("favor_standing", "Neutral")
         _check(f"characters.{name}.favor_standing", standing, STANDINGS)
-        chars[name] = Character(name, standing)
-    return Profile(region, int(d.get("ruleset", 2)), faction, chars)
+        overtime = _overtime(f"characters.{name}.working_overtime", c.get("working_overtime", 0))
+        study = _flag(f"characters.{name}.dedicated_study", c.get("dedicated_study", False))
+        chars[name] = Character(name, standing, overtime, study)
+    return Profile(region, int(d.get("ruleset", 2)), faction, chars, reading)
 
 
 def save_house(path: Path, house: int, region: str, ruleset: int) -> None:

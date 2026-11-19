@@ -39,6 +39,50 @@ class ProfileTests(unittest.TestCase):
                 profile.load_profile(write(d, EXAMPLE.replace('"Neutral"', '"Best friends"')))
         self.assertIn("favor_standing", str(cm.exception))
 
+    def test_talent_keys_default_when_absent(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, EXAMPLE))
+        self.assertEqual(prof.overtime_reading, "relative")
+        self.assertEqual(prof.characters["Main"].working_overtime, 0)
+        self.assertFalse(prof.characters["Main"].dedicated_study)
+
+    def test_talent_keys_parsed(self):
+        text = EXAMPLE + "working_overtime = 3\ndedicated_study = true\n"
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, 'working_overtime_reading = "points"\n' + text))
+        self.assertEqual(prof.overtime_reading, "points")
+        self.assertEqual(prof.characters["Main"], profile.Character("Main", "Neutral", 3, True))
+
+    def test_working_overtime_out_of_range(self):
+        for bad in ("6", "-1"):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ValueError) as cm:
+                    profile.load_profile(write(d, EXAMPLE + f"working_overtime = {bad}\n"))
+                self.assertIn("characters.Main.working_overtime", str(cm.exception))
+                self.assertIn("0-5", str(cm.exception))
+
+    def test_working_overtime_not_a_whole_number(self):
+        for bad in ('"3"', "2.5", "true"):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ValueError) as cm:
+                    profile.load_profile(write(d, EXAMPLE + f"working_overtime = {bad}\n"))
+                self.assertIn("characters.Main.working_overtime", str(cm.exception))
+
+    def test_dedicated_study_must_be_true_or_false(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError) as cm:
+                profile.load_profile(write(d, EXAMPLE + 'dedicated_study = "yes"\n'))
+        self.assertIn("characters.Main.dedicated_study", str(cm.exception))
+
+    def test_working_overtime_reading_unknown(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError) as cm:
+                profile.load_profile(write(d, 'working_overtime_reading = "both"\n' + EXAMPLE))
+        msg = str(cm.exception)
+        self.assertIn("working_overtime_reading", msg)
+        self.assertIn("relative", msg)
+        self.assertIn("points", msg)
+
     def test_load_profile_missing_says_init(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(FileNotFoundError) as cm:
