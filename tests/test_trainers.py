@@ -739,6 +739,12 @@ class CityTipTests(unittest.TestCase):
                          "(for example Grom Anvilhand, Orgrimmar).")
 
 
+class ShippedNotesTests(unittest.TestCase):
+    def test_every_city_tip_is_for_a_capital(self):
+        for zone in trainer_notes.load_notes().cities:
+            self.assertIn(zone, trainers.CAPITALS["alliance"] + trainers.CAPITALS["horde"])
+
+
 REAL = settings.paths(settings.home({})).gamedata  # the player's real cache (read only), not the test home
 HAVE_REAL = all((REAL / n).exists() for n in gamedata.TRAINER_FILES)
 
@@ -754,10 +760,6 @@ class RealDataTests(unittest.TestCase):
         for npc in trainer_notes.load_notes().trainers:
             self.assertIn(npc, self.by_id, npc)
             self.assertIn(self.by_id[npc].rank, ("Artisan", "Master"), npc)
-
-    def test_every_city_tip_is_for_a_capital(self):
-        for zone in trainer_notes.load_notes().cities:
-            self.assertIn(zone, trainers.CAPITALS["alliance"] + trainers.CAPITALS["horde"])
 
     def test_booty_bay_auctioneers_serve_both_factions(self):
         # Brikk Keencraft, Master Blacksmith in Booty Bay
