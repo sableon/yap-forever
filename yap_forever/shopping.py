@@ -293,7 +293,9 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
     return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
 
 
-def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0) -> str:
+def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
+               services_known: bool = False) -> str:
+    """services_known: the row already says what is near the trainer (or that it is a capital)."""
     reagents = reagent_items(gd) if reagent_slots else None
     reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents)
     if not items:
@@ -304,9 +306,10 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0) ->
     stack = stacks(gd, total)
     split = carried_split(total, stack, reagents, reagent_slots)
     note = pack_note(gd, total, stack, "them at the trainer")
+    town = "" if services_known else "the town may have no auction house, mailbox or bank, so "
     return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
-            f"({slots_text(split)}{'; ' + note if note else ''}); the town may have "
-            "no auction house, mailbox or bank, so buy and collect before you go.")
+            f"({slots_text(split)}{'; ' + note if note else ''}); "
+            f"{town}buy and collect before you go.")
 
 
 def _patterns(plan, gd, market) -> list[tuple[str, str, float]]:

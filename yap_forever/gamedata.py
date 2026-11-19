@@ -23,10 +23,12 @@ WAGO_BUILD = "1.60.1.70862"
 SOURCES = {
     **{f"{n}.lua": f"https://raw.githubusercontent.com/cjber/skillup-forever/{SKILLUP_SHA}/Data/{n}.lua"
        for n in ("Recipes", "Thresholds", "Trainer", "Vendor")},
-    "foreverQuestDB.lua": f"https://raw.githubusercontent.com/Questie/QuestieDB/{QUESTIE_SHA}/data/Forever/foreverQuestDB.lua",
+    **{f"{n}.lua": f"https://raw.githubusercontent.com/Questie/QuestieDB/{QUESTIE_SHA}/data/Forever/{n}.lua"
+       for n in ("foreverQuestDB", "foreverNpcDB", "foreverObjectDB")},
     **{f"{t}.csv": f"https://wago.tools/db2/{t}/csv?build={WAGO_BUILD}"
-       for t in ("ItemSparse", "Item", "SpellTotems", "TotemCategory", "SkillLineAbility")},
+       for t in ("ItemSparse", "Item", "SpellTotems", "TotemCategory", "SkillLineAbility", "AreaTable")},
 }
+TRAINER_FILES = ("foreverNpcDB.lua", "foreverObjectDB.lua", "AreaTable.csv")  # guide extras, not planning data
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class Recipe:
     fee: int = 0
     scroll_item: int | None = None
     tools: list[int] = field(default_factory=list)
+    inferred_skill: int | None = None  # Classic skill a trainer may ask for this recipe (TrainerInferred)
 
 
 @dataclass
@@ -90,10 +93,14 @@ class GameData:
         return i.name if i else f"item {item_id}"
 
 
-def fetch_all(force: bool = False, dest: Path | None = None) -> None:
+def fetch_all(force: bool = False, dest: Path | None = None, only: Iterable[str] | None = None,
+              skip: Iterable[str] = ()) -> None:
+    """Download what is not cached yet: every source, or just `only`, or all but `skip`."""
     dest = Path(dest) if dest is not None else settings.paths().gamedata
     dest.mkdir(parents=True, exist_ok=True)
     for name, url in SOURCES.items():
+        if (only is not None and name not in only) or name in skip:
+            continue
         p = dest / name
         if p.exists() and not force:
             continue
@@ -155,6 +162,10 @@ def load_gamedata(d: Path | None = None, professions: Iterable[int] = (BS, ENCH)
     trainer_src = (d / "Trainer.lua").read_text(encoding="utf-8")
     fees = parse(extract_table(trainer_src, "TrainerFees"))
     ranks = parse(extract_table(trainer_src, "TrainerRanks"))
+    try:
+        inferred = parse(extract_table(trainer_src, "TrainerInferred"))
+    except KeyError:  # a Trainer.lua from before the table existed
+        inferred = {}
     vendor = _lua(d / "Vendor.lua", "VendorPrices")
     starters = {int(r["Spell"]) for r in _rows(d / "SkillLineAbility.csv")
                 if int(r["SkillLine"]) in professions and r["AcquireMethod"] == "1"}
@@ -186,7 +197,8 @@ def load_gamedata(d: Path | None = None, professions: Iterable[int] = (BS, ENCH)
             reagents={int(x["itemID"]): int(x["quantity"]) for x in rd.get("reagents", [])},
             output=(int(out["itemID"]), out["quantity"]) if out else None,
             thresholds=t, required_skill=max(req), source=source, fee=fee,
-            scroll_item=scroll, tools=tools.get(spell, []))
+            scroll_item=scroll, tools=tools.get(spell, []),
+            inferred_skill=int(inferred[spell]) if spell in inferred else None)
 
     classes = {int(r["ID"]): int(r["ClassID"]) for r in _rows(d / "Item.csv")}
     items, item_cat = {}, {}

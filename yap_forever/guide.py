@@ -7,9 +7,10 @@ from yap_forever.config import STATIC_DIR
 from yap_forever.costmodel import BARS, ORES, STONES
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
+from yap_forever import trainer_text
 from yap_forever.prices import source_line
 from yap_forever.talents import talent_lines
-from yap_forever.trips import trips
+from yap_forever.trips import city_ranks, trips
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
     SOURCES = {group: {int(k): v for k, v in items.items()} for group, items in tomllib.load(_f).items()}
@@ -92,11 +93,13 @@ def _title(caps, route) -> str:
 
 
 def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None,
-                 character=None, reading="relative", today=None) -> str:
+                 character=None, reading="relative", today=None, trainer_info=None, trainer_note="") -> str:
     """caps: profession -> target (default Blacksmithing and Enchanting to the stock's target).
     alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
     character, reading: the profile.Character and Working Overtime reading, for the talent lines.
-    today: the date the staleness of imported prices is judged against (default: today)."""
+    today: the date the staleness of imported prices is judged against (default: today).
+    trainer_info: trainer_text.TrainerInfo, to name trainers on rank rows (None: say a set town);
+    trainer_note: why trainers are left out, said once at the top."""
     caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
@@ -111,10 +114,12 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
         intro.append("Until you switch, gather and keep the materials below instead of selling them.")
     if intro:
         out += [" ".join(intro), ""]
+    if trainer_note:
+        out += [trainer_note, ""]
     for line in talent_lines(character, reading, plan, caps, stock):
         out += [line, ""]
     _keep(out, plan, gd, market)
-    _route(out, plan, gd, caps, stock, alts or {})
+    _route(out, plan, gd, caps, stock, alts or {}, trainer_info)
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)
@@ -220,12 +225,19 @@ def _group_notes(group, items, gd) -> list[str]:
 
 
 # --- route ---------------------------------------------------------------------
-def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_slots=0) -> str:
+def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_slots=0,
+               trainer_info=None) -> str:
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
-        return (f"- **Trip:** {t.what}: the trainer is in a set town (the planner doesn't say where yet). "
-                "While there, learn the trainer recipes your skill allows."
-                + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots) if plan is not None else ""))
+        stop = trainer_text.remote_stop(trainer_info, t.profession, t.cap)
+        learn = "While there, learn the trainer recipes your skill allows."
+        if stop is None:
+            where = f"the trainer is in a set town (the planner doesn't say where yet). {learn}"
+        else:
+            where = f"{stop.text} {learn}" if stop.found else stop.text
+        return (f"- **Trip:** {t.what}: {where}"
+                + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots, bool(stop and stop.services_known))
+                   if plan is not None else ""))
     if t.kind == "vendor":
         line = (f"- **Trip:** buy the pattern for {t.what} from a vendor (patterns are sold in particular "
                 "towns); buy every vendor pattern the route uses on one visit: patterns can be bought before "
@@ -240,7 +252,7 @@ def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_
     return line + "."
 
 
-def _route(out, plan, gd, caps, stock, alts) -> None:
+def _route(out, plan, gd, caps, stock, alts, trainer_info=None) -> None:
     quest_limit = stock.quest_item_sales
     used_by: dict[int, list[str]] = {}
     for s in plan.steps:
@@ -283,6 +295,7 @@ def _route(out, plan, gd, caps, stock, alts) -> None:
                                  + [f"{count(q)} {gd.name(i)} (made earlier)" for i, q in made.items()])
                 text = f"- **Craft {recipe_name(s.spell_id, s.name, gd)} once**" + (f" — {mats}" if mats else "")
                 lines.setdefault((stage(p, s.skill_from, True), p), []).append((s.skill_from, 3, text))
+    inferred = _inferred_notes(plan, gd)
     de: dict[str, list] = {}  # item name -> [first skill, last skill, count]
     for e in plan.events:
         m = EVENT.match(e)
@@ -296,7 +309,8 @@ def _route(out, plan, gd, caps, stock, alts) -> None:
             first_at, _last, n = de.get(d.group(2), [at, at, 0])
             de[d.group(2)] = [first_at, at, n + float(d.group(1))]
             continue
-        lines.setdefault((stage(p, at, True), p), []).append((at, 0, f"- *At {at}: {_fix_names(text, gd)}*"))
+        note = inferred.get((p, at, text.split(" (", 1)[0].removeprefix("Learn ")), "")
+        lines.setdefault((stage(p, at, True), p), []).append((at, 0, f"- *At {at}: {_fix_names(text, gd)}{note}*"))
     for item, (first_at, last, n) in de.items():
         text = (f"- *At {first_at}: disenchant {count(n)} {item}*" if first_at == last else
                 f"- *From {first_at}: disenchant your {item} as you make them ({count(n)} in all, by {last})*")
@@ -304,7 +318,12 @@ def _route(out, plan, gd, caps, stock, alts) -> None:
     for t in trips(plan, gd):
         if t.profession in caps:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
-                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots)))
+                (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots,
+                                          trainer_info)))
+    for t in city_ranks(plan):
+        row = trainer_text.city_row(trainer_info, t.profession, t.cap) if t.profession in caps else None
+        if row:
+            lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append((t.skill, 0.5, f"- {row}"))
 
     out += ["## Route", ""]
     for k in sorted({k for k, _p in lines}):
@@ -317,6 +336,21 @@ def _route(out, plan, gd, caps, stock, alts) -> None:
             lo = trained[p][n - 1] if n > 0 else first[p][0]
             hi = trained[p][n] if n < len(trained[p]) else plan.final_skill.get(p, lo)
             out += [f"**{PROFESSIONS.get(p, p)} {lo}–{hi}**", ""] + [t for _, _, t in part] + [""]
+
+
+def _inferred_notes(plan, gd) -> dict[tuple[int, int, str], str]:
+    """(profession, skill, recipe name) -> the note for a trainer recipe the trainer may not offer yet:
+    its requirement is inferred from Classic and is above the skill the route learns it at."""
+    out = {}
+    for prof, at, spell, how in plan.learn_log:
+        r = gd.recipes.get(spell)
+        if how != "trainer" or not r or not r.inferred_skill or r.inferred_skill <= at:
+            continue
+        later = [s for s in plan.steps if s.profession == prof and s.spell_id != spell and s.skill_from >= at]
+        nxt = min(later, key=lambda s: s.skill_from, default=None)
+        out[(prof, at, r.name)] = trainer_text.inferred_note(
+            r.inferred_skill, recipe_name(nxt.spell_id, nxt.name, gd) if nxt else None)
+    return out
 
 
 def _ranges(steps, gd, rows=None) -> list[dict]:

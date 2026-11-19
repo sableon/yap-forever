@@ -60,4 +60,22 @@ Write it for that.
   and 300 (Artisan and Master trainers sit in set towns), vendor-sold patterns and the Merchant's
   Favor vendor. Say a trip is needed, how to avoid a second one (buy every vendor pattern on one
   visit; patterns can be bought before they can be learned), and what to bring to keep levelling
-  at a remote trainer, with the bag slots it takes. Don't give places until the planner knows them.
+  at a remote trainer, with the bag slots it takes.
+- Name the trainer from the data, for the character's faction (the profile's `faction`; without it
+  the row says "a set town"). A remote rank row reads `**Trip:** Blacksmithing rank to 300: <name>,
+  <zone> (x, y). Nearby: bank, mailbox; no auction house.` (map coordinates; "Nearby" is a bank, an
+  auction house and a mailbox within a few map units of the trainer, same zone, and says plainly
+  when there is none). A trainer inside an instance reads `<name>, inside <instance>` and gets no
+  coordinates, never `(-1, -1)`. A trainer in a capital of the character's own faction gets no
+  "Nearby" line (capitals have all three); a trainer in the other faction's capital still does.
+  Name only trainers whose title names the rank; if there is none, name the odd-titled one with
+  "(title unconfirmed in the data)". When the data has no trainer of that rank for the faction, say so
+  in a sentence; never leave a name or a place empty.
+- Expert and Journeyman ranks are not trips: `Train Blacksmithing to 150 at any Expert Blacksmith
+  in a capital (for example <name>, <capital>).` names up to two trainers in the faction's capitals
+  and drops the parenthesis when there is none.
+- A trainer recipe whose requirement is only inferred from Classic (`TrainerInferred`) and is above
+  the skill the route learns it at gets `(inferred: the trainer may ask up to <skill>; if it isn't
+  offered, craft <next row's recipe> instead)`, or `come back at <skill>` when no row follows.
+- If the trainer data can't be downloaded or read, the guide renders without names and says why
+  once, near the top.

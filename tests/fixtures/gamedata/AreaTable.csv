@@ -1,0 +1,8 @@
+ID,ZoneName,AreaName_lang,ContinentID,ParentAreaID
+33,StranglethornJungle,"Stranglethorn Vale",0,0
+1337,Uldaman,Uldaman,70,0
+1519,StormwindCity,"Stormwind City",0,0
+1637,Orgrimmar,Orgrimmar,1,0
+1537,Ironforge,Ironforge,0,0
+9000,MistyVale,"Misty Vale",0,0
+9001,HollowDepths,"Hollow Depths",70,9000

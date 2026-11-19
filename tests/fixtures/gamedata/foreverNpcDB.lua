@@ -1,0 +1,23 @@
+-- Made-up NPCs in the row format of Questie's foreverNpcDB.lua (not copied from it).
+QuestieDB.npcData = [[return {
+[90001] = {'Brakka Ironfold',2000,2000,54,54,0,{[33]={{30,70}}},nil,33,nil,nil,120,"AH","Master Blacksmith",17},
+[90002] = {'Thessa Hammerlow',2000,2000,50,50,0,{[1519]={{60.5,40.25},{61,41}}},nil,1519,nil,nil,12,"A","Artisan Blacksmith",19},
+[90003] = {'Grom Anvilhand',1500,1500,40,40,0,{[1637]={{80,20}}},nil,1637,nil,nil,29,"H","Expert Blacksmith",19},
+[90004] = {'Olla Stitchwell',900,900,30,30,0,{[1519]={{55,60}}},nil,1519,nil,nil,12,"A","Journeyman Tailor",19},
+[90005] = {'Vennick Spoolwright',900,900,30,30,0,{[1637]={{40,50}}},nil,1637,nil,nil,29,"AH","Tailoring Trainer",16},
+[90006] = {'Zarn Runeweaver',3000,3000,54,54,0,{[1337]={{-1,-1}}},nil,1337,nil,nil,35,"AH","Master Enchanter",17},
+[90007] = {'Ol\'Mirra "Scales" Dray',2000,2000,50,50,0,{[16]={{37.5,65.5}}},nil,16,nil,nil,12,"A","Master Dragonscale Leatherworker",19},
+[90008] = {'Pell Spellwright',2000,2000,50,50,0,{[1519]={{50,50}}},nil,1519,nil,nil,12,"A","Mage Trainer",19},
+[90009] = {'World Smithing Trainer',10,10,10,10,0,nil,nil,0,nil,nil,35,"AH","Blacksmithing Trainer",16},
+[90010] = {'Bancroft the Banker',500,500,40,40,0,{[33]={{31,71},{80,80}}},nil,33,nil,nil,120,"AH","Banker",257},
+[90011] = {'Aldo Gavel',500,500,40,40,0,{[33]={{29,69.5}}},nil,33,nil,nil,120,"AH","Auctioneer",4097},
+[90012] = {'Faraway Banker',500,500,40,40,0,{[33]={{60,20}}},nil,33,nil,nil,120,"AH","Banker",257},
+[90013] = {'Other Zone Auctioneer',500,500,40,40,0,{[1519]={{30,70}}},nil,1519,nil,nil,12,"A","Auctioneer",4097},
+[90014] = {'Storm Banker',500,500,40,40,0,{[1519]={{61,41.5}}},nil,1519,nil,nil,12,"A","Banker",257},
+[90015] = {'Pip the Peddler',500,500,40,40,0,{[33]={{30,70.5}}},nil,33,nil,nil,120,"AH","Vendor",4},
+[90016] = {'Unplaced Banker',500,500,40,40,0,{[33]={{-1,-1}}},nil,33,nil,nil,120,"AH","Banker",257},
+[90017] = {'Wandering Smith',2000,2000,50,50,0,{[1519]={{10,10}},[1537]={{20,20}}},nil,1537,nil,nil,12,"A","Artisan Blacksmith",19},
+[90018] = {'Odd Leatherworker',2000,2000,50,50,0,{[1637]={{70,30}}},nil,1637,nil,nil,29,"H","Expert Leathercrafter",19},
+[90019] = {'Journey Alchemist',2000,2000,25,25,0,{[1637]={{75,35}}},nil,1637,nil,nil,29,"H","Journeyman Alchemist Trainer",19},
+[90020] = {'Dorn Deepdelver',3000,3000,54,54,0,{[9001]={{-1,-1}}},nil,9001,nil,nil,35,"AH","Master Alchemist",17},
+}]]

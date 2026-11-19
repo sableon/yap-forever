@@ -2,7 +2,7 @@
 from datetime import date
 from pathlib import Path
 
-from yap_forever import gamedata
+from yap_forever import gamedata, trainer_text
 from yap_forever.compare import ROUTE_NAMES, compare, settle_routes
 from yap_forever.config import load_stock
 from yap_forever.costmodel import Valuer
@@ -78,11 +78,13 @@ def candidates(gd, market, stock, favor, caps, craft_once, quests, overtime=0, r
 
 
 def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, character=None,
-                  reading: str = "relative") -> tuple[str, dict[str, Path]]:
+                  reading: str = "relative", faction: str = "") -> tuple[str, dict[str, Path]]:
     """Plan both routes from the player's prices and stock; return (comparison, written files).
-    character: the profile.Character, for its talents; reading: how Working Overtime applies."""
+    character: the profile.Character, for its talents; reading: how Working Overtime applies.
+    faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none."""
     overtime = character.working_overtime if character else 0
-    gamedata.fetch_all(dest=paths.gamedata)
+    gamedata.fetch_all(dest=paths.gamedata, skip=gamedata.TRAINER_FILES)
+    trainer_info, trainer_note = trainer_text.load_info(paths.gamedata, faction)
     gd = gamedata.load_gamedata(paths.gamedata, professions=goals)
     stock = load_stock(stock_path)
     favor = load_favor(standing)
@@ -104,7 +106,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                character, reading), encoding="utf-8")
         guide = paths.reports / f"{today}-guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
-                                       character, reading),
+                                       character=character, reading=reading,
+                                       trainer_info=trainer_info, trainer_note=trainer_note),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
     return table, files
