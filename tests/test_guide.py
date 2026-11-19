@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import unittest
 
@@ -313,7 +314,8 @@ class TrainerRowTests(unittest.TestCase):
         cls.data = trainers.load_trainer_data(Path(__file__).parent / "fixtures" / "gamedata")
         cls.info = lambda self, faction: trainer_text.TrainerInfo(faction, self.data)
 
-    def route(self, ranks, faction="alliance", events=(), learn_log=(), recipes=None, steps=None, **kw):
+    def route(self, ranks, faction="alliance", events=(), learn_log=(), recipes=None, steps=None, notes=None,
+              level=60, **kw):
         from yap_forever.planner import Plan, Step
         rs = (recipes or base_recipes()) + [toy.recipe(11, "BS two", BS, {toy.COPPER_BAR: 1}),
                                             toy.recipe(12, "BS three", BS, {toy.COPPER_BAR: 1}),
@@ -326,8 +328,10 @@ class TrainerRowTests(unittest.TestCase):
                  events=[f"Blacksmithing {s}: train rank up to {cap} (4s 50c)" for s, cap in ranks] + list(events),
                  final_skill={BS: 300})
         info = self.info(faction) if faction else None
-        return render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: 1}), caps={BS: 300},
-                            trainer_info=info, **kw)
+        if info and notes is not None:
+            info = dataclasses.replace(info, notes=notes)
+        return render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: 1}, level=level),
+                            caps={BS: 300}, trainer_info=info, **kw)
 
     def lines(self, text, start):
         return [l for l in text.splitlines() if l.startswith(start)]
@@ -340,6 +344,54 @@ class TrainerRowTests(unittest.TestCase):
                                        "mailbox. "), row)
         self.assertIn("While there, learn the trainer recipes your skill allows.", row)
         self.assertNotIn("set town", row)
+
+    def test_booty_bay_style_master_row_says_neutral_auction_house(self):
+        text = self.route([(60, 150), (200, 225), (275, 300)])
+        (row,) = [l for l in self.lines(text, "- **Trip:**") if "rank to 300" in l]
+        self.assertIn("neutral AH (its own prices and a higher deposit)", row)
+
+    def test_master_row_with_notes_from_play(self):
+        from yap_forever.trainer_notes import Notes, TrainerNote
+        notes = Notes({90001: TrainerNote(reach_level=35, flight_path=True, note="A tip.")}, {})
+        ranks = [(60, 150), (200, 225), (275, 300)]
+        (row,) = [l for l in self.lines(self.route(ranks, notes=notes, level=40), "- **Trip:**") if "rank to 300" in l]
+        self.assertIn("mailbox. Easy to reach from about level 35, with a flight path for repeat visits. A tip. "
+                      "While there, learn the trainer recipes your skill allows.", row)
+        (row,) = [l for l in self.lines(self.route(ranks, notes=notes, level=30), "- **Trip:**") if "rank to 300" in l]
+        self.assertIn("for repeat visits (you're level 30: the first trip is harder). A tip. While there", row)
+
+    def test_trainer_without_notes_row_is_unchanged(self):
+        from yap_forever.trainer_notes import Notes, TrainerNote
+        ranks = [(60, 150), (200, 225), (275, 300)]
+        plain = self.route(ranks)
+        self.assertEqual(self.route(ranks, notes=Notes({12345: TrainerNote(reach_level=50)}, {})), plain)
+        self.assertEqual(self.route(ranks, notes=Notes({}, {})), plain)
+
+    def test_instance_row_group_and_solo(self):
+        from yap_forever.planner import Plan, Step
+        from yap_forever.trainer_notes import Notes, TrainerNote
+        notes = Notes({90006: TrainerNote(group_level=37, solo_level=52, note="Groups go earlier.")}, {})
+        p = Plan(steps=[Step(333, 1, 300, 2, "Ench basic", 299, 0, 0, {toy.ROD: 299})], ranks=[(333, 250, 300, 450)],
+                 events=["Enchanting 250: train rank up to 300 (4s 50c)"], final_skill={333: 300})
+        for level, tail in ((50, "solo from about level 52. Groups go earlier."),
+                            (30, "solo from about level 52 (you're level 30). Groups go earlier.")):
+            info = dataclasses.replace(self.info("horde"), notes=notes)
+            text = render_guide(p, toy.gamedata(base_recipes()), toy.market(BARS),
+                                toy.stock(skills={333: 1}, level=level), caps={333: 300}, trainer_info=info)
+            (row,) = self.lines(text, "- **Trip:**")
+            self.assertIn("Zarn Runeweaver, inside Uldaman. Go with a group from about level 37, " + tail, row)
+
+    def test_city_row_says_the_cities_tip(self):
+        from yap_forever.trainer_notes import Notes
+        text = self.route([(60, 150)], faction="alliance", notes=Notes({}, {1519: "A tip."}),
+                          recipes=base_recipes())
+        # no Expert Blacksmith for the Alliance in a capital in the fixture: no tip, no capital
+        (row,) = self.lines(text, "- Train ")
+        self.assertNotIn("A tip.", row)
+        text = self.route([(60, 150)], faction="horde", notes=Notes({}, {1637: "A tip."}))
+        (row,) = self.lines(text, "- Train ")
+        self.assertEqual(row, "- Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                              "(for example Grom Anvilhand, Orgrimmar). A tip.")
 
     def test_artisan_row_names_both_alliance_trainers(self):
         text = self.route([(60, 150), (200, 225)])

@@ -3,7 +3,8 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from yap_forever import gamedata, settings, trainer_text, trainers
+from yap_forever import gamedata, settings, trainer_notes, trainer_text, trainers
+from yap_forever.trainer_notes import Notes, TrainerNote
 from yap_forever.trainers import Services, Trainer
 
 FIX = Path(__file__).parent / "fixtures" / "gamedata"
@@ -602,6 +603,142 @@ class TextTests(unittest.TestCase):
         self.assertIsNone(trainer_text.remote_stop(self.info("alliance"), BS, 100))  # no such rank
 
 
+class NoteRowTests(unittest.TestCase):
+    """What the notes from play add to a trainer row (Artisan and Master)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.data = fixture_data()
+
+    def stop(self, note, level=None, npc=90001, faction="alliance", profession=BS, cap=300):
+        notes = Notes({npc: note} if note is not None else {}, {})
+        info = trainer_text.TrainerInfo(faction, self.data, notes)
+        return trainer_text.remote_stop(info, profession, cap, level).text
+
+    PLACE = "Brakka Ironfold, Stranglethorn Vale (30.0, 70.0). Nearby: bank, " \
+            "neutral AH (its own prices and a higher deposit), mailbox."
+
+    def test_reach_and_flight_path(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=35, flight_path=True), level=40),
+                         self.PLACE + " Easy to reach from about level 35, with a flight path for repeat visits.")
+
+    def test_reach_alone(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=20), level=20),
+                         self.PLACE + " Easy to reach from about level 20.")
+
+    def test_flight_path_alone(self):
+        self.assertEqual(self.stop(TrainerNote(flight_path=True), level=20),
+                         self.PLACE + " With a flight path for repeat visits.")
+
+    def test_note_alone(self):
+        self.assertEqual(self.stop(TrainerNote(note="A tip."), level=20), self.PLACE + " A tip.")
+
+    def test_all_three_in_order(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=20, flight_path=True, note="A tip."), level=25),
+                         self.PLACE + " Easy to reach from about level 20, with a flight path for repeat visits. "
+                                      "A tip.")
+
+    def test_below_the_reach_level_says_so(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=35, flight_path=True, note="A tip."), level=30),
+                         self.PLACE + " Easy to reach from about level 35, with a flight path for repeat visits "
+                                      "(you're level 30: the first trip is harder). A tip.")
+        self.assertEqual(self.stop(TrainerNote(reach_level=35), level=1),
+                         self.PLACE + " Easy to reach from about level 35 (you're level 1: the first trip is harder).")
+
+    def test_at_the_reach_level_it_is_not_harder(self):
+        self.assertNotIn("harder", self.stop(TrainerNote(reach_level=35), level=35))
+
+    def test_below_level_without_a_reach_level_says_nothing(self):
+        self.assertNotIn("you're level", self.stop(TrainerNote(flight_path=True, note="A tip."), level=1))
+
+    def test_unknown_level_says_nothing_about_it(self):
+        self.assertNotIn("you're level", self.stop(TrainerNote(reach_level=35), level=None))
+
+    def test_a_trainer_without_notes_is_unchanged(self):
+        plain = self.stop(None, level=30)
+        self.assertEqual(plain, self.PLACE)
+        self.assertEqual(self.stop(TrainerNote(), level=30), plain)
+        self.assertEqual(self.stop(None, level=30, npc=90001),
+                         trainer_text.remote_stop(trainer_text.TrainerInfo("alliance", self.data), BS, 300).text)
+
+    def test_notes_of_another_trainer_do_not_leak(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=35), npc=12345, level=1), self.PLACE)
+
+    def test_instance_trainer_group_and_solo(self):
+        note = TrainerNote(group_level=37, solo_level=52, note="A group can go earlier.")
+        self.assertEqual(self.stop(note, level=45, npc=90006, faction="horde", profession=ENCH),
+                         "Zarn Runeweaver, inside Uldaman. Go with a group from about level 37, "
+                         "solo from about level 52. A group can go earlier.")
+
+    def test_instance_trainer_below_the_group_level(self):
+        note = TrainerNote(group_level=37, solo_level=52, note="A group can go earlier.")
+        self.assertEqual(self.stop(note, level=30, npc=90006, faction="horde", profession=ENCH),
+                         "Zarn Runeweaver, inside Uldaman. Go with a group from about level 37, "
+                         "solo from about level 52 (you're level 30). A group can go earlier.")
+        # at the group level, and between group and solo, nothing is added
+        for level in (37, 40, 52, 60):
+            self.assertNotIn("you're level",
+                             self.stop(note, level=level, npc=90006, faction="horde", profession=ENCH), level)
+
+    def test_each_trainer_named_gets_its_own_notes(self):
+        notes = Notes({90002: TrainerNote(note="One."), 90017: TrainerNote(note="Two.")}, {})
+        info = trainer_text.TrainerInfo("alliance", self.data, notes)
+        self.assertEqual(trainer_text.remote_stop(info, BS, 225, 60).text,
+                         "Thessa Hammerlow, Stormwind City (60.5, 40.2). One. "
+                         "Or Wandering Smith, Ironforge (20.0, 20.0). Two.")
+
+    def test_the_notes_say_nothing_about_services_known(self):
+        info = trainer_text.TrainerInfo("alliance", self.data, Notes({90001: TrainerNote(note="A tip.")}, {}))
+        self.assertTrue(trainer_text.remote_stop(info, BS, 300, 60).services_known)
+
+
+class CityTipTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.data = fixture_data()
+
+    def row(self, cities, faction="alliance", profession=BS, cap=150, data=None):
+        info = trainer_text.TrainerInfo(faction, data or self.data, Notes({}, cities))
+        return trainer_text.city_row(info, profession, cap)
+
+    def test_the_tip_follows_the_row(self):
+        got = self.row({1519: "A tip."}, profession=TAILOR, cap=75)
+        self.assertEqual(got, "Train Tailoring to 75 at any Journeyman Tailor in a capital "
+                              "(for example Olla Stitchwell, Stormwind City). A tip.")
+
+    def test_a_city_without_a_tip_is_unchanged(self):
+        plain = trainer_text.city_row(trainer_text.TrainerInfo("horde", self.data), BS, 150)
+        self.assertEqual(self.row({1519: "A tip."}, faction="horde"), plain)
+        self.assertNotIn("A tip", plain)
+
+    def test_each_tip_once_in_example_order(self):
+        ts = [Trainer(i, f"Smith {i}", BS, "Expert", "A", z, (1, 1), True)
+              for i, z in ((1, 1519), (2, 1537), (3, 1519))]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge"})
+        got = self.row({1519: "Stormwind tip.", 1537: "Ironforge tip."}, data=data)
+        self.assertEqual(got, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                              "(for example Smith 1, Stormwind City or Smith 2, Ironforge). "
+                              "Stormwind tip. Ironforge tip.")
+        data = trainers.TrainerData([ts[0], ts[2]], {}, [], {1519: "Stormwind City"})
+        self.assertEqual(self.row({1519: "Stormwind tip."}, data=data).count("Stormwind tip."), 1)
+
+    def test_a_tip_for_a_city_not_named_is_left_out(self):
+        ts = [Trainer(i, f"Smith {i}", BS, "Expert", "A", z, (1, 1), True)
+              for i, z in ((1, 1519), (2, 1537), (3, 1657))]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge", 1657: "Darnassus"})
+        self.assertNotIn("Darnassus tip", self.row({1657: "Darnassus tip."}, data=data))
+
+    def test_a_row_without_a_capital_trainer_has_no_tip(self):
+        data = trainers.TrainerData([Trainer(1, "Far Smith", BS, "Expert", "A", 33, (1, 1), True)],
+                                    {}, [], {33: "Somewhere"})
+        self.assertNotIn("tip", self.row({33: "A tip."}, data=data))
+
+    def test_no_notes_is_todays_row(self):
+        info = trainer_text.TrainerInfo("horde", self.data)
+        self.assertEqual(trainer_text.city_row(info, BS, 150),
+                         "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                         "(for example Grom Anvilhand, Orgrimmar).")
+
+
 class LoadInfoTests(unittest.TestCase):
     def folder(self, d):
         for p in FIX.iterdir():
@@ -614,6 +751,19 @@ class LoadInfoTests(unittest.TestCase):
         fetch.assert_called_once_with(dest=Path(d), only=gamedata.TRAINER_FILES)
         self.assertEqual((info.faction, note), ("horde", ""))
         self.assertTrue(info.data.trainers)
+
+    def test_loads_the_shipped_notes(self):
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(gamedata, "fetch_all"):
+            info, _note = trainer_text.load_info(self.folder(d), "horde")
+        self.assertEqual(info.notes, trainer_notes.load_notes())
+
+    def test_unusable_notes_are_a_note_and_the_trainers_are_still_named(self):
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(gamedata, "fetch_all"), \
+                unittest.mock.patch.object(trainer_notes, "load_notes", side_effect=ValueError("trainers.1 is wrong")):
+            info, note = trainer_text.load_info(self.folder(d), "horde")
+        self.assertIsNone(info.notes)
+        self.assertTrue(info.data.trainers)
+        self.assertEqual(note, "Trainer notes are left out of this guide: trainers.1 is wrong.")
 
     def test_no_faction_downloads_nothing(self):
         with unittest.mock.patch.object(gamedata, "fetch_all") as fetch:
