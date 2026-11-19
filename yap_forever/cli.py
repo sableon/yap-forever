@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 
-from yap_forever import bnet, prices, probe, profile, settings
+from yap_forever import auctionator, bnet, prices, probe, profile, settings
 from yap_forever.settings import Paths, command_hint
 
 __all__ = ["main", "command_hint"]
@@ -119,6 +119,21 @@ def cmd_probe(paths: Paths, item: int, buyout: int) -> int:
     return probe.run(client, prof.region, prof.ruleset, item, buyout, paths.house)
 
 
+def cmd_prices_auctionator(paths: Paths, file: Path, realm: str | None) -> int:
+    try:
+        m = auctionator.load_auctionator(file, realm)
+    except OSError as e:
+        print(f"can't read {file}: {e.strerror or e}")
+        return 1
+    except ValueError as e:
+        print(e)
+        return 1
+    m.save(paths.prices)
+    print(f"Saved {len(m.listings)} items from Auctionator, scan day {m.scan_day or 'unknown'} "
+          f"({m.dropped} left out: not listed or older than {auctionator.FRESH_DAYS} days).")
+    return 0
+
+
 def cmd_prices(paths: Paths) -> int:
     try:
         prof = profile.load_profile(paths.profile)
@@ -222,7 +237,10 @@ def main(argv: list[str], paths: Paths | None = None) -> int:
     p = sub.add_parser("probe", help="find your auction house from a marker listing")
     p.add_argument("--item", type=int, required=True, help="item ID of the marker listing")
     p.add_argument("--buyout", type=int, required=True, help="its buyout in copper")
-    sub.add_parser("prices", help="download your auction house's prices")
+    pr = sub.add_parser("prices", help="download your auction house's prices")
+    pr.add_argument("--auctionator", type=Path, metavar="PATH",
+                    help="read prices from Auctionator's saved file (Auctionator.lua) instead of downloading")
+    pr.add_argument("--realm", help="realm key in Auctionator.lua, when it holds several")
     pl = sub.add_parser("plan", help="plan a character's professions")
     pl.add_argument("--character", required=True)
     pl.add_argument("--prof", action="append", default=[], metavar="NAME:TARGET",
@@ -244,6 +262,11 @@ def main(argv: list[str], paths: Paths | None = None) -> int:
     if args.command == "probe":
         return cmd_probe(paths, args.item, args.buyout)
     if args.command == "prices":
+        if args.auctionator is not None:
+            return cmd_prices_auctionator(paths, args.auctionator.expanduser(), args.realm)
+        if args.realm is not None:
+            print("--realm goes with --auctionator")
+            return 1
         return cmd_prices(paths)
     if args.command == "migrate":
         return cmd_migrate(paths, args)

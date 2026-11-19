@@ -18,6 +18,11 @@ class Market:
         self.region = ""
         self.ruleset: int | None = None
         self.commodities_time = ""
+        # Where the prices came from: "api" (full listings) or "auctionator" (one price and count per
+        # item); for an import, the scan day and how many items were left out as not listed.
+        self.source = "api"
+        self.scan_day = ""
+        self.dropped = 0
 
     @classmethod
     def from_snapshot(cls, regular: dict, commodities: dict, snapshot_time: str = "") -> "Market":
@@ -60,6 +65,7 @@ class Market:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {"snapshot_time": self.snapshot_time, "commodities_time": self.commodities_time,
                 "house": self.house, "region": self.region, "ruleset": self.ruleset,
+                "source": self.source, "scan_day": self.scan_day, "dropped": self.dropped,
                 "listings": {str(i): v for i, v in self.listings.items()}}
         path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -72,6 +78,7 @@ class Market:
                     d.get("snapshot_time", ""))
             m.house, m.region, m.ruleset = d.get("house"), d.get("region", ""), d.get("ruleset")
             m.commodities_time = d.get("commodities_time", "")
+            m.source, m.scan_day, m.dropped = d.get("source", "api"), d.get("scan_day", ""), d.get("dropped", 0)
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             raise ValueError(f"{path} is damaged ({type(e).__name__}): "
                              f"run {settings.command_hint('prices')}") from None
