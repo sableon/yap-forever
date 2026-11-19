@@ -10,6 +10,7 @@ from yap_forever.gamedata import BS, ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
 from yap_forever import trainer_text
 from yap_forever.prices import source_line
+from yap_forever.shared import SHARED_NOTE, mail_text
 from yap_forever.talents import lowest_profession, talent_lines
 from yap_forever.trips import city_ranks, trips
 
@@ -130,7 +131,7 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)
-    _notes(out, plan, market, gatherer=bool(stock.mining or plan.farm))
+    _notes(out, plan, market, gatherer=bool(stock.mining or plan.farm), gd=gd)
     return "\n".join(out) + "\n"
 
 
@@ -147,7 +148,7 @@ def _less(counts: dict, minus: dict) -> dict:
 
 
 def _keep(out, plan, gd, market) -> None:
-    need, bank = {}, {}
+    need, bank, mail = {}, {}, {}
     rows, seen = _whole(plan, gd), set()
     for s in plan.steps:
         row = rows.get(id(s))
@@ -157,6 +158,7 @@ def _keep(out, plan, gd, market) -> None:
             seen.add(id(row))
             _add(need, _less(row["need"], row["tools"]))  # a bought tool is no material to keep
         _add(bank, s.from_stock)
+        _add(mail, s.from_mail)
     groups: dict[str, list] = {}
     for item, q in need.items():
         groups.setdefault(source_group(item, gd), []).append(item)
@@ -171,14 +173,17 @@ def _keep(out, plan, gd, market) -> None:
             continue
         rows = []
         for item in items:
-            still = max(0.0, need[item] - bank.get(item, 0))
+            still = max(0.0, need[item] - bank.get(item, 0) - mail.get(item, 0))
             rows.append((_buy_later(item, still, market), item, still))
         rows.sort(key=lambda r: -r[0][0])
-        out += [f"### {group}", "", "| Item | Keep | In bank | Still to get | Buy later |",
-                "|---|---|---|---|---|"]
+        by_mail = any(mail.get(item) for item in items)  # a column only when another character mails some
+        out += [f"### {group}", "",
+                "| Item | Keep | In bank |" + (" By mail |" if by_mail else "") + " Still to get | Buy later |",
+                "|---|---|---|" + ("---|" if by_mail else "") + "---|---|"]
         for (_, price), item, still in rows:
             out.append(f"| {_label(item, gd)} | {count(need[item])} | {count(bank.get(item, 0))} "
-                       f"| {count(still)} | {price} |")
+                       + (f"| {count(mail.get(item, 0))} " if by_mail else "")
+                       + f"| {count(still)} | {price} |")
         out.append("")
         out += _group_notes(group, items, gd)
 
@@ -452,8 +457,10 @@ def _money(out, plan, stock) -> None:
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 
-def _notes(out, plan, market, gatherer=True) -> None:
+def _notes(out, plan, market, gatherer=True, gd=None) -> None:
     out += ["## Notes", ""]
+    if plan.used_mail and gd is not None:
+        out += [f"- From your other characters, by mail: {mail_text(plan.used_mail, gd.name)}.", f"- {SHARED_NOTE}"]
     for reason in plan.stall_reasons.values():
         out.append(f"- Stops early: {reason}.")
     if any("quest from" in e for e in plan.events):

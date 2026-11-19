@@ -6,6 +6,7 @@ from yap_forever.costmodel import Valuer, money
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
 from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.prices import source_line
+from yap_forever.shared import SHARED_NOTE, Budget, mail_text
 from yap_forever.talents import talent_lines
 
 SECTIONS = ["Verdict", "Farm before switching", "Switch order", "Route", "Merchant's Favor",
@@ -28,12 +29,24 @@ def verdict(plan, stock, caps=None) -> str:
     return "Not yet"
 
 
+def _budget_text(cash: float, stock, budget: Budget | None) -> str:
+    """Whether the route's cash fits the gold: the group's shared gold, or this character's own `cash_gold`
+    when the caller names no group."""
+    if budget is None:
+        over = cash - stock.cash
+        return (f"over your {money(stock.cash)} budget by {money(over)}" if over > 0
+                else f"within your {money(stock.cash)} budget")
+    over = cash - budget.copper
+    shared = f"{money(budget.copper)} shared by your {budget.label} characters"
+    return f"over the {shared} by {money(over)}" if over > 0 else f"within the {shared}"
+
+
 def _q(item, gd):
     return " (quest item)" if item in gd.quest_items else ""
 
 
 def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=None,
-           reading="relative", today=None, saving_line="") -> str:
+           reading="relative", today=None, saving_line="", budget: Budget | None = None) -> str:
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
@@ -76,7 +89,7 @@ def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=No
 
     pair = caps or {BS: stock.target, ENCH: stock.target}
     _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, pair, stock),
-          saving_line)
+          saving_line, budget)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
@@ -93,7 +106,7 @@ def _switch_order(out, section, held_total) -> None:
         out.append(f"Disenchanting in this route yields about {held_total:.0f} materials.")
 
 
-def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="") -> None:
+def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None) -> None:
     # Route
     section("Route")
     out += ["| Profession | Skill | Craft | Crafts | Cash | Net cost |", "|---|---|---|---|---|---|"]
@@ -118,6 +131,8 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     if plan.used_stock:
         used = ", ".join(f"{math.ceil(n - 1e-9)} {gd.name(i)}" for i, n in sorted(plan.used_stock.items()))
         out += ["", f"From your stock: {used}."]
+    if plan.used_mail:
+        out += ["", f"From your other characters, by mail: {mail_text(plan.used_mail, gd.name)}."]
 
     # Favor
     section("Merchant's Favor")
@@ -147,10 +162,8 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
 
     # Totals
     section("Totals")
-    over = plan.cash_total - stock.cash
-    budget = (f"over your {money(stock.cash)} budget by {money(over)}" if over > 0
-              else f"within your {money(stock.cash)} budget")
-    out.append(f"- **Cash needed:** {money(plan.cash_total)} ({budget}), before any sales.")
+    out.append(f"- **Cash needed:** {money(plan.cash_total)} ({_budget_text(plan.cash_total, stock, budget)}), "
+               "before any sales.")
     out.append(f"- Trainer fees included: {money(plan.fees)}.")
     out.append(f"- **Expected sales of crafted leftovers:** {money(plan.sale_proceeds)}.")
     out.append(f"- Leftover disenchant materials worth {money(plan.leftover_value)}.")
@@ -229,6 +242,11 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out.append("- Disenchant results use Classic odds (estimates). Favor data is from community guides.")
     out.append("- AH resale of crafted gear counts at most 5 of each item, except quest items.")
     out.append("- Leather is not farmed in this model; any leather is bought.")
+    if budget is not None and budget.is_sum:
+        out.append(f"- The {budget.label} gold is the sum of `cash_gold` in your characters' stock files; "
+                   f"set it once under [gold] in profile.toml (\"{budget.label}\" = gold).")
+    if plan.used_mail:
+        out.append(f"- {SHARED_NOTE}")
     out += [f"- {line}" for line in talents]
     if saving_line:
         out.append(f"- {saving_line}")

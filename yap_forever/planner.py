@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from yap_forever.costmodel import VENDOR_TOOLS, Cost, Pools, bars_to_ore, money, skillup_chance
 from yap_forever.disenchant import DE_THRESHOLDS, de_skill_needed, de_yield
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS
+from yap_forever.shared import mail_used
 
 START_CAP = 75  # Apprentice
 DISENCHANT = 0  # Step.spell_id of an Enchanting skill-up from disenchanting
@@ -40,6 +41,7 @@ class Step:
     extra: dict[int, float] = field(default_factory=dict)  # taken once, not per craft (part of materials):
     # quest hand-ins and a crafted tool's materials
     tools_bought: dict[int, float] = field(default_factory=dict)  # tools bought for this step (AH or vendor)
+    from_mail: dict[int, float] = field(default_factory=dict)  # part of materials mailed by your other characters
 
 
 @dataclass
@@ -48,6 +50,8 @@ class Plan:
     bought: dict[int, float] = field(default_factory=dict)
     vendor_bought: dict[int, float] = field(default_factory=dict)
     used_stock: dict[int, float] = field(default_factory=dict)
+    used_mail: dict[int, list[tuple[str, int]]] = field(default_factory=dict)  # item -> (character, count) mailed to you
+    shared: dict[str, dict[int, int]] = field(default_factory=dict)  # your other characters' mailable items, by name
     farmed_bars: dict[int, float] = field(default_factory=dict)
     farm: dict[int, int] = field(default_factory=dict)  # ore -> count
     held_for_de: dict[int, tuple[float, int]] = field(default_factory=dict)
@@ -152,9 +156,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
     ench_reagents = {i for r in recipes.values() if r.skill_line == ENCH for i in r.reagents} if has_ench else set()
 
     def tool_held(cat):
-        have = set(pools.tools) | {i for i, n in pools.made.items() if n >= 1} | \
-            {i for i, n in pools.stock.items() if n >= 1}
-        return any(gd.satisfies(i, cat) for i in have)
+        return any(gd.satisfies(i, cat) for i in pools.held())
 
     def learn_option(r):
         """(Cost, favor, scroll purchase kind, quest hand-ins) to learn r, or a reason string."""
@@ -168,6 +170,10 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
                 # as for any owned item (Valuer._take)
                 v = valuer.owned_value(r.scroll_item)
                 return Cost(0, v, v), 0, "owned", []
+            if r.scroll_item and pools.mail.get(r.scroll_item, 0) >= 1:
+                # a pattern another of your characters mails you: the same, taken from what they hold
+                v = valuer.owned_value(r.scroll_item)
+                return Cost(0, v, v), 0, "mail", []
             opt = valuer.buy_option(r.scroll_item, 1, pools.bought.get(r.scroll_item, 0))
             if opt is None:
                 return f"scroll not available: {gd.name(r.scroll_item)}"
@@ -298,6 +304,8 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         p.favor_spent += favor_cost
         if scroll_kind == "owned":
             pools.stock[r.scroll_item] -= 1  # consumed: no longer owned, sellable or bought
+        elif scroll_kind == "mail":
+            pools.mail[r.scroll_item] -= 1  # consumed: the other character no longer has it to mail
         elif scroll_kind:
             pool = pools.bought if scroll_kind == "ah" else pools.vendor
             pool[r.scroll_item] = pool.get(r.scroll_item, 0) + 1
@@ -306,7 +314,8 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             items = ", ".join(f"{n} {gd.name(i)}" for i, n in q.items.items())
             p.events.append(f"{name} {s}: Learn {r.name} (quest from {q.giver}: hand in {items}; level {q.level})")
             return Cost()  # the hand-ins are taken and costed with the crafts
-        how = {"trainer": "trainer", "scroll": "your own pattern" if scroll_kind == "owned" else "scroll",
+        pattern = {"owned": "your own pattern", "mail": "a pattern mailed by another of your characters"}
+        how = {"trainer": "trainer", "scroll": pattern.get(scroll_kind, "scroll"),
                "favor": f"{favor_cost} Favor"}[r.source]
         price = f" {money(learn_cost.cash)}" if learn_cost.cash else ""
         p.events.append(f"{name} {s}: Learn {r.name} ({how}{price})")
@@ -383,12 +392,12 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             extra[i] = extra.get(i, 0) + q
         before = _snapshot(pools)
         step_cost += valuer.take_many(requests, pools, skill, commit=True, learned=learned)
-        mats, from_stock, used_made = _deltas(before, _snapshot(pools))
+        mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(pools))
         if r.output:
             pools.made[r.output[0]] = pools.made.get(r.output[0], 0) + r.output[1]
         spent += step_cost
         p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
-                            mats, from_stock, used_made, 1, extra, bought))
+                            mats, from_stock, used_made, 1, extra, bought, from_mail))
         p.events.append(f"{name} {s}: craft {r.name} once")
 
     disenchant_bank()
@@ -502,7 +511,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             p.stalled[prof], p.stall_reasons[prof] = s, f"{name}: materials ran out at {s}"
             continue
         step_cost += c
-        mats, from_stock, used_made = _deltas(before, _snapshot(pools))
+        mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(pools))
         made_something = False
         if r.output:
             item, per = r.output
@@ -524,12 +533,14 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             last.cash += step_cost.cash
             last.economic += step_cost.economic
             for mine, new in ((last.materials, mats), (last.from_stock, from_stock), (last.used_made, used_made),
-                              (last.extra, extra), (last.tools_bought, bought)):
+                              (last.extra, extra), (last.tools_bought, bought),
+                              (last.from_mail, from_mail)):
                 for i, q in new.items():
                     mine[i] = mine.get(i, 0) + q
         else:
             p.steps.append(Step(prof, s, s + 1, r.spell_id, r.name, crafts, step_cost.cash, step_cost.economic,
-                                mats, from_stock, used_made, crafts * buffer_factor(crafts), extra, bought))
+                                mats, from_stock, used_made, crafts * buffer_factor(crafts), extra, bought,
+                                from_mail))
         skill[prof] = s + 1
         made_something = release_held() or made_something
         for other in profs:
@@ -550,6 +561,8 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
     p.farm = bars_to_ore(pools.farmed)
     p.used_stock = {i: n - pools.stock.get(i, 0) for i, n in stock.items.items()
                     if n - pools.stock.get(i, 0) > 1e-9}
+    p.shared = {name: dict(items) for name, items in getattr(stock, "shared", {}).items()}
+    p.used_mail = mail_used(p.shared, pools.mail)
     de_mats = set(p.de_materials)
     keep_greens = getattr(stock, "keep_greens", False) and not has_ench
     for item, n in list(pools.made.items()) + list(held.items()):
@@ -571,23 +584,26 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
 
 
 def _snapshot(pools) -> dict:
-    return {k: dict(getattr(pools, k)) for k in ("stock", "made", "bought", "vendor", "farmed")}
+    return {k: dict(getattr(pools, k)) for k in ("stock", "made", "bought", "vendor", "farmed", "mail")}
 
 
 def _deltas(before: dict, after: dict):
-    """What one step took: (materials from outside, the bank part of them, own crafts used)."""
+    """What one step took: (materials from outside, the bank part of them, own crafts used, the part mailed
+    by your other characters)."""
     def drop(k):  # amount that left pool k
         return {i: q - after[k].get(i, 0) for i, q in before[k].items() if q - after[k].get(i, 0) > 1e-9}
 
     def gain(k):  # amount added to pool k
         return {i: q - before[k].get(i, 0) for i, q in after[k].items() if q - before[k].get(i, 0) > 1e-9}
 
-    from_stock = drop("stock")
+    from_stock, from_mail = drop("stock"), drop("mail")
     mats = dict(from_stock)
+    for i, q in from_mail.items():
+        mats[i] = mats.get(i, 0) + q
     for k in ("bought", "vendor", "farmed"):
         for i, q in gain(k).items():
             mats[i] = mats.get(i, 0) + q
-    return mats, from_stock, drop("made")
+    return mats, from_stock, drop("made"), from_mail
 
 
 def sale_value(valuer, gd, item: int, n: float) -> float:

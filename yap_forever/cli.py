@@ -260,12 +260,13 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
         return 1
     import urllib.error
 
-    from yap_forever import plan  # heavy imports only when planning
+    from yap_forever import plan, shared  # heavy imports only when planning
     try:
         me = prof.characters[character]
         table, files = plan.write_reports(paths, stock, me.favor_standing, goals, me, prof.overtime_reading,
                                           faction=prof.faction, profile_names=list(prof.characters),
-                                          study_hint_gold_per_point=prof.study_hint_gold_per_point)
+                                          study_hint_gold_per_point=prof.study_hint_gold_per_point,
+                                          group=shared.load_group(paths, prof, character))
     except (urllib.error.URLError, TimeoutError) as e:
         print(f"could not download game data ({getattr(e, 'reason', e)}): check your network or VPN, "
               f"then run {command_hint('plan --character ' + character)} again")

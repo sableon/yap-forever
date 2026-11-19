@@ -105,12 +105,15 @@ def saving_line(copper: float) -> str:
 
 def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, character=None,
                   reading: str = "relative", faction: str = "",
-                  profile_names=(), study_hint_gold_per_point: float = 100) -> tuple[str, dict[str, Path]]:
+                  profile_names=(), study_hint_gold_per_point: float = 100,
+                  group=None) -> tuple[str, dict[str, Path]]:
     """Plan both routes from the player's prices and stock; return (comparison, written files).
     character: the profile.Character, for its talents; reading: how Working Overtime applies.
     faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none.
     study_hint_gold_per_point: a route row of the lowest profession that costs this much gold a point
     gets a Dedicated Study hint (profile.toml, default 100).
+    group: the shared.Group of the character: the mailable items of its other characters join the plan, and
+    the report's budget line is the group's shared gold (without it, the stock's own `cash_gold`).
     Trainer recipes are planned at their inferred requirement, the safe one (gamedata.safe_requirements).
     The files are named for the character (see profile.report_name; profile_names: every character in the
     profile); without a character they keep the plain names."""
@@ -120,6 +123,10 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     quests = load_quest_plans()
     gd = gamedata.safe_requirements(gamedata.load_gamedata(paths.gamedata, professions=goals), skip=quests)
     stock = load_stock(stock_path)
+    budget = None
+    if group is not None:
+        stock.shared = group.shared_items(gd)
+        budget = group.budget(stock)
     favor = load_favor(standing)
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
@@ -138,7 +145,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
         full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps,
-                               character, reading, saving_line=line), encoding="utf-8")
+                               character, reading, saving_line=line, budget=budget), encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
                                        character=character, reading=reading,

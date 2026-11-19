@@ -10,6 +10,7 @@ import math
 from yap_forever.disenchant import ESSENCE_PAIRS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
+from yap_forever.shared import allocate
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
 BRING_POINTS = 25  # without a bag count, bring enough for this many points (or to the stage end)
@@ -144,7 +145,7 @@ def merged_steps(plan, gd) -> list[tuple]:
                 cash=sum(p.cash for p in parts), economic=sum(p.economic for p in parts),
                 materials=_sum(p.materials for p in parts), from_stock=_sum(p.from_stock for p in parts),
                 used_made=_sum(p.used_made for p in parts), extra=_sum(p.extra for p in parts),
-                tools_bought=_sum(p.tools_bought for p in parts)), parts)
+                tools_bought=_sum(p.tools_bought for p in parts), from_mail=_sum(p.from_mail for p in parts)), parts)
         else:
             latest[st.profession] = len(out)
             out.append((st, [st]))
@@ -246,10 +247,36 @@ def _bank(plan) -> dict[int, float]:
     return {i: math.ceil(q - 1e-6) for i, q in out.items()}  # you own whole items
 
 
-def _split(rows, plan, gd=None, left=None) -> dict[tuple[int, str], int]:
-    """(item, source) -> whole count over these rows; source: bank, mail (AH) or vendor.
-    Farmed bars are left out (the keep list covers mining)."""
-    left = _bank(plan) if left is None else left  # shared across trips, so the bank is used once
+MAIL_FROM = "from:"  # a source "from:<Name>": mailed by another of your characters (not "mail", bought on the AH)
+
+
+def from_character(src: str) -> str | None:
+    """The character a source names, or None for bank, mail (AH) and vendor."""
+    return src[len(MAIL_FROM):] if src.startswith(MAIL_FROM) else None
+
+
+def _mail(plan, whole_pool: bool = False) -> dict[int, list[list]]:
+    """What your other characters can mail you: item -> [[name, count]] in name order.
+    The planner's own use of it; with whole_pool, everything they could mail (the buffer comes from there
+    while it lasts, as from the bank)."""
+    if whole_pool:
+        items = {i for held in plan.shared.values() for i in held}
+        want = {i: sum(held.get(i, 0) for held in plan.shared.values()) for i in items}
+    else:
+        want = {}
+        for st in plan.steps:
+            for i, q in st.from_mail.items():
+                want[i] = want.get(i, 0) + q
+        want = {i: math.ceil(q - 1e-6) for i, q in want.items()}
+    return {i: [[name, n] for name, n in allocate(plan.shared, i, int(n))] for i, n in want.items()}
+
+
+def _split(rows, plan, gd=None, left=None, mail=None) -> dict[tuple[int, str], int]:
+    """(item, source) -> whole count over these rows; source: bank, from:<Name> (mailed by another of your
+    characters), mail (bought on the AH) or vendor. Farmed bars are left out (the keep list covers mining).
+    left, mail: what the bank and your other characters still hold, shared across trips so each is used once."""
+    left = _bank(plan) if left is None else left
+    mail = _mail(plan) if mail is None else mail
     out: dict[tuple[int, str], int] = {}
     for r in rows:
         for i, q in r["need"].items():
@@ -257,10 +284,21 @@ def _split(rows, plan, gd=None, left=None) -> dict[tuple[int, str], int]:
                 continue
             bank = min(q, left.get(i, 0))
             left[i] = left.get(i, 0) - bank
+            if bank > 1e-6:
+                out[(i, "bank")] = out.get((i, "bank"), 0) + math.ceil(bank - 1e-6)
+            rest = q - bank
+            for source in mail.get(i, ()):  # name order
+                if rest <= 1e-6:
+                    break
+                n = min(rest, source[1])
+                source[1] -= n
+                rest -= n
+                key = (i, MAIL_FROM + source[0])
+                out[key] = out.get(key, 0) + math.ceil(n - 1e-6)
             vendor = i not in plan.bought and (i in plan.vendor_bought or (gd is not None and i in gd.vendor_prices))
-            for src, n in (("bank", bank), ("vendor" if vendor else "mail", q - bank)):
-                if n > 1e-6:
-                    out[(i, src)] = out.get((i, src), 0) + math.ceil(n - 1e-6)
+            if rest > 1e-6:
+                key = (i, "vendor" if vendor else "mail")
+                out[key] = out.get(key, 0) + math.ceil(rest - 1e-6)
     return out
 
 
@@ -278,7 +316,8 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
     if not rows:
         return trip.skill, []
     left = {i: float(n) for i, n in owned.items()} if owned is not None else _bank(plan)
-    _split(every[:at], plan, gd, left)  # the bank the rows before the trip use
+    mail = _mail(plan, whole_pool=owned is not None)
+    _split(every[:at], plan, gd, left, mail)  # the bank and the mail the rows before the trip use
     later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
     if later:  # the next rank trip brings its own
         rows = [r for r in rows if r["st"].skill_to <= min(later)] or rows[:1]
@@ -289,7 +328,7 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
                            reagent_slots)[0]
     else:
         rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
-    split = _split(rows, plan, gd, left)
+    split = _split(rows, plan, gd, left, mail)
     return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
 
 
@@ -301,7 +340,8 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
     if not items:
         return ""
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
-    parts = [f"{n} {gd.name(i)} ({where[src]})" for i, n, src in items]
+    parts = [f"{n} {gd.name(i)} ({where[src] if src in where else 'mail from ' + from_character(src)})"
+             for i, n, src in items]
     total = _sum({i: n} for i, n, _src in items)
     stack = stacks(gd, total)
     split = carried_split(total, stack, reagents, reagent_slots)
@@ -327,14 +367,14 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
     returns the lines and the number of mailbox trips (None without a bag count)."""
     rows = route_rows(plan, gd)
     owned = {i: float(n) for i, n in stock.items.items()}  # the buffer comes from the bank while it lasts
-    split = _split(rows, plan, gd, dict(owned))
+    split = _split(rows, plan, gd, dict(owned), _mail(plan, whole_pool=True))
     lines = ["## Shopping list", "",
              "Counts are for whole crafts, buffer included: you never run short, and nothing is left over "
              "that is too little for another craft.", "",
              "| Item | Count | Where | Cost |", "|---|---:|---|---:|"]
     total = 0.0
     for (i, src), n in sorted(split.items(), key=lambda x: (x[0][1], gd.name(x[0][0]))):
-        if src == "bank":
+        if src == "bank" or from_character(src) is not None:  # nothing to buy
             continue
         cost = ((gd.vendor_prices.get(i) or (gd.items[i].buy_price if i in gd.items else 0)) * n if src == "vendor"
                 else market.buy_cost(i, n) or (market.min_price(i) or 0) * n)
@@ -357,11 +397,16 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
     lines += ["## Mailbox trips", "",
               f"Planned for {stock.bag_slots} free bag slots"
               + (f" and {bag} reagent bag slots" if bag else "") + "; bought materials wait in the mail.", ""]
-    left = dict(owned)
+    left, mail = dict(owned), _mail(plan, whole_pool=True)
     for t, trip in enumerate(trips, 1):
-        parts = {"mail": [], "vendor": [], "bank": []}
-        for (i, src), n in sorted(_split(trip, plan, gd, left).items(), key=lambda x: gd.name(x[0][0])):
-            parts[src].append(f"{n} {gd.name(i)}")
+        parts = {"mail": [], "vendor": [], "bank": [], "other": []}
+        for (i, src), n in sorted(_split(trip, plan, gd, left, mail).items(),
+                                  key=lambda x: (gd.name(x[0][0]), x[0][1])):
+            who = from_character(src)
+            if who is None:
+                parts[src].append(f"{n} {gd.name(i)}")
+            else:
+                parts["other"].append(f"{n} {gd.name(i)} (mail from {who})")
         first, last = trip[0]["st"], trip[-1]["st"]
         need: dict[int, float] = {}
         for r in trip:
@@ -375,5 +420,6 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
                      + (f" From the mail: {', '.join(parts['mail'])}." if parts["mail"] else "")
                      + (f" From a vendor: {', '.join(parts['vendor'])}." if parts["vendor"] else "")
                      + (f" From the bank: {', '.join(parts['bank'])}." if parts["bank"] else "")
+                     + (f" Mailed by your other characters: {', '.join(parts['other'])}." if parts["other"] else "")
                      + (f" {note[0].upper()}{note[1:]}." if note else ""))
     return lines + [""], len(trips)

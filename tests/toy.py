@@ -10,8 +10,8 @@ HAMMER = 5956
 GREATER_ESSENCE = 11082
 
 
-def item(i, name, quality=1, ilvl=10, cls=7, sell=10, buy=40):
-    return ItemInfo(i, name, quality, ilvl, cls, sell, buy)
+def item(i, name, quality=1, ilvl=10, cls=7, sell=10, buy=40, bonding=0):
+    return ItemInfo(i, name, quality, ilvl, cls, sell, buy, bonding=bonding)
 
 
 def recipe(spell, name, line, reagents, output=None, t=(1, 300, 300, 300), req=1,
@@ -45,9 +45,10 @@ def gamedata(recipes, quest_items=()):
                     item_tool_category={HAMMER: 162, ROD_TOOL: 373})
 
 
-def stock(items=None, favor=0, mining=0, level=60, skills=None):
+def stock(items=None, favor=0, mining=0, level=60, skills=None, shared=None):
+    """shared: another character's mailable items, {name: {item: n}}."""
     return Stock(items=items or {}, favor=favor, cash=120000, level=level, mining=mining,
-                 short_farm_ore=200, marker=None, skills=skills or {})
+                 short_farm_ore=200, marker=None, skills=skills or {}, shared=shared or {})
 
 
 def market(listings=None):
