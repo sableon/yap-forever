@@ -51,10 +51,6 @@ class MarketTests(unittest.TestCase):
         self.assertEqual(m2.snapshot_time, "T")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SourceLineTests(unittest.TestCase):
     TODAY = datetime.date(2026, 11, 20)
 
@@ -81,3 +77,7 @@ class SourceLineTests(unittest.TestCase):
 
     def test_known_scan_day_has_no_unknown_note(self):
         self.assertNotIn("unknown", self.line(scan_day="2026-11-18"))
+
+
+if __name__ == "__main__":
+    unittest.main()
