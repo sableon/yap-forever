@@ -116,10 +116,10 @@ def add_note(text: str, note: str) -> str:
     return text + note
 
 
-def inferred_note(classic_skill: int, next_recipe: str | None) -> str:
-    """Appended to a trainer recipe's learn row when its skill requirement is inferred."""
-    fallback = f"craft {next_recipe} instead" if next_recipe else f"come back at {classic_skill}"
-    return f" (inferred: the trainer may ask up to {classic_skill}; if it isn't offered, {fallback})"
+def listed_note(listed_skill: int) -> str:
+    """Appended to a trainer recipe's learn row when the route learns it above the skill the Forever data lists."""
+    return (f" (listed from {listed_skill} in the Forever data: "
+            "if the trainer offers it then, you can start it earlier)")
 
 
 def load_info(dest: Path, faction: str) -> tuple[TrainerInfo | None, str]:

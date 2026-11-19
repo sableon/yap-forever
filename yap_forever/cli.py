@@ -258,7 +258,8 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
     try:
         me = prof.characters[character]
         table, files = plan.write_reports(paths, stock, me.favor_standing, goals, me, prof.overtime_reading,
-                                          faction=prof.faction, profile_names=list(prof.characters))
+                                          faction=prof.faction, profile_names=list(prof.characters),
+                                          study_hint_gold_per_point=prof.study_hint_gold_per_point)
     except (urllib.error.URLError, TimeoutError) as e:
         print(f"could not download game data ({getattr(e, 'reason', e)}): check your network or VPN, "
               f"then run {command_hint('plan --character ' + character)} again")

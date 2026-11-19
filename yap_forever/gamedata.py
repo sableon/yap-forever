@@ -3,6 +3,7 @@
 Usage: python3 -m yap_forever.gamedata [--fetch] [--checks]
 """
 import csv
+import dataclasses
 import os
 import sys
 import urllib.request
@@ -68,6 +69,7 @@ class Recipe:
     scroll_item: int | None = None
     tools: list[int] = field(default_factory=list)
     inferred_skill: int | None = None  # Classic skill a trainer may ask for this recipe (TrainerInferred)
+    listed_skill: int | None = None  # the Forever data's requirement, kept when safe_requirements raised it
 
 
 @dataclass
@@ -91,6 +93,25 @@ class GameData:
     def name(self, item_id: int) -> str:
         i = self.items.get(item_id)
         return i.name if i else f"item {item_id}"
+
+
+def safe_requirements(gd: GameData) -> GameData:
+    """The game data as the planner plans with it: a trainer recipe whose inferred skill is above the
+    Forever requirement needs the inferred one, so the route works wherever the trainer sets the bar.
+    The Forever value stays in `listed_skill`. Other sources are unchanged, and so is `gd` (a copy)."""
+    recipes = {}
+    for spell, r in gd.recipes.items():
+        if r.source == "trainer" and r.listed_skill is None and r.inferred_skill and r.inferred_skill > r.required_skill:
+            r = dataclasses.replace(r, required_skill=r.inferred_skill, listed_skill=r.required_skill)
+        recipes[spell] = r
+    return dataclasses.replace(gd, recipes=recipes)
+
+
+def listed_requirements(gd: GameData) -> GameData:
+    """`safe_requirements` undone: every recipe back at the requirement the Forever data lists."""
+    recipes = {spell: dataclasses.replace(r, required_skill=r.listed_skill, listed_skill=None)
+               if r.listed_skill is not None else r for spell, r in gd.recipes.items()}
+    return dataclasses.replace(gd, recipes=recipes)
 
 
 def fetch_all(force: bool = False, dest: Path | None = None, only: Iterable[str] | None = None,

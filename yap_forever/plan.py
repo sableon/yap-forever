@@ -3,11 +3,11 @@ from datetime import date
 from pathlib import Path
 
 from yap_forever import gamedata, trainer_text
-from yap_forever.compare import ROUTE_NAMES, compare, settle_routes
+from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
 from yap_forever.config import load_stock
 from yap_forever.costmodel import Valuer
 from yap_forever.favor import load_favor
-from yap_forever.guide import render_guide
+from yap_forever.guide import gold, render_guide
 from yap_forever.planner import DISENCHANT, plan, resolve_goals
 from yap_forever.prices import Market
 from yap_forever.profile import report_name
@@ -18,6 +18,7 @@ from yap_forever.shopping import render_shopping
 from yap_forever.trips import trip_alternatives
 
 REUSE_ROUNDS = 4
+MIN_SAVING = 100  # copper: a smaller gap is not worth a header line
 
 
 def unit_value(item: int, gd, market) -> float:
@@ -78,18 +79,44 @@ def candidates(gd, market, stock, favor, caps, craft_once, quests, overtime=0, r
     return out
 
 
+def listed_savings(gd, routes, market, stock, favor, caps, craft_once, quests, overtime=0,
+                   reading="relative") -> dict[str, float]:
+    """What the routes could cost less if every trainer offered its recipes at the Forever listing:
+    mode -> copper, in the mode's own measure, for the modes where it is worth saying.
+    gd: the game data the routes were planned on (see gamedata.safe_requirements); routes: their settled
+    routes. The listed routes are settled the same way, from the same candidates."""
+    if not any(r.listed_skill is not None for r in gd.recipes.values()):
+        return {}
+    listed, _ = settle_routes(candidates(gamedata.listed_requirements(gd), market, stock, favor, caps,
+                                         craft_once, quests, overtime, reading), caps)
+    out = {}
+    for mode, safe in routes.items():
+        better, measure = listed[mode], ("cash_total" if mode == "gold" else "economic_total")
+        saving = getattr(safe, measure) - getattr(better, measure)
+        if saving >= MIN_SAVING and (reaches(better, caps) or not reaches(safe, caps)):
+            out[mode] = saving
+    return out
+
+
+def saving_line(copper: float) -> str:
+    return f"If trainers offer recipes at the Forever listing, this route could cost about {gold(copper)} less."
+
+
 def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, character=None,
                   reading: str = "relative", faction: str = "",
-                  profile_names=()) -> tuple[str, dict[str, Path]]:
+                  profile_names=(), study_hint_gold_per_point: float = 100) -> tuple[str, dict[str, Path]]:
     """Plan both routes from the player's prices and stock; return (comparison, written files).
     character: the profile.Character, for its talents; reading: how Working Overtime applies.
     faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none.
+    study_hint_gold_per_point: a route row of the lowest profession that costs this much gold a point
+    gets a Dedicated Study hint (profile.toml, default 100).
+    Trainer recipes are planned at their inferred requirement, the safe one (gamedata.safe_requirements).
     The files are named for the character (see profile.report_name; profile_names: every character in the
     profile); without a character they keep the plain names."""
     overtime = character.working_overtime if character else 0
     gamedata.fetch_all(dest=paths.gamedata, skip=gamedata.TRAINER_FILES)
     trainer_info, trainer_note = trainer_text.load_info(paths.gamedata, faction)
-    gd = gamedata.load_gamedata(paths.gamedata, professions=goals)
+    gd = gamedata.safe_requirements(gamedata.load_gamedata(paths.gamedata, professions=goals))
     stock = load_stock(stock_path)
     favor = load_favor(standing)
     quests = load_quest_plans()
@@ -98,6 +125,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     routes, same = settle_routes(
         candidates(gd, market, stock, favor, caps, once, quests, overtime, reading), caps)
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
+    savings = listed_savings(gd, routes, market, stock, favor, caps, once, quests, overtime, reading)
     table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same)
     today = date.today().isoformat()
     paths.reports.mkdir(parents=True, exist_ok=True)
@@ -107,12 +135,15 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         alts = trip_alternatives(route, gd, market, stock, favor, caps, once, m, quests,
                                  overtime, reading)
         full = paths.reports / f"{today}-{who}plan-{m}.md"
+        line = saving_line(savings[m]) if m in savings else ""
         full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps,
-                               character, reading), encoding="utf-8")
+                               character, reading, saving_line=line), encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
                                        character=character, reading=reading,
-                                       trainer_info=trainer_info, trainer_note=trainer_note),
+                                       trainer_info=trainer_info, trainer_note=trainer_note,
+                                       saving_line=line, mode=m,
+                                       study_hint_gold_per_point=study_hint_gold_per_point),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
     return table, files

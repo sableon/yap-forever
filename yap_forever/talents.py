@@ -21,11 +21,16 @@ def talent_lines(character, reading, plan, caps, stock) -> list[str]:
     return out
 
 
+def lowest_profession(caps, stock) -> int:
+    """The profession the free daily point goes to: the lower skill when the route starts;
+    on a tie the first of the route."""
+    return min(caps, key=lambda p: max(1, stock.skills.get(p, 1)))  # min keeps the first of equals
+
+
 def _dedicated_study(plan, caps, stock) -> str:
-    """The free daily point goes to the lowest profession (the lower skill when the route starts;
-    on a tie the first of the route): say how many days cover its points on the route."""
+    """Say how many days of the free daily point cover the lowest profession's points on the route."""
     start = {p: max(1, stock.skills.get(p, 1)) for p in caps}
-    prof = min(caps, key=lambda p: start[p])  # min keeps the first of equals
+    prof = lowest_profession(caps, stock)
     name = PROFESSIONS.get(prof, str(prof))
     n = max(0, plan.final_skill.get(prof, start[prof]) - start[prof])
     head = "Dedicated Study: one free point a day goes to your lowest profession; "

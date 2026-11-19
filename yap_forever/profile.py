@@ -1,6 +1,7 @@
 """The player's profile (region, ruleset, faction, characters) and their auction house."""
 import hashlib
 import json
+import math
 import re
 import tomllib
 import unicodedata
@@ -33,6 +34,7 @@ class Profile:
     faction: str = ""
     characters: dict[str, Character] = field(default_factory=dict)
     overtime_reading: str = "relative"  # how the Working Overtime bonus reads: "relative" or "points"
+    study_hint_gold_per_point: float = 100  # gold a point costs on a route row before it hints at Dedicated Study
 
 
 _WINDOWS_REFUSED = set('<>:"/\\|?*')
@@ -75,6 +77,12 @@ def _flag(key: str, value) -> bool:
     return value
 
 
+def _positive(key: str, value) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{key} = {value!r} in profile.toml: use a number of gold above 0")
+    return value
+
+
 def load_profile(path: Path) -> Profile:
     path = Path(path)
     if not path.exists():
@@ -86,6 +94,7 @@ def load_profile(path: Path) -> Profile:
     _check("faction", faction, FACTIONS)
     reading = d.get("working_overtime_reading", "relative")
     _check("working_overtime_reading", reading, OVERTIME_READINGS)
+    hint = _positive("study_hint_gold_per_point", d.get("study_hint_gold_per_point", 100))
     chars = {}
     for name, c in d.get("characters", {}).items():
         standing = c.get("favor_standing", "Neutral")
@@ -93,7 +102,7 @@ def load_profile(path: Path) -> Profile:
         overtime = _overtime(f"characters.{name}.working_overtime", c.get("working_overtime", 0))
         study = _flag(f"characters.{name}.dedicated_study", c.get("dedicated_study", False))
         chars[name] = Character(name, standing, overtime, study)
-    return Profile(region, int(d.get("ruleset", 2)), faction, chars, reading)
+    return Profile(region, int(d.get("ruleset", 2)), faction, chars, reading, hint)
 
 
 def save_house(path: Path, house: int, region: str, ruleset: int) -> None:

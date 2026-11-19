@@ -33,7 +33,7 @@ def _q(item, gd):
 
 
 def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=None,
-           reading="relative", today=None) -> str:
+           reading="relative", today=None, saving_line="") -> str:
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
@@ -75,7 +75,8 @@ def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=No
         _switch_order(out, section, held_total)
 
     pair = caps or {BS: stock.target, ENCH: stock.target}
-    _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, pair, stock))
+    _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, pair, stock),
+          saving_line)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
@@ -92,7 +93,7 @@ def _switch_order(out, section, held_total) -> None:
         out.append(f"Disenchanting in this route yields about {held_total:.0f} materials.")
 
 
-def _rest(out, section, plan, v, market, gd, stock, favor, talents=()) -> None:
+def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="") -> None:
     # Route
     section("Route")
     out += ["| Profession | Skill | Craft | Crafts | Cash | Net cost |", "|---|---|---|---|---|---|"]
@@ -229,3 +230,5 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=()) -> None:
     out.append("- AH resale of crafted gear counts at most 5 of each item, except quest items.")
     out.append("- Leather is not farmed in this model; any leather is bought.")
     out += [f"- {line}" for line in talents]
+    if saving_line:
+        out.append(f"- {saving_line}")
