@@ -89,6 +89,56 @@ class ProfileTests(unittest.TestCase):
         self.assertIn("relative", msg)
         self.assertIn("points", msg)
 
+    def test_group_defaults_to_the_profile_values(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, EXAMPLE))
+        c = prof.characters["Main"]
+        self.assertEqual((c.ruleset, c.faction), (None, None))
+        self.assertEqual(prof.group_of("Main"), (2, "alliance"))
+
+    def test_character_sets_its_own_ruleset_and_faction(self):
+        text = EXAMPLE + 'ruleset = 3\nfaction = "horde"\n[characters.Other]\nruleset = 4\n'
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, text))
+        self.assertEqual(prof.group_of("Main"), (3, "horde"))
+        self.assertEqual(prof.group_of("Other"), (4, "alliance"))  # the faction stays the profile's
+
+    def test_character_faction_and_ruleset_are_validated(self):
+        for bad, key in (('faction = "orc"', "characters.Main.faction"), ('ruleset = "2"', "characters.Main.ruleset"),
+                         ("ruleset = 0", "characters.Main.ruleset"), ("ruleset = 2.5", "characters.Main.ruleset"),
+                         ("ruleset = true", "characters.Main.ruleset")):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ValueError) as cm:
+                    profile.load_profile(write(d, EXAMPLE + bad + "\n"))
+                self.assertIn(key, str(cm.exception))
+
+    def test_gold_table_parsed_per_group(self):
+        text = EXAMPLE + '[gold]\n"2/alliance" = 45\n"3/horde" = 0.5\n'
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, text))
+            self.assertEqual(prof.gold, {(2, "alliance"): 45, (3, "horde"): 0.5})
+            self.assertEqual(profile.load_profile(write(d, EXAMPLE)).gold, {})
+
+    def test_gold_zero_is_allowed(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, EXAMPLE + '[gold]\n"2/alliance" = 0\n'))
+        self.assertEqual(prof.gold, {(2, "alliance"): 0})
+
+    def test_gold_table_is_validated(self):
+        for bad in ('"2/alliance" = -1', '"2/alliance" = "45"', '"2/alliance" = true', '"2/alliance" = inf',
+                    '"2/alliance" = nan', '"2/orc" = 5', '"alliance" = 5', '"x/alliance" = 5',
+                    '"2.5/alliance" = 5', '"0/alliance" = 5'):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ValueError) as cm:
+                    profile.load_profile(write(d, EXAMPLE + f"[gold]\n{bad}\n"))
+                self.assertIn("gold", str(cm.exception))
+
+    def test_gold_must_be_a_table(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError) as cm:
+                profile.load_profile(write(d, "gold = 45\n" + EXAMPLE))
+        self.assertIn("gold", str(cm.exception))
+
     def test_load_profile_missing_says_init(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(FileNotFoundError) as cm:

@@ -25,6 +25,8 @@ class Character:
     favor_standing: str = "Neutral"
     working_overtime: int = 0  # Working Overtime talent rank, 0-5
     dedicated_study: bool = False  # Dedicated Study talent taken
+    ruleset: int | None = None  # None = the profile's ruleset
+    faction: str | None = None  # None = the profile's faction
 
 
 @dataclass
@@ -35,6 +37,19 @@ class Profile:
     characters: dict[str, Character] = field(default_factory=dict)
     overtime_reading: str = "relative"  # how the Working Overtime bonus reads: "relative" or "points"
     study_hint_gold_per_point: float = 100  # gold a point costs on a route row before it hints at Dedicated Study
+    gold: dict[tuple[int, str], float] = field(default_factory=dict)  # (ruleset, faction) -> gold shared by its characters
+
+    def group_of(self, name: str) -> tuple[int, str]:
+        """The (ruleset, faction) a character plays on: its own, or the profile's. Characters of one group
+        share gold and mailable items and the auction house (region is the profile's)."""
+        c = self.characters[name]
+        return (c.ruleset if c.ruleset is not None else self.ruleset,
+                c.faction if c.faction is not None else self.faction)
+
+
+def group_label(group: tuple[int, str]) -> str:
+    """'2/alliance': how profile.toml's [gold] table names a group."""
+    return f"{group[0]}/{group[1]}"
 
 
 _WINDOWS_REFUSED = set('<>:"/\\|?*')
@@ -83,6 +98,27 @@ def _positive(key: str, value) -> float:
     return value
 
 
+def _ruleset(key: str, value) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{key} = {value!r} in profile.toml: use a ruleset number such as 2")
+    return value
+
+
+def _gold_table(table) -> dict[tuple[int, str], float]:
+    if not isinstance(table, dict):
+        raise ValueError(f'gold = {table!r} in profile.toml: use a [gold] table, e.g. "2/alliance" = 45')
+    out = {}
+    for key, value in table.items():
+        match = re.fullmatch(r"(\d+)/(\w+)", str(key))
+        if not match or int(match.group(1)) < 1 or match.group(2) not in FACTIONS:
+            raise ValueError(f'gold.{key} in profile.toml: name the group as "<ruleset>/<faction>", '
+                             f'e.g. "2/alliance" (factions: {", ".join(FACTIONS)})')
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise ValueError(f"gold.{key} = {value!r} in profile.toml: use a number of gold, 0 or more")
+        out[(int(match.group(1)), match.group(2))] = value
+    return out
+
+
 def load_profile(path: Path) -> Profile:
     path = Path(path)
     if not path.exists():
@@ -101,8 +137,13 @@ def load_profile(path: Path) -> Profile:
         _check(f"characters.{name}.favor_standing", standing, STANDINGS)
         overtime = _overtime(f"characters.{name}.working_overtime", c.get("working_overtime", 0))
         study = _flag(f"characters.{name}.dedicated_study", c.get("dedicated_study", False))
-        chars[name] = Character(name, standing, overtime, study)
-    return Profile(region, int(d.get("ruleset", 2)), faction, chars, reading, hint)
+        own_ruleset = _ruleset(f"characters.{name}.ruleset", c["ruleset"]) if "ruleset" in c else None
+        own_faction = c.get("faction")
+        if "faction" in c:
+            _check(f"characters.{name}.faction", own_faction, FACTIONS)
+        chars[name] = Character(name, standing, overtime, study, own_ruleset, own_faction)
+    return Profile(region, int(d.get("ruleset", 2)), faction, chars, reading, hint,
+                   _gold_table(d["gold"]) if "gold" in d else {})
 
 
 def save_house(path: Path, house: int, region: str, ruleset: int) -> None:
