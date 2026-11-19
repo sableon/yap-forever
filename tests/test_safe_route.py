@@ -135,12 +135,31 @@ class ListedSavingTests(unittest.TestCase):
         gd = safe_requirements(toy.gamedata(dear))
         self.assertEqual(listed_savings(gd, self.routes(gd), *self.args), {})
 
+    def test_a_gap_under_one_silver_gives_no_line(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        market = toy.market({**BARS, toy.IRON_BAR: [(99, 100000)]})  # iron 1c under copper: a tiny gap
+        args = (market, *self.args[1:])
+        gd = safe_requirements(toy.gamedata(cheap_recipes()))
+        safe = self.settle_routes(self.candidates(gd, *args), {BS: 60})[0]
+        self.assertEqual(plan_mod.listed_savings(gd, safe, *args), {})
+        with mock.patch.object(plan_mod, "MIN_SAVING", 1):  # the same gap is there, only the floor hides it
+            self.assertTrue(plan_mod.listed_savings(gd, safe, *args))
+
+    def test_quest_recipes_are_left_alone_and_claim_no_saving(self):
+        from yap_forever.plan import listed_savings
+        gd = safe_requirements(toy.gamedata(cheap_recipes()), skip={3})
+        self.assertEqual((gd.recipes[3].required_skill, gd.recipes[3].listed_skill), (20, None))
+        self.assertEqual(listed_savings(gd, self.routes(gd), *self.args), {})
+
     def test_the_line_names_the_amount_in_guide_gold(self):
         from yap_forever.guide import gold
         from yap_forever.plan import saving_line
         self.assertEqual(
             saving_line(1_234_500),
-            f"If trainers offer recipes at the Forever listing, this route could cost about {gold(1_234_500)} less.")
+            f"A route planned at the Forever listing (trainers offering recipes from their listed skill) "
+            f"could cost about {gold(1_234_500)} less.")
         self.assertIn("123g", saving_line(1_234_500))
 
 

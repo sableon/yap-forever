@@ -103,7 +103,7 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
     today: the date the staleness of imported prices is judged against (default: today).
     trainer_info: trainer_text.TrainerInfo, to name trainers on rank rows (None: say a set town);
     trainer_note: why trainers are left out, said once at the top.
-    saving_line: what the route could cost less if trainers offer recipes at the Forever listing ("": none).
+    saving_line: what a route planned at the Forever listing could cost less ("": none).
     mode: "gold" or "value", the measure the route was planned for (a row's cost per point is in it).
     study_hint_gold_per_point: a row of the lowest profession at this many gold a point gets a Dedicated Study hint."""
     caps = caps or {BS: stock.target, ENCH: stock.target}

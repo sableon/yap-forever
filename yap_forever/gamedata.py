@@ -95,13 +95,15 @@ class GameData:
         return i.name if i else f"item {item_id}"
 
 
-def safe_requirements(gd: GameData) -> GameData:
+def safe_requirements(gd: GameData, skip: Iterable[int] = ()) -> GameData:
     """The game data as the planner plans with it: a trainer recipe whose inferred skill is above the
     Forever requirement needs the inferred one, so the route works wherever the trainer sets the bar.
-    The Forever value stays in `listed_skill`. Other sources are unchanged, and so is `gd` (a copy)."""
+    The Forever value stays in `listed_skill`. Other sources are unchanged, and so is `gd` (a copy).
+    skip: spells the planner turns into quest recipes (the quest plans), which are left alone."""
+    skip = set(skip)
     recipes = {}
     for spell, r in gd.recipes.items():
-        if r.source == "trainer" and r.listed_skill is None and r.inferred_skill and r.inferred_skill > r.required_skill:
+        if spell not in skip and r.source == "trainer" and r.listed_skill is None and r.inferred_skill and r.inferred_skill > r.required_skill:
             r = dataclasses.replace(r, required_skill=r.inferred_skill, listed_skill=r.required_skill)
         recipes[spell] = r
     return dataclasses.replace(gd, recipes=recipes)

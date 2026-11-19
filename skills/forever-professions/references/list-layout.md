@@ -79,10 +79,10 @@ Write it for that.
   skill inferred from Classic (`TrainerInferred`). A trainer recipe learned above its Forever listing
   gets a note inside the fee's parenthesis: `(trainer <fee>; listed from <skill> in the Forever data:
   if the trainer offers it then, you can start it earlier)`.
-- One header line, under the comparison table, when the route could be cheaper if trainers offer
-  recipes at the Forever listing (the route planned again with the listed requirements, compared in
-  the route's own measure): `If trainers offer recipes at the Forever listing, this route could cost
-  about <gold> less.` The report's data notes carry the same line. No line when listing the recipes
+- One header line, after the intro, the trainer note and the talent lines, when the route could be
+  cheaper if trainers offer recipes at the Forever listing (the route planned again with the listed
+  requirements, compared in the route's own measure): `A route planned at the Forever listing
+  (trainers offering recipes from their listed skill) could cost about <gold> less.` The report's data notes carry the same line. No line when listing the recipes
   would not make the route cheaper.
 - On the lowest profession's route, a row that costs `study_hint_gold_per_point` gold a point or more
   ends with ` — about <gold> a point here: Dedicated Study (one free point a day) would cover these N

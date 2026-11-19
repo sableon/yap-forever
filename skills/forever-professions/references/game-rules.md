@@ -75,7 +75,8 @@ say so.
   threshold, not a rule) gets a hint: how many days of the free point would cover its points, and
   "(a legacy talent you haven't taken)" when the character hasn't taken it. The cost is the row's
   own, in the route's measure (gold out of pocket for the least-gold route, net cost for the
-  least-total-value route). Other professions and cheaper rows get no hint.
+  least-total-value route): its crafting cost as the report's Route table shows it, before resale
+  or leftover credit. Other professions and cheaper rows get no hint.
 
 ## Loot
 

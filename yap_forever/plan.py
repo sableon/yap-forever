@@ -18,7 +18,7 @@ from yap_forever.shopping import render_shopping
 from yap_forever.trips import trip_alternatives
 
 REUSE_ROUNDS = 4
-MIN_SAVING = 100  # copper: a smaller gap is not worth a header line
+MIN_SAVING = 100  # copper: below 1 silver the gap is noise from the greedy planner, not a saving to name
 
 
 def unit_value(item: int, gd, market) -> float:
@@ -99,7 +99,8 @@ def listed_savings(gd, routes, market, stock, favor, caps, craft_once, quests, o
 
 
 def saving_line(copper: float) -> str:
-    return f"If trainers offer recipes at the Forever listing, this route could cost about {gold(copper)} less."
+    return (f"A route planned at the Forever listing (trainers offering recipes from their listed skill) "
+            f"could cost about {gold(copper)} less.")
 
 
 def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, character=None,
@@ -116,10 +117,10 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     overtime = character.working_overtime if character else 0
     gamedata.fetch_all(dest=paths.gamedata, skip=gamedata.TRAINER_FILES)
     trainer_info, trainer_note = trainer_text.load_info(paths.gamedata, faction)
-    gd = gamedata.safe_requirements(gamedata.load_gamedata(paths.gamedata, professions=goals))
+    quests = load_quest_plans()
+    gd = gamedata.safe_requirements(gamedata.load_gamedata(paths.gamedata, professions=goals), skip=quests)
     stock = load_stock(stock_path)
     favor = load_favor(standing)
-    quests = load_quest_plans()
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
     routes, same = settle_routes(
