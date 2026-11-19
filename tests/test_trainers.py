@@ -739,6 +739,39 @@ class CityTipTests(unittest.TestCase):
                          "(for example Grom Anvilhand, Orgrimmar).")
 
 
+REAL = settings.paths(settings.home({})).gamedata  # the player's real cache (read only), not the test home
+HAVE_REAL = all((REAL / n).exists() for n in gamedata.TRAINER_FILES)
+
+
+@unittest.skipUnless(HAVE_REAL, "real trainer data not downloaded")
+class RealDataTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.data = trainers.load_trainer_data(REAL)
+        cls.by_id = {t.npc_id: t for t in cls.data.trainers}
+
+    def test_every_noted_npc_is_an_artisan_or_master_trainer(self):
+        for npc in trainer_notes.load_notes().trainers:
+            self.assertIn(npc, self.by_id, npc)
+            self.assertIn(self.by_id[npc].rank, ("Artisan", "Master"), npc)
+
+    def test_every_city_tip_is_for_a_capital(self):
+        for zone in trainer_notes.load_notes().cities:
+            self.assertIn(zone, trainers.CAPITALS["alliance"] + trainers.CAPITALS["horde"])
+
+    def test_booty_bay_auctioneers_serve_both_factions(self):
+        # Brikk Keencraft, Master Blacksmith in Booty Bay
+        near = trainers.nearby(self.by_id[2836], self.data.npc_rows, self.data.mailboxes, trainers.NEARBY_RADIUS)
+        self.assertTrue(near.auction and near.neutral_auction)
+        info = trainer_text.TrainerInfo("alliance", self.data)
+        self.assertIn("neutral AH (its own prices and a higher deposit)", trainer_text.remote_stop(info, BS, 300).text)
+
+    def test_pinned_tailoring_master_rank_has_a_level(self):
+        gd = gamedata.load_gamedata(REAL, professions=[TAILOR])
+        self.assertEqual(gd.trainer_ranks[TAILOR][-1].cap, 300)
+        self.assertEqual(gd.trainer_ranks[TAILOR][-1].level, 35)
+
+
 class LoadInfoTests(unittest.TestCase):
     def folder(self, d):
         for p in FIX.iterdir():
