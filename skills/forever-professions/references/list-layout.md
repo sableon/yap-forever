@@ -40,6 +40,9 @@ Write it for that.
   normal slots. Without `reagent_slots` the trips are the same as before.
 - Each trip lists what to take from the mail **including patterns bought on the auction house**,
   what to buy from the vendor (thread, salt, dyes, vials), and what is already in the bags.
+- What the player's other characters (same ruleset and faction) mail over is named by source in the
+  trip: "10 Iron Bar (mail from <Name>)", one entry per character, in name order. It costs no gold
+  and is not on the shopping list.
 - Mark mailbox pickups on the route rows. The mailbox can be far from the trainer.
 - Carried lesser essences are packed 3 to 1 into greater ones when that saves slots (all of them
   on a tie), and unpacked as they are used. Trips and bring lists count slots packed and say

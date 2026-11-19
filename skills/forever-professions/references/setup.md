@@ -59,8 +59,8 @@ auction house belongs to the ruleset and faction too. A character's group is its
 Ask the player for gold once per group, not per character:
 
 - `[gold]` in `profile.toml`, keyed `"<ruleset>/<faction>"`, for example `"2/alliance" = 45` (gold,
-  a number, 0 or more). The report's budget line compares the plan's cash with it: "within / over
-  the 45g shared by your 2/alliance characters".
+  a number, 0 or more). The report's budget line compares the plan's cash with it: "within the
+  45g 0s 0c shared by your 2/alliance characters", or "over the ... by <amount>".
 - A group with no `[gold]` entry uses the sum of `cash_gold` in its characters' `stock.toml` files
   (older files keep working), and the report says so once in its notes. `[gold]` is preferred:
   `cash_gold` in a stock file is the old, per-character place for it.
@@ -76,9 +76,11 @@ Ask the player for gold once per group, not per character:
 character, and so do items the game data doesn't know. The planner uses a character's own items
 first, then these by mail, then buys. In the "least total value" route they cost what they would
 sell for, like the character's own items. A mailable pattern held by another character teaches its
-recipe like an owned pattern (free in cash, used up). The shopping list, mailbox trips and bring
+recipe like an owned pattern (free in cash, used up). Another character's tools, ore
+(to smelt into bars) and greens (to disenchant) are not used. The shopping list, mailbox trips and bring
 lists name the source: "20 Copper Bar (mail from Aldra Stoneward)", several sources each, in name
-order. The other characters' stock is counted as it is now, with nothing reserved between plans, so
+order; the counts are the whole crafts the shopping list asks for (the buffer included), the same in
+the guide's notes. The other characters' stock is counted as it is now, with nothing reserved between plans, so
 the report says once that two plans may count the same items. Characters outside the group, or
 without a `stock.toml`, add nothing. A group mate's `stock.toml` that can't be read stops the plan
 and names the file.

@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 
 from tests import toy
-from yap_forever import profile, settings, shared
-from yap_forever.costmodel import Valuer
+from yap_forever import profile, settings, shared, shopping
+from yap_forever.costmodel import Pools, Valuer
 from yap_forever.planner import plan
 from yap_forever.shopping import bring_list, bring_text, render_shopping
 from yap_forever.trips import Trip
@@ -117,11 +117,45 @@ class MailPoolTests(unittest.TestCase):
         p = run(toy.stock(shared={"Ann": {S: 3}}))
         self.assertEqual(bars_used(p), 3)
 
-    def test_a_tool_another_character_holds_counts_as_in_hand(self):
+    def test_a_tool_another_character_holds_is_not_counted(self):
         rs = [toy.recipe(1, "BS tooled", BS, {S: 1}, (toy.STONE, 1), tools=[162])]
-        without = run(toy.stock(), {**BARS, toy.HAMMER: [(500, 1)]}, rs=rs)
-        mailed = run(toy.stock(shared={"Ann": {toy.HAMMER: 1}}), {**BARS, toy.HAMMER: [(500, 1)]}, rs=rs)
-        self.assertLess(mailed.cash_total, without.cash_total)
+        market = {**BARS, toy.HAMMER: [(500, 1)]}
+        alone = run(toy.stock(), market, rs=rs)
+        with_mate = run(toy.stock(shared={"Ann": {toy.HAMMER: 1}}), market, rs=rs)
+        self.assertEqual(with_mate.used_mail.get(toy.HAMMER), None)  # nothing is said to be mailed
+        self.assertEqual(with_mate.cash_total, alone.cash_total)  # the hammer is bought as before
+
+
+class OwnItemsFirstTests(unittest.TestCase):
+    """Your own ore, smelted, comes before bars another character mails; mining comes after them."""
+    IRON_ORE = 2772
+
+    def take(self, qty, own, mate, mining=125):
+        gd = toy.gamedata([])
+        st = toy.stock(own, mining=mining, shared={"Ann": mate})
+        pools = Pools.from_stock(st)
+        cost = Valuer(toy.market(), gd, st).take(T, qty, pools, skills={})
+        return cost, pools
+
+    def test_own_ore_is_smelted_before_the_mates_bars(self):
+        cost, pools = self.take(5, {self.IRON_ORE: 3}, {T: 10})
+        self.assertEqual(pools.stock[self.IRON_ORE], 0)  # all three ore smelted
+        self.assertEqual(pools.mail[T], 8)  # the other two bars come from Ann
+        self.assertEqual(pools.farmed, {})
+
+    def test_the_mates_bars_come_before_mining(self):
+        _cost, pools = self.take(5, {}, {T: 3})
+        self.assertEqual(pools.mail.get(T, 0), 0)
+        self.assertAlmostEqual(pools.farmed[T], 2)  # the rest is mined
+
+    def test_own_bars_come_before_everything(self):
+        _cost, pools = self.take(5, {T: 5, self.IRON_ORE: 9}, {T: 10})
+        self.assertEqual((pools.stock[T], pools.stock[self.IRON_ORE], pools.mail[T]), (0, 9, 10))
+
+    def test_the_mates_ore_is_not_smelted(self):
+        _cost, pools = self.take(2, {}, {self.IRON_ORE: 9})
+        self.assertEqual(pools.mail[self.IRON_ORE], 9)
+        self.assertAlmostEqual(pools.farmed[T], 2)
 
 
 class MailedPatternTests(unittest.TestCase):
@@ -419,6 +453,41 @@ class GuideTests(unittest.TestCase):
         text = self.guide({"Ann": {S: 10}})
         self.assertIn("| Item | Keep | In bank | By mail | Still to get | Buy later |", text)
         self.assertNotIn("By mail", self.guide({}))
+
+    def test_the_notes_count_what_the_trips_count(self):
+        import re
+
+        from yap_forever.guide import render_guide
+        rs = [toy.recipe(1, "BS yellow", BS, {S: 1}, (toy.STONE, 1), t=(1, 1, 300, 600))]  # buffered 15%
+        gd = toy.gamedata(rs)
+        st = dataclasses.replace(toy.stock(shared={"Ann": {S: 100}}), bag_slots=200)
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
+        text = render_guide(p, gd, toy.market(BARS), st, caps={BS: 30})
+        trip = int(re.search(r"(\d+) Copper Bar \(mail from Ann\)", next(
+            l for l in text.splitlines() if l.startswith("- 📬"))).group(1))
+        note = int(re.search(r"(\d+) Copper Bar \(mail from Ann\)", next(
+            l for l in text.splitlines() if l.startswith("- From your other characters"))).group(1))
+        self.assertEqual(note, trip)
+        self.assertGreater(trip, p.used_mail[S][0][1])  # the buffer is on top of what the planner took
+
+    def test_the_report_counts_what_the_trips_count(self):
+        from yap_forever.report import render, verdict
+        rs = [toy.recipe(1, "BS yellow", BS, {S: 1}, (toy.STONE, 1), t=(1, 1, 300, 600))]
+        gd = toy.gamedata(rs)
+        st = toy.stock(shared={"Ann": {S: 100}})
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR)
+        self.assertNotIn(f"{p.used_mail[S][0][1]} Copper Bar (mail from Ann)", text)  # the buffered count instead
+        self.assertIn(f"{shopping.mailed(p, gd, st)[S][0][1]} Copper Bar (mail from Ann)", text)
+
+    def test_a_mailed_pattern_is_named_in_the_guide_notes(self):
+        from yap_forever.guide import render_guide
+        rs = recipes() + [toy.recipe(3, "Scroll free", BS, {}, (toy.STONE, 1), source="scroll", scroll=toy.SCROLL)]
+        gd = toy.gamedata(rs)
+        st = toy.stock(shared={"Ann": {toy.SCROLL: 1}})
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
+        text = render_guide(p, gd, toy.market(BARS), st, caps={BS: 30})
+        self.assertIn("- From your other characters, by mail: 1 Plans: Something (mail from Ann).", text)
 
     def test_without_other_characters_the_guide_is_unchanged(self):
         text = self.guide({})

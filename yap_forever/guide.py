@@ -128,10 +128,11 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
     _keep(out, plan, gd, market)
     hint = _StudyHint(lowest_profession(caps, stock), mode, study_hint_gold_per_point, character)
     _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint)
-    from yap_forever.shopping import render_shopping  # shopping imports this module
+    from yap_forever.shopping import mailed, render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)
-    _notes(out, plan, market, gatherer=bool(stock.mining or plan.farm), gd=gd)
+    _notes(out, plan, market, gatherer=bool(stock.mining or plan.farm),
+           mailed=mailed(plan, gd, stock) if plan.used_mail else None, gd=gd)
     return "\n".join(out) + "\n"
 
 
@@ -457,10 +458,11 @@ def _money(out, plan, stock) -> None:
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 
-def _notes(out, plan, market, gatherer=True, gd=None) -> None:
+def _notes(out, plan, market, gatherer=True, mailed=None, gd=None) -> None:
+    """mailed: item -> (character, count) your other characters are asked to mail (shopping.mailed)."""
     out += ["## Notes", ""]
-    if plan.used_mail and gd is not None:
-        out += [f"- From your other characters, by mail: {mail_text(plan.used_mail, gd.name)}.", f"- {SHARED_NOTE}"]
+    if mailed and gd is not None:
+        out += [f"- From your other characters, by mail: {mail_text(mailed, gd.name)}.", f"- {SHARED_NOTE}"]
     for reason in plan.stall_reasons.values():
         out.append(f"- Stops early: {reason}.")
     if any("quest from" in e for e in plan.events):

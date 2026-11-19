@@ -304,6 +304,24 @@ def _split(rows, plan, gd=None, left=None, mail=None) -> dict[tuple[int, str], i
     return out
 
 
+def mailed(plan, gd, stock) -> dict[int, list[tuple[str, int]]]:
+    """item -> (character, count): what your other characters are asked to mail, as the shopping list and
+    the mailbox trips count it (whole crafts, buffer included). A mailed pattern, which no row needs, is
+    named as the plan took it."""
+    rows = route_rows(plan, gd)
+    split = _split(rows, plan, gd, {i: float(n) for i, n in stock.items.items()}, _mail(plan, whole_pool=True))
+    out: dict[int, list[tuple[str, int]]] = {}
+    for (i, src), n in sorted(split.items()):
+        who = from_character(src)
+        if who is not None:
+            out.setdefault(i, []).append((who, n))
+    needed = {i for r in rows for i in r["need"]}
+    for i, sources in plan.used_mail.items():
+        if i not in out and i not in needed:
+            out[i] = list(sources)
+    return out
+
+
 def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0,
               reagents=None) -> tuple[int, list[tuple[int, int, str]]]:
     """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).

@@ -132,7 +132,8 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
         used = ", ".join(f"{math.ceil(n - 1e-9)} {gd.name(i)}" for i, n in sorted(plan.used_stock.items()))
         out += ["", f"From your stock: {used}."]
     if plan.used_mail:
-        out += ["", f"From your other characters, by mail: {mail_text(plan.used_mail, gd.name)}."]
+        from yap_forever.shopping import mailed  # shopping imports guide, which report does not need until now
+        out += ["", f"From your other characters, by mail: {mail_text(mailed(plan, gd, stock), gd.name)}."]
 
     # Favor
     section("Merchant's Favor")

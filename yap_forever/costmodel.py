@@ -93,12 +93,14 @@ class Pools:
         return cls(stock={k: float(v) for k, v in stock.items.items() if v}, mail=mail)
 
     def owned(self):
-        """Pools you draw on before buying, in order: your own crafts, your own stock, then what your other
-        characters mail you; (pool, made): `made` pools are crafts, which cost nothing more."""
-        return ((self.made, True), (self.stock, False), (self.mail, False))
+        """Pools of your own, in the order they are drawn on: (pool, made); `made` pools are your crafts
+        and disenchants, already paid for. What your other characters mail you is `mail`, drawn on after
+        all of these (smelting your own ore included)."""
+        return ((self.made, True), (self.stock, False))
 
     def held(self) -> set[int]:
-        """Items in hand (at least one): tools among them satisfy a recipe's tool needs."""
+        """Items of your own in hand (at least one): tools among them satisfy a recipe's tool needs. A tool
+        another of your characters holds is not counted."""
         return set(self.tools) | {i for pool, _made in self.owned() for i, n in pool.items() if n >= 1}
 
 
@@ -200,14 +202,18 @@ class Valuer:
                 need -= n
         if need <= 1e-9:
             return cost
+        if item in BARS and self.farmable(item):  # smelt what the bank's ore, coal and bars allow first
+            n = min(need, self._smeltable(item, pools))
+            if n > 1e-9:
+                cost = cost + self._smelt_owned(item, n, pools, move)
+                need -= n
+            if need <= 1e-9:
+                return cost
+        mailed, need = self._from_mail(item, need, pools, move)  # your other characters' items, then mining
+        cost = cost + mailed
+        if need <= 1e-9:
+            return cost
         if self.farmable(item):
-            if item in BARS:  # smelt what the bank's ore, coal and bars allow before mining more
-                n = min(need, self._smeltable(item, pools))
-                if n > 1e-9:
-                    cost = cost + self._smelt_owned(item, n, pools, move)
-                    need -= n
-                if need <= 1e-9:
-                    return cost
             move(pools.farmed, item, need)
             extra = self._smelt_extras(item, need, pools, move) if item in BARS else Cost()
             return cost + extra + Cost(0, need * self.owned_value(item))
@@ -238,6 +244,16 @@ class Valuer:
             if crafted is not None:
                 return cost + crafted[0]
         return None
+
+    def _from_mail(self, item: int, qty: float, pools: Pools, move) -> tuple[Cost, float]:
+        """Take what another of your characters can mail you: (cost, what is still missing). It costs what
+        it would sell for, like your own stock, and no cash."""
+        n = min(pools.mail.get(item, 0), qty)
+        if n <= 1e-9:
+            return Cost(), qty
+        move(pools.mail, item, -n)
+        v = self.owned_value(item)
+        return Cost(0, n * v, n * v), qty - n
 
     def _craft(self, item, need, pools, skills, move, depth, learned):
         """(cost, recipe) of crafting `need` of item with a known recipe and the tools at hand, or None."""
@@ -311,6 +327,8 @@ class Valuer:
                 v = self.owned_value(item)
                 cost = cost + Cost(0, 0 if made else n * v, n * v)
                 qty -= n
+        mailed, qty = self._from_mail(item, qty, pools, move)
+        cost = cost + mailed
         if qty <= 1e-9:
             return cost
         unit = self.gd.vendor_prices.get(item, self.gd.items[item].buy_price if item in self.gd.items else 0)
