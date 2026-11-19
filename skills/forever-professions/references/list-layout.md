@@ -75,10 +75,18 @@ Write it for that.
   in a capital (for example <name>, <capital>).` names up to two trainers in the faction's capitals.
   When none of the rank's trainers is in a capital, the row names up to two of them with their zones
   and says `(no Expert Blacksmith in a capital in the data)`, never "in a capital".
-- A trainer recipe whose requirement is only inferred from Classic (`TrainerInferred`) and is above
-  the skill the route learns it at gets a note inside the fee's parenthesis: `(trainer <fee>; inferred: the trainer may ask up to
-  <skill>; if it isn't offered, craft <recipe> instead)`. The recipe is the first later row of the
-  profession that the player can craft at that skill (its requirement is met and it is not itself a
-  trainer recipe inferred higher); when there is none the note says `come back at <skill>`.
+- The route uses the safe requirement for trainer recipes: the higher of the Forever listing and the
+  skill inferred from Classic (`TrainerInferred`). A trainer recipe learned above its Forever listing
+  gets a note inside the fee's parenthesis: `(trainer <fee>; listed from <skill> in the Forever data:
+  if the trainer offers it then, you can start it earlier)`.
+- One header line, under the comparison table, when the route could be cheaper if trainers offer
+  recipes at the Forever listing (the route planned again with the listed requirements, compared in
+  the route's own measure): `If trainers offer recipes at the Forever listing, this route could cost
+  about <gold> less.` The report's data notes carry the same line. No line when listing the recipes
+  would not make the route cheaper.
+- On the lowest profession's route, a row that costs `study_hint_gold_per_point` gold a point or more
+  ends with ` — about <gold> a point here: Dedicated Study (one free point a day) would cover these N
+  points in N days`, and ` (a legacy talent you haven't taken)` when the profile's character lacks
+  the talent.
 - If the trainer data can't be downloaded or read, the guide renders without names and says why
   once, near the top.

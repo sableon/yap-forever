@@ -13,8 +13,12 @@ say so.
   client data shows small per-profession differences that nobody has confirmed in game.
 - **Recipe skill requirements at trainers are often inferred** from Classic and moved down. Some
   hold (a recipe learnable about 25 points earlier than in Classic), some don't (a recipe missing
-  from the trainer 30 points past its inferred level). When a route leans on such a recipe, flag
-  it and give a fallback craft.
+  from the trainer 30 points past its inferred level). Skill points come only from crafting (and
+  one legacy talent), so the planner plans the **safe route**: a trainer recipe whose inferred skill
+  is above the Forever listing is learned and crafted from the inferred skill, so the route works
+  wherever the trainer sets the bar. Recipes from vendors, Favor, patterns and quests are not
+  changed. The learn row says where the Forever data lists the recipe, and each route's header
+  and report notes say how much cheaper it could be if trainers offer recipes at the listing.
 - Trainer places are not listed here: the guide's trainer rows come from the Questie Forever NPC
   data, for the character's faction. Facts the data lacks: Booty Bay is a neutral town, and the
   Alliance Master Enchanting trainer is inside Uldaman (Badlands), which has no map coordinates.
@@ -66,6 +70,12 @@ say so.
   when the character has it, the guide header and the report's data notes add one line, "N days
   would cover the last N points" of the lower-skill planned profession (on a tie the first of the
   route), N being that profession's points from its start to its target on the route.
+  On that profession's route, a row (one recipe over a skill range) that costs at least
+  `study_hint_gold_per_point` gold a point (default 100, set in `profile.toml`; an example
+  threshold, not a rule) gets a hint: how many days of the free point would cover its points, and
+  "(a legacy talent you haven't taken)" when the character hasn't taken it. The cost is the row's
+  own, in the route's measure (gold out of pocket for the least-gold route, net cost for the
+  least-total-value route). Other professions and cheaper rows get no hint.
 
 ## Loot
 

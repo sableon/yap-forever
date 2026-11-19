@@ -67,8 +67,9 @@ player what changed, running the planner, and walking them through the result.
   patterns, the Favor vendor) are marked, with the cost of skipping a recipe trip. The guide
   names the trainer for the character's faction (from the profile) with the zone and map
   coordinates, and says what is nearby (bank, auction house, mailbox). The Expert rank names
-  capital trainers. A trainer recipe whose skill requirement is only inferred from Classic gets a
-  fallback note on its learn row.
+  capital trainers. The route is the safe one: a trainer recipe whose skill requirement is only
+  inferred from Classic is planned at the inferred skill, its learn row says where the Forever data
+  lists it, and a header line says what the route could save if trainers offer it earlier.
 - Merchant's Favor recipes for the character's standing (Alliance, Blacksmithing and
   Enchanting).
 - A shopping list in every guide; mailbox trips when `stock.toml` gives `bag_slots`, and a reagent
@@ -76,7 +77,8 @@ player what changed, running the planner, and walking them through the result.
 - Owned patterns: a pattern in the character's stock teaches its recipe at no cost, and is left
   off the shopping list and the "Sell now" list.
 - Legacy talents from the profile: Working Overtime (a higher skill-up chance) and Dedicated Study
-  (the guide says how many days of the free daily point would cover the last points).
+  (the guide says how many days of the free daily point would cover the last points, and hints at
+  it on route rows that cost over `study_hint_gold_per_point` gold a point).
 - Two price fallbacks when the API can't be reached: `prices --remote` (another machine over
   ssh) and `prices --auctionator PATH` (Auctionator's saved data).
 - Not yet: gathering while levelling, keep-or-sell advice, budget targets, gear. Say so when
