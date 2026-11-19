@@ -32,10 +32,11 @@ def verdict(plan, stock, caps=None) -> str:
 def _budget_text(cash: float, stock, budget: Budget | None) -> str:
     """Whether the route's cash fits the gold: the group's shared gold, or this character's own `cash_gold`
     when the caller names no group."""
-    if budget is None:
-        over = cash - stock.cash
-        return (f"over your {money(stock.cash)} budget by {money(over)}" if over > 0
-                else f"within your {money(stock.cash)} budget")
+    if budget is None or not budget.shared:
+        have = stock.cash if budget is None else budget.copper
+        over = cash - have
+        return (f"over your {money(have)} budget by {money(over)}" if over > 0
+                else f"within your {money(have)} budget")
     over = cash - budget.copper
     shared = f"{money(budget.copper)} shared by your {budget.label} characters"
     return f"over the {shared} by {money(over)}" if over > 0 else f"within the {shared}"
@@ -46,7 +47,7 @@ def _q(item, gd):
 
 
 def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=None,
-           reading="relative", today=None, saving_line="", budget: Budget | None = None) -> str:
+           reading="relative", today=None, saving_line="", budget: Budget | None = None, notes=()) -> str:
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
@@ -89,7 +90,7 @@ def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=No
 
     pair = caps or {BS: stock.target, ENCH: stock.target}
     _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, pair, stock),
-          saving_line, budget)
+          saving_line, budget, notes)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
@@ -106,7 +107,7 @@ def _switch_order(out, section, held_total) -> None:
         out.append(f"Disenchanting in this route yields about {held_total:.0f} materials.")
 
 
-def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None) -> None:
+def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None, notes=()) -> None:
     # Route
     section("Route")
     out += ["| Profession | Skill | Craft | Crafts | Cash | Net cost |", "|---|---|---|---|---|---|"]
@@ -248,6 +249,7 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
                    f"set it once under [gold] in profile.toml (\"{budget.label}\" = gold).")
     if plan.used_mail:
         out.append(f"- {SHARED_NOTE}")
+    out += [f"- {line}" for line in notes]
     out += [f"- {line}" for line in talents]
     if saving_line:
         out.append(f"- {saving_line}")

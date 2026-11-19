@@ -61,9 +61,11 @@ Ask the player for gold once per group, not per character:
 - `[gold]` in `profile.toml`, keyed `"<ruleset>/<faction>"`, for example `"2/alliance" = 45` (gold,
   a number, 0 or more). The report's budget line compares the plan's cash with it: "within the
   45g 0s 0c shared by your 2/alliance characters", or "over the ... by <amount>".
-- A group with no `[gold]` entry uses the sum of `cash_gold` in its characters' `stock.toml` files
-  (older files keep working), and the report says so once in its notes. `[gold]` is preferred:
-  `cash_gold` in a stock file is the old, per-character place for it.
+- A group with no `[gold]` entry and at least two characters with a `stock.toml` uses the sum of
+  `cash_gold` in those files (older files keep working), and the report says so once in its notes.
+  A character alone in its group, with no `[gold]` entry, has just its own `cash_gold` as before:
+  "within / over your 12g 0s 0c budget", with no note. `[gold]` is preferred: `cash_gold` in a
+  stock file is the old, per-character place for it.
 - The profile may hold characters on two rulesets (for example Normal, `2`, and RP-Normal). Their
   gold is kept apart, per ruleset and faction.
 - Only the profile's own ruleset and faction have prices (the saved prices and `house.json`). `plan
@@ -76,14 +78,16 @@ Ask the player for gold once per group, not per character:
 character, and so do items the game data doesn't know. The planner uses a character's own items
 first, then these by mail, then buys. In the "least total value" route they cost what they would
 sell for, like the character's own items. A mailable pattern held by another character teaches its
-recipe like an owned pattern (free in cash, used up). Another character's tools, ore
-(to smelt into bars) and greens (to disenchant) are not used. The shopping list, mailbox trips and bring
+recipe like an owned pattern (free in cash, used up). A mailable tool another character holds counts
+as held (no cash; the lists name it), and when Enchanting is planned its mailable greens are
+disenchanted after the character's own ("disenchant 30 X (mail from Name)"). Another character's
+ore is not smelted into bars. The shopping list, mailbox trips and bring
 lists name the source: "20 Copper Bar (mail from Aldra Stoneward)", several sources each, in name
 order; the counts are the whole crafts the shopping list asks for (the buffer included), the same in
 the guide's notes. The other characters' stock is counted as it is now, with nothing reserved between plans, so
 the report says once that two plans may count the same items. Characters outside the group, or
-without a `stock.toml`, add nothing. A group mate's `stock.toml` that can't be read stops the plan
-and names the file.
+without a `stock.toml`, add nothing. A group mate's `stock.toml` that can't be read is left out
+(items and gold), and the report and guide notes name the file; the plan goes on.
 
 Each character planned gets `characters/<Name>/stock.toml`:
 
@@ -122,7 +126,8 @@ switch to the hashed names, and files written earlier keep their old names.
 `characters/<Name>/bags.toml` (`profs`, `bag_slots`, `reagent_slots`, `[items]`). The first
 `plan --character "<Name>"` makes a `stock.toml` from it: `bag_slots`, `reagent_slots` and `[items]`
 carry over, the professions become commented lines under `[skills]` and `[goals]`, and a comment at
-the top says what to fill in: `level`, `cash_gold`, `[skills]` and `[goals]`. It prints one line naming
+the top says what to fill in: `level`, `[skills]` and `[goals]`, and that gold goes under `[gold]` in
+`profile.toml`. It prints one line naming
 the new file, and never overwrites a `stock.toml` or deletes the `bags.toml`. Fill the values in
 with the player, then plan.
 

@@ -35,7 +35,8 @@ player what changed, running the planner, and walking them through the result.
    starts from those skills. **Gold is shared by characters on the same ruleset and faction:** ask
    for it once per ruleset and faction and save it under `[gold]` in `profile.toml`
    (`"2/alliance" = 45`), not per character; `cash_gold` in a stock file is the old place and is
-   only summed when `[gold]` has no entry for the group. Other characters of the group also count:
+   only summed when `[gold]` has no entry for the group and another character of the group has a
+   stock file (a lone character's `cash_gold` is just its budget). Other characters of the group also count:
    their mailable items (bind on equip, on use or none; not bound on pickup) are used by mail
    before buying, so ask for each of them to keep an up-to-date `stock.toml`, and say that a plan
    for another character may count the same items.
@@ -47,7 +48,8 @@ player what changed, running the planner, and walking them through the result.
    another character** or sold, and set `keep_greens = true` or `false` in `stock.toml`. A
    character with only a `bags.toml` gets a `stock.toml` made from it the first time `plan` runs
    (`bag_slots`, `reagent_slots` and `[items]` carry over; the file is never overwritten or
-   deleted): help the player fill in level, gold (`cash_gold`), `[skills]` and `[goals]`.
+   deleted): help the player fill in level, `[skills]` and `[goals]` (gold goes under `[gold]` in
+   `profile.toml`, once per ruleset and faction).
 3. **Refresh prices** with `prices`. Prices update about once an hour. If the API can't be
    reached, use a fallback from [references/setup.md](references/setup.md) step 5:
    `prices --remote` (another machine over ssh) or `prices --auctionator PATH` (Auctionator's

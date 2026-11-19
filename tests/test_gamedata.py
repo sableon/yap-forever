@@ -77,9 +77,9 @@ class GameDataTests(unittest.TestCase):
 
     def test_bonding_is_read_and_says_what_can_be_mailed(self):
         got = {i: self.gd.items[i].bonding for i in (2840, 2857, 2770, 5956, 6339, 11145)}
-        self.assertEqual(got, {2840: 0, 2857: 2, 2770: 0, 5956: 3, 6339: 1, 11145: 4})  # an empty cell is 0
+        self.assertEqual(got, {2840: 0, 2857: 2, 2770: None, 5956: 3, 6339: 1, 11145: 4})  # an empty cell is unknown
         self.assertEqual({i: self.gd.items[i].mailable for i in got},
-                         {2840: True, 2857: True, 2770: True, 5956: True, 6339: False, 11145: False})
+                         {2840: True, 2857: True, 2770: False, 5956: True, 6339: False, 11145: False})
 
     def test_bonding_of_every_kind(self):
         kinds = {0: True, 1: False, 2: True, 3: True, 4: False, 5: False}  # 5 appears in the data, not mailable

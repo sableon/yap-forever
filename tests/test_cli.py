@@ -226,8 +226,9 @@ class CliTests(unittest.TestCase):
         self.assertTrue(bags.exists())
         lines = [l for l in out.splitlines() if str(stock) in l and "bags.toml" in l]
         self.assertEqual(len(lines), 1, out)
-        for word in ("level", "cash_gold", "[skills]", "[goals]"):
+        for word in ("level", "[skills]", "[goals]"):
             self.assertIn(word, lines[0])
+        self.assertNotIn("cash_gold", lines[0])
         self.assertIn("name the professions to plan", out)
         again_code, again = run(["plan", "--character", "Firstname Lastname"], self.paths)
         self.assertEqual(again_code, 1)

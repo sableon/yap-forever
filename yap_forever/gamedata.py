@@ -72,7 +72,7 @@ class ItemInfo:
     buy_price: int
     no_disenchant: bool = False  # client flag; e.g. Enchanting's own wands
     stack: int = 1  # most of one item a bag slot holds
-    bonding: int | None = None  # ItemSparse Bonding; None = the cached file has no such column
+    bonding: int | None = None  # ItemSparse Bonding; None = unknown (no such column, or an empty cell)
 
     @property
     def mailable(self) -> bool:
@@ -256,7 +256,7 @@ def load_gamedata(d: Path | None = None, professions: Iterable[int] = (BS, ENCH)
                             classes.get(i, -1), int(r["SellPrice"]), int(r["BuyPrice"]),
                             bool(int(r.get("Flags_0") or 0) & NO_DISENCHANT_FLAG),
                             max(1, int(r.get("Stackable") or 1)),
-                            int(r["Bonding"] or 0) if "Bonding" in r else None)
+                            int(r["Bonding"]) if r.get("Bonding") not in (None, "") else None)
         cat = int(r.get("TotemCategoryID") or 0)
         if cat:
             item_cat[i] = cat

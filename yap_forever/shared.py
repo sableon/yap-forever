@@ -63,7 +63,8 @@ class Budget:
     """The gold a group shares, in copper, and where the figure comes from."""
     copper: int
     label: str  # "2/alliance"
-    is_sum: bool = False  # no [gold] entry: the sum of the characters' `cash_gold`
+    is_sum: bool = False  # no [gold] entry: the sum of the characters' `cash_gold` of several characters
+    shared: bool = True  # False: one character's own `cash_gold`, with no [gold] entry and nobody to share with
 
 
 @dataclass
@@ -73,6 +74,7 @@ class Group:
     faction: str
     gold: float | None = None  # profile.toml's [gold] entry for the group, in gold
     others: dict[str, Stock] = field(default_factory=dict)  # the other characters with a stock file
+    skipped: list[tuple[Path, str]] = field(default_factory=list)  # their stock files that could not be read
 
     @property
     def label(self) -> str:
@@ -86,18 +88,24 @@ class Group:
 
     def budget(self, stock: Stock) -> Budget:
         """The group's gold: the [gold] entry, else the sum of every stock file's `cash_gold` (the
-        character being planned included). A sum over this character's file alone is just that figure,
-        so it is only called a sum when other characters' files add to it."""
+        character being planned included). With no entry and no other character, it is this character's
+        own figure: not shared, and not a sum."""
         if self.gold is not None:
             return Budget(int(round(self.gold * COPPER_PER_GOLD)), self.label)
-        return Budget(stock.cash + sum(s.cash for s in self.others.values()), self.label, bool(self.others))
+        alone = not self.others
+        return Budget(stock.cash + sum(s.cash for s in self.others.values()), self.label, not alone, not alone)
+
+    def notes(self) -> list[str]:
+        """One line for each mate's stock file that was left out because it could not be read."""
+        return [f"{path} (a character of your {self.label} group) can't be read ({why}): that character's "
+                "items and gold are left out of this plan." for path, why in self.skipped]
 
 
 def load_group(paths, prof: "profile_mod.Profile", character: str) -> Group:
     """The group of `character`: its [gold] entry and the stock files of its other members.
 
-    A member without a stock.toml contributes nothing. A member's file that can't be read stops the plan,
-    naming the file."""
+    A member without a stock.toml contributes nothing. A member's file that can't be read is left out and
+    named in the notes (`Group.notes`); it does not stop the plan."""
     group = prof.group_of(character)
     out = Group(group[0], group[1], prof.gold.get(group))
     for name in sorted(prof.characters):
@@ -109,5 +117,5 @@ def load_group(paths, prof: "profile_mod.Profile", character: str) -> Group:
         try:
             out.others[name] = load_stock(path)
         except (ValueError, KeyError, TypeError, OSError) as e:
-            raise ValueError(f"can't read {path} (a character of your {out.label} group): {e}") from None
+            out.skipped.append((path, str(e) or type(e).__name__))  # said in the notes; the plan goes on
     return out

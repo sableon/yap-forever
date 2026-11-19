@@ -438,12 +438,17 @@ class GroupTests(unittest.TestCase):
         self.stock("Me", f"[items]\n{S} = 5\n")
         self.assertEqual(shared.load_group(self.paths, self.prof(), "Me").others, {})
 
-    def test_a_damaged_stock_file_of_another_character_is_named(self):
-        self.stock("Me", "[items]\n")
-        self.stock("Ann", "[items\n")
-        with self.assertRaises(ValueError) as cm:
-            shared.load_group(self.paths, self.prof(), "Me")
-        self.assertIn(str(self.paths.character("Ann") / "stock.toml"), str(cm.exception))
+    def test_a_damaged_stock_file_of_another_character_is_left_out_and_named(self):
+        self.stock("Me", "cash_gold = 5\n[items]\n")
+        self.stock("Ann", "cash_gold = 7\n[items\n")
+        self.stock("Dee", "cash_gold = 1\n[items]\n")
+        g = shared.load_group(self.paths, self.prof(), "Me")
+        self.assertEqual(sorted(g.others), ["Dee"])  # Ann is left out, the plan goes on
+        notes = g.notes()
+        self.assertEqual(len(notes), 1)
+        self.assertIn(str(self.paths.character("Ann") / "stock.toml"), notes[0])
+        self.assertEqual(g.budget(self.load("Me")).copper, 60000)  # 5 + 1: Ann's gold is not counted
+        self.assertEqual(shared.Group(2, "alliance").notes(), [])
 
     def test_a_character_on_another_ruleset_has_its_own_group(self):
         for name in ("Me", "Ann", "Cyd"):
@@ -466,10 +471,10 @@ class GroupTests(unittest.TestCase):
         g = shared.load_group(self.paths, self.prof(), "Me")
         self.assertEqual(g.budget(self.load("Me")), shared.Budget(425000, "2/alliance", True))
 
-    def test_a_single_stock_file_is_not_called_a_sum(self):
+    def test_a_lone_character_with_no_gold_entry_has_its_own_budget(self):
         self.stock("Me", "cash_gold = 12\n[items]\n")
         g = shared.load_group(self.paths, self.prof(), "Me")
-        self.assertEqual(g.budget(self.load("Me")), shared.Budget(120000, "2/alliance", False))
+        self.assertEqual(g.budget(self.load("Me")), shared.Budget(120000, "2/alliance", False, False))
 
     def test_a_zero_gold_entry_is_a_budget_of_zero_not_a_missing_one(self):
         self.stock("Me", "cash_gold = 12\n[items]\n")
@@ -523,6 +528,21 @@ class BudgetLineTests(unittest.TestCase):
     def test_without_a_group_the_stock_budget_reads_as_before(self):
         _p, text = self.render(None)
         self.assertIn("within your 12g 0s 0c budget", self.cash_line(text))
+
+    def test_a_lone_character_keeps_the_old_wording(self):
+        _p, text = self.render(shared.Budget(150000, "2/alliance", False, False))
+        self.assertIn("within your 15g 0s 0c budget", self.cash_line(text))
+        self.assertNotIn("shared by", text)
+        _p, text = self.render(shared.Budget(0, "2/alliance", False, False))
+        self.assertIn("over your 0s 0c budget by", self.cash_line(text))
+
+    def test_notes_about_a_left_out_file_are_in_the_report(self):
+        from yap_forever.report import render, verdict
+        gd = toy.gamedata(recipes())
+        st = toy.stock()
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, notes=["ann.toml can't be read"])
+        self.assertEqual(text.count("- ann.toml can't be read"), 1)
 
     def test_a_sum_is_said_once_in_the_notes(self):
         _p, text = self.render(shared.Budget(10**9, "2/alliance", True))
@@ -671,12 +691,21 @@ class PlanCommandTests(unittest.TestCase):
         self.assertIn("50s 0c shared", line)
         self.assertNotIn("sum of `cash_gold`", reports["plan-gold.md"])
 
-    def test_a_damaged_file_of_a_group_mate_names_it(self):
+    def test_a_damaged_file_of_a_group_mate_is_left_out_with_a_note(self):
         self.write("Testy Example", "[items\n")
-        code, out = self.run_cli(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"],
-                                 self.paths)
-        self.assertEqual(code, 1)
-        self.assertIn(str(self.paths.character("Testy Example") / "stock.toml"), out)
+        reports = self.plan()  # the plan still runs
+        path = str(self.paths.character("Testy Example") / "stock.toml")
+        for name in ("plan-gold.md", "guide-gold.md", "plan-value.md", "guide-value.md"):
+            self.assertEqual(reports[name].count(path), 1, name)
+        line = next(l for l in reports["plan-gold.md"].splitlines() if l.startswith("- **Cash needed:**"))
+        self.assertIn("within your 5g 0s 0c budget", line)  # nobody else's gold is counted, and no "shared"
+
+    def test_a_lone_character_reads_as_before_and_a_group_reads_shared(self):
+        line = next(l for l in self.plan()["plan-gold.md"].splitlines() if l.startswith("- **Cash needed:**"))
+        self.assertIn("within your 5g 0s 0c budget", line)
+        self.write("Testy Example", "cash_gold = 7\nlevel = 20\n[items]\n")
+        line = next(l for l in self.plan()["plan-gold.md"].splitlines() if l.startswith("- **Cash needed:**"))
+        self.assertIn("shared by your 2/alliance characters", line)
 
 
 if __name__ == "__main__":
