@@ -119,6 +119,11 @@ def _whole(plan, gd) -> dict[int, dict]:
     return {id(st): r for r in route_rows(plan, gd) for st in r["parts"]}
 
 
+def _less(counts: dict, minus: dict) -> dict:
+    out = {i: q - minus.get(i, 0) for i, q in counts.items()}
+    return {i: q for i, q in out.items() if q > 1e-9}
+
+
 def _keep(out, plan, gd, market) -> None:
     need, bank = {}, {}
     rows, seen = _whole(plan, gd), set()
@@ -128,7 +133,7 @@ def _keep(out, plan, gd, market) -> None:
             _add(need, {i: q * step_factor(s) for i, q in s.materials.items()})
         elif id(row) not in seen:
             seen.add(id(row))
-            _add(need, row["need"])
+            _add(need, _less(row["need"], row["tools"]))  # a bought tool is no material to keep
         _add(bank, s.from_stock)
     groups: dict[str, list] = {}
     for item, q in need.items():
@@ -315,8 +320,8 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
             crafts, mats, own = 0, {}, {}
         elif row:
             seen.add(id(row))
-            crafts, mats, own = row["n"] + row["more"], dict(row["need"]), dict(row["earlier"])
-            here = dict(row["here"])
+            crafts, mats, own = row["n"] + row["more"], _less(row["need"], row["tools"]), dict(row["earlier"])
+            here = dict(row["here"])  # bought tools are left out: the route shows each purchase
         else:
             k = step_factor(s)
             crafts = s.crafts * k

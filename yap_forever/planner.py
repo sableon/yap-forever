@@ -37,8 +37,9 @@ class Step:
     from_stock: dict[int, float] = field(default_factory=dict)  # part of materials from your bank
     used_made: dict[int, float] = field(default_factory=dict)  # your own crafts or disenchants used
     buffered: float | None = None  # crafts with the buffer, judged one skill point at a time
-    extra: dict[int, float] = field(default_factory=dict)  # taken once, not per craft: quest hand-ins,
-    # a crafted tool's materials and bought tools (part of materials, apart from bought tools)
+    extra: dict[int, float] = field(default_factory=dict)  # taken once, not per craft (part of materials):
+    # quest hand-ins and a crafted tool's materials
+    tools_bought: dict[int, float] = field(default_factory=dict)  # tools bought for this step (AH or vendor)
 
 
 @dataclass
@@ -319,8 +320,8 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
 
     def get_tools(tools, s, name):
         """Craft or buy the tools a step needs; their materials are taken with the step's.
-        Returns (cost, what the step takes once for them: the crafted tools' materials, bought tools)."""
-        cost, extra = Cost(), {}
+        Returns (cost, the crafted tools' materials, the tools bought)."""
+        cost, extra, bought = Cost(), {}, {}
         for t in tools:
             item = t["item"]
             if t["how"] == "craft":
@@ -334,10 +335,10 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
                 pool = pools.bought if t["how"] == "ah" else pools.vendor
                 pool[item] = pool.get(item, 0) + 1
                 cost += t["cost"]
-                extra[item] = extra.get(item, 0) + 1
+                bought[item] = bought.get(item, 0) + 1
                 p.events.append(f"{name} {s}: Buy tool {gd.name(item)} ({t['how']} {money(t['cost'].cash)})")
             pools.tools.add(item)
-        return cost, extra
+        return cost, extra, bought
 
     def craft_once_step(prof, spell):
         """The goal recipe, learned and crafted once at the end of its profession's route."""
@@ -366,7 +367,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
         step_cost = Cost()
         if spell not in learned:
             step_cost += learn_now(r, lo, s, name)
-        tool_cost, extra = get_tools(tools, s, name)
+        tool_cost, extra, bought = get_tools(tools, s, name)
         step_cost += tool_cost
         for i, q in lo[3]:
             extra[i] = extra.get(i, 0) + q
@@ -377,7 +378,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             pools.made[r.output[0]] = pools.made.get(r.output[0], 0) + r.output[1]
         spent += step_cost
         p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
-                            mats, from_stock, used_made, 1, extra))
+                            mats, from_stock, used_made, 1, extra, bought))
         p.events.append(f"{name} {s}: craft {r.name} once")
 
     disenchant_bank()
@@ -481,7 +482,7 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             for i, q in lo[3]:
                 extra[i] = extra.get(i, 0) + q
             step_cost += learn_now(r, lo, s, name)
-        tool_cost, tool_extra = get_tools(tools, s, name)
+        tool_cost, tool_extra, bought = get_tools(tools, s, name)
         step_cost += tool_cost
         for i, q in tool_extra.items():
             extra[i] = extra.get(i, 0) + q
@@ -513,12 +514,12 @@ def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
             last.cash += step_cost.cash
             last.economic += step_cost.economic
             for mine, new in ((last.materials, mats), (last.from_stock, from_stock), (last.used_made, used_made),
-                              (last.extra, extra)):
+                              (last.extra, extra), (last.tools_bought, bought)):
                 for i, q in new.items():
                     mine[i] = mine.get(i, 0) + q
         else:
             p.steps.append(Step(prof, s, s + 1, r.spell_id, r.name, crafts, step_cost.cash, step_cost.economic,
-                                mats, from_stock, used_made, crafts * buffer_factor(crafts), extra))
+                                mats, from_stock, used_made, crafts * buffer_factor(crafts), extra, bought))
         skill[prof] = s + 1
         made_something = release_held() or made_something
         for other in profs:

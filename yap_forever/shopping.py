@@ -102,7 +102,8 @@ def merged_steps(plan, gd) -> list[tuple]:
                 buffered=sum(p.crafts * step_factor(p) for p in parts),
                 cash=sum(p.cash for p in parts), economic=sum(p.economic for p in parts),
                 materials=_sum(p.materials for p in parts), from_stock=_sum(p.from_stock for p in parts),
-                used_made=_sum(p.used_made for p in parts), extra=_sum(p.extra for p in parts)), parts)
+                used_made=_sum(p.used_made for p in parts), extra=_sum(p.extra for p in parts),
+                tools_bought=_sum(p.tools_bought for p in parts)), parts)
         else:
             latest[st.profession] = len(out)
             out.append((st, [st]))
@@ -123,10 +124,11 @@ def route_rows(plan, gd) -> list[dict]:
     rows, missing = [], {}  # missing: intermediate -> [count, index of the first row needing it]
     for st, parts in merged:
         r, k = gd.recipes[st.spell_id], step_factor(st)
-        row = {"st": st, "parts": parts, "n": math.ceil(st.crafts * k - 1e-9), "more": 0, "need": {}, "here": {}, "earlier": {}}
+        row = {"st": st, "parts": parts, "n": math.ceil(st.crafts * k - 1e-9), "more": 0, "need": {}, "here": {},
+               "earlier": {}, "tools": {i: math.ceil(q - 1e-6) for i, q in st.tools_bought.items()}}
         demand = {i: q * row["n"] for i, q in r.reagents.items()}  # whole crafts, buffered
         planned = {i: q * st.crafts for i, q in r.reagents.items()}  # what the planner took per craft
-        for i, q in st.extra.items():  # taken once: quest hand-ins, a crafted tool's materials, bought tools
+        for i, q in st.extra.items():  # taken once: quest hand-ins, a crafted tool's materials
             demand[i] = demand.get(i, 0) + math.ceil(q - 1e-6)
             planned[i] = planned.get(i, 0) + q
         for i, d in demand.items():
@@ -148,6 +150,8 @@ def route_rows(plan, gd) -> list[dict]:
                 row["earlier"][i] = row["earlier"].get(i, 0) + rest  # yours: crafted in the batch below
             else:
                 row["need"][i] = row["need"].get(i, 0) + rest
+        for i, q in row["tools"].items():  # bought, never crafted here
+            row["need"][i] = row["need"].get(i, 0) + q
         if r.output:
             pool[r.output[0]] = pool.get(r.output[0], 0) + row["n"] * r.output[1]
         rows.append(row)
@@ -227,13 +231,14 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None)
         return trip.skill, []
     left = {i: float(n) for i, n in owned.items()} if owned is not None else _bank(plan)
     _split(every[:at], plan, gd, left)  # the bank the rows before the trip use
+    later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
+    if later:  # the next rank trip brings its own
+        rows = [r for r in rows if r["st"].skill_to <= min(later)] or rows[:1]
     if bag_slots:
         items = {i for r in rows for i in r["need"]}
         rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items))[0]
     else:
-        later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
-        limit = min([trip.skill + BRING_POINTS] + later)
-        rows = [r for r in rows if r["st"].skill_to <= limit] or rows[:1]
+        rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
     split = _split(rows, plan, gd, left)
     return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
 

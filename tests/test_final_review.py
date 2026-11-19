@@ -61,6 +61,32 @@ class BoughtToolTests(unittest.TestCase):
         route = guide.split("## Route", 1)[1]
         self.assertIn("Buy tool Blacksmith Hammer", route)
 
+    def test_bought_tool_not_a_material_on_rows_or_keep_table(self):
+        from yap_forever.guide import render_guide
+        rs = [toy.recipe(1, "BS hammer", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1), tools=[162]),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        p = run(rs, BARS)
+        gd = toy.gamedata(rs)
+        guide = render_guide(p, gd, toy.market(BARS), toy.stock(), caps={BS: 225, ENCH: 225})
+        keep = guide[guide.index("## Keep while levelling"):guide.index("## Route")]
+        self.assertNotIn("Blacksmith Hammer", keep)
+        rows = [l for l in guide.splitlines() if l.startswith("- **") and "× BS hammer" in l]
+        self.assertTrue(rows)
+        self.assertFalse(any("Blacksmith Hammer" in l for l in rows))
+
+    def test_bought_tool_the_route_also_crafts_is_bought(self):
+        from yap_forever.planner import Plan, Step
+        from yap_forever.shopping import route_rows
+        H = toy.HAMMER
+        gd = toy.gamedata([toy.recipe(1, "Make hammer", BS, {toy.IRON_BAR: 2}, (H, 1)),
+                           toy.recipe(2, "BS hammer", BS, {toy.COPPER_BAR: 1}, tools=[162])])
+        p = Plan(steps=[Step(BS, 1, 2, 2, "BS hammer", 1, 0, 0, {toy.COPPER_BAR: 1}, buffered=1, tools_bought={H: 1}),
+                        Step(BS, 2, 3, 1, "Make hammer", 1, 0, 0, {toy.IRON_BAR: 2}, buffered=1)],
+                 crafted={H: 1}, vendor_bought={H: 1}, final_skill={BS: 3})
+        rows = route_rows(p, gd)
+        self.assertEqual(rows[0]["need"], {toy.COPPER_BAR: 1, H: 1})
+        self.assertEqual(rows[0]["earlier"], {})
+
     def test_craft_once_tool_on_shopping_list(self):
         rs = base_recipes() + [toy.recipe(5, "BS final", BS, {toy.IRON_BAR: 1}, req=20, tools=[162])]
         listings = {**BARS, toy.IRON_BAR: [(700, 100)]}
@@ -129,6 +155,23 @@ class FavorGoalTests(unittest.TestCase):
         favor = FavorData({5: 30}, {5: 45}, [])
         caps, once = resolve_goals({BS: Goal(recipe="Veteran Belt")}, gd, favor)
         self.assertEqual((caps, once), ({BS: 45}, {BS: 5}))
+
+
+class BringListNextRankTests(unittest.TestCase):
+    def test_bring_list_stops_at_the_next_rank_trip(self):
+        from yap_forever.planner import Plan, Step
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import Trip
+        S = toy.COPPER_BAR
+        gd = toy.gamedata([toy.recipe(1, "A", BS, {S: 1}), toy.recipe(2, "B", BS, {S: 1})])
+        p = Plan(steps=[Step(BS, 140, 200, 1, "A", 60, 0, 0, {S: 60}, buffered=60),
+                        Step(BS, 200, 260, 2, "B", 60, 0, 0, {S: 60}, buffered=60)],
+                 ranks=[(BS, 140, 225, 0), (BS, 200, 300, 0)], bought={S: 120}, final_skill={BS: 260})
+        gd.items[S].stack = 20
+        for bags in (None, 200):
+            reach, items = bring_list(p, gd, Trip(140, BS, "rank", "Blacksmithing rank to 225"), bags)
+            self.assertEqual(reach, 200, bags)
+            self.assertEqual(items, [(S, 60, "mail")], bags)
 
 
 if __name__ == "__main__":
