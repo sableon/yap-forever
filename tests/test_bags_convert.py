@@ -83,8 +83,9 @@ class BagsToStockTests(unittest.TestCase):
         self.convert()
         top = self.text().splitlines()[0]
         self.assertTrue(top.startswith("#"), top)
-        for word in ("bags.toml", "level", "cash_gold", "[skills]", "[goals]"):
+        for word in ("bags.toml", "level", "[skills]", "[goals]", "[gold]", "profile.toml"):
             self.assertIn(word, top)
+        self.assertNotIn("cash_gold", self.text())  # gold is shared: it is no longer asked per character
 
     def test_items_with_the_same_id_twice_are_refused_naming_the_file(self):
         self.bags.write_text('profs = ["alchemy"]\n[items]\n"2589" = 1\n"02589" = 2\n', encoding="utf-8")

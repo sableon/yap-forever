@@ -81,10 +81,27 @@ class Pools:
     farmed: dict[int, float] = field(default_factory=dict)  # bars to mine and smelt
     crafted: dict[int, float] = field(default_factory=dict)  # intermediates crafted on the way
     tools: set[int] = field(default_factory=set)
+    mail: dict[int, float] = field(default_factory=dict)  # mailable items of your other characters
 
     @classmethod
     def from_stock(cls, stock) -> "Pools":
-        return cls(stock={k: float(v) for k, v in stock.items.items() if v})
+        mail: dict[int, float] = {}
+        for items in getattr(stock, "shared", {}).values():
+            for item, n in items.items():
+                if n > 0:
+                    mail[item] = mail.get(item, 0) + n
+        return cls(stock={k: float(v) for k, v in stock.items.items() if v}, mail=mail)
+
+    def owned(self):
+        """Pools of your own, in the order they are drawn on: (pool, made); `made` pools are your crafts
+        and disenchants, already paid for. What your other characters mail you is `mail`, drawn on after
+        all of these (smelting your own ore included)."""
+        return ((self.made, True), (self.stock, False))
+
+    def held(self) -> set[int]:
+        """Items of your own in hand (at least one): tools among them satisfy a recipe's tool needs. A tool
+        another of your characters holds is not counted."""
+        return set(self.tools) | {i for pool, _made in self.owned() for i, n in pool.items() if n >= 1}
 
 
 class Valuer:
@@ -175,7 +192,7 @@ class Valuer:
 
     def _take(self, item, qty, pools, skills, move, depth, learned) -> Cost | None:
         cost, need = Cost(), qty
-        for pool, made in ((pools.made, True), (pools.stock, False)):
+        for pool, made in pools.owned():
             have = pool.get(item, 0)
             n = min(have, need)
             if n > 1e-9:
@@ -185,14 +202,18 @@ class Valuer:
                 need -= n
         if need <= 1e-9:
             return cost
+        if item in BARS and self.farmable(item):  # smelt what the bank's ore, coal and bars allow first
+            n = min(need, self._smeltable(item, pools))
+            if n > 1e-9:
+                cost = cost + self._smelt_owned(item, n, pools, move)
+                need -= n
+            if need <= 1e-9:
+                return cost
+        mailed, need = self._from_mail(item, need, pools, move)  # your other characters' items, then mining
+        cost = cost + mailed
+        if need <= 1e-9:
+            return cost
         if self.farmable(item):
-            if item in BARS:  # smelt what the bank's ore, coal and bars allow before mining more
-                n = min(need, self._smeltable(item, pools))
-                if n > 1e-9:
-                    cost = cost + self._smelt_owned(item, n, pools, move)
-                    need -= n
-                if need <= 1e-9:
-                    return cost
             move(pools.farmed, item, need)
             extra = self._smelt_extras(item, need, pools, move) if item in BARS else Cost()
             return cost + extra + Cost(0, need * self.owned_value(item))
@@ -224,10 +245,19 @@ class Valuer:
                 return cost + crafted[0]
         return None
 
+    def _from_mail(self, item: int, qty: float, pools: Pools, move) -> tuple[Cost, float]:
+        """Take what another of your characters can mail you: (cost, what is still missing). It costs what
+        it would sell for, like your own stock, and no cash."""
+        n = min(pools.mail.get(item, 0), qty)
+        if n <= 1e-9:
+            return Cost(), qty
+        move(pools.mail, item, -n)
+        v = self.owned_value(item)
+        return Cost(0, n * v, n * v), qty - n
+
     def _craft(self, item, need, pools, skills, move, depth, learned):
         """(cost, recipe) of crafting `need` of item with a known recipe and the tools at hand, or None."""
-        held = set(pools.tools) | {i for i, n in pools.made.items() if n >= 1} | \
-            {i for i, n in pools.stock.items() if n >= 1}
+        held = pools.held()
         for r in self.gd.recipes.values():
             if not r.output or r.output[0] != item:
                 continue
@@ -251,7 +281,7 @@ class Valuer:
         return None
 
     def _owned(self, item: int, pools: Pools) -> float:
-        return pools.made.get(item, 0) + pools.stock.get(item, 0)
+        return sum(pool.get(item, 0) for pool, _made in pools.owned())
 
     def _smeltable(self, bar: int, pools: Pools) -> float:
         """Bars that owned ore and bars could make (component bars smelted in turn). Coal and other
@@ -266,7 +296,7 @@ class Valuer:
     def _take_owned(self, item: int, qty: float, pools: Pools, move) -> Cost:
         """Take qty from made, then the bank, then smelt the rest from owned reagents."""
         cost = Cost()
-        for pool, made in ((pools.made, True), (pools.stock, False)):
+        for pool, made in pools.owned():
             n = min(pool.get(item, 0), qty)
             if n > 1e-9:
                 move(pool, item, -n)
@@ -290,13 +320,15 @@ class Valuer:
     def _vendor_reagent(self, item: int, qty: float, pools: Pools, move) -> Cost:
         """Coal and the like: from the bank first (no cash, counted at its value), the rest from a vendor."""
         cost = Cost()
-        for pool, made in ((pools.made, True), (pools.stock, False)):
+        for pool, made in pools.owned():
             n = min(pool.get(item, 0), qty)
             if n > 1e-9:
                 move(pool, item, -n)
                 v = self.owned_value(item)
                 cost = cost + Cost(0, 0 if made else n * v, n * v)
                 qty -= n
+        mailed, qty = self._from_mail(item, qty, pools, move)
+        cost = cost + mailed
         if qty <= 1e-9:
             return cost
         unit = self.gd.vendor_prices.get(item, self.gd.items[item].buy_price if item in self.gd.items else 0)

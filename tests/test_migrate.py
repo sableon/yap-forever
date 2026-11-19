@@ -95,7 +95,7 @@ class SameFilesForEveryCharacterTests(MigrateTests):
         for name in ("Bo", "Cy"):
             self.assertTrue((self.dest.character(name) / "stock.toml").exists(), name)
         self.assertEqual(set(profile.load_profile(self.dest.profile).characters), {"Bo", "Cy"})
-        self.assertTrue(any("check level, cash_gold" in a for a in actions), actions)
+        self.assertTrue(any("check level, [skills] and [goals]; gold goes under [gold] in profile.toml" in a for a in actions), actions)
 
     def test_a_converted_character_keeps_an_existing_stock_file(self):
         stock = self.dest.character("Bo") / "stock.toml"

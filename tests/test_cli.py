@@ -146,6 +146,28 @@ class CliTests(unittest.TestCase):
     def report_names(self):
         return sorted(f.name for f in self.paths.reports.glob("*.md"))
 
+    def test_plan_refuses_a_character_on_another_ruleset_or_faction(self):
+        self.ready_home()
+        for line, where in (("ruleset = 3\n", "ruleset 3"), ('faction = "horde"\n', "horde")):
+            with self.subTest(line=line):
+                text = self.paths.profile.read_text(encoding="utf-8")
+                self.paths.profile.write_text(text + line, encoding="utf-8")
+                code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"],
+                                self.paths)
+                self.assertEqual(code, 1)
+                self.assertIn("no prices yet", out)
+                self.assertIn("isn't supported yet", out)
+                self.assertIn(where, out)
+                self.assertEqual(self.report_names(), [])
+                self.paths.profile.write_text(text, encoding="utf-8")
+
+    def test_plan_for_the_profiles_own_group_is_not_refused(self):
+        self.ready_home()
+        text = self.paths.profile.read_text(encoding="utf-8")
+        self.paths.profile.write_text(text + 'ruleset = 2\nfaction = "alliance"\n', encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 0, out)
+
     def test_plan_reports_carry_the_characters_name(self):
         from datetime import date
         self.ready_home()
@@ -204,8 +226,9 @@ class CliTests(unittest.TestCase):
         self.assertTrue(bags.exists())
         lines = [l for l in out.splitlines() if str(stock) in l and "bags.toml" in l]
         self.assertEqual(len(lines), 1, out)
-        for word in ("level", "cash_gold", "[skills]", "[goals]"):
+        for word in ("level", "[skills]", "[goals]", "gold goes under [gold] in profile.toml"):
             self.assertIn(word, lines[0])
+        self.assertNotIn("cash_gold", lines[0])
         self.assertIn("name the professions to plan", out)
         again_code, again = run(["plan", "--character", "Firstname Lastname"], self.paths)
         self.assertEqual(again_code, 1)

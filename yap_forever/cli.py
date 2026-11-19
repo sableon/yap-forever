@@ -206,6 +206,12 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
     if character not in prof.characters:
         print(f"no character {character!r} in {paths.profile}; known: {', '.join(prof.characters) or 'none'}")
         return 1
+    group = prof.group_of(character)
+    if group != (prof.ruleset, prof.faction):
+        print(f"{character} plays on ruleset {group[0]}, {group[1]}, but your saved prices are for ruleset "
+              f"{prof.ruleset}, {prof.faction}: there are no prices yet for that ruleset and faction, "
+              "and planning it isn't supported yet")
+        return 1
     if not paths.prices.exists():
         print(f"no prices yet: run {command_hint('prices')}")
         return 1
@@ -254,12 +260,13 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None) -> in
         return 1
     import urllib.error
 
-    from yap_forever import plan  # heavy imports only when planning
+    from yap_forever import plan, shared  # heavy imports only when planning
     try:
         me = prof.characters[character]
         table, files = plan.write_reports(paths, stock, me.favor_standing, goals, me, prof.overtime_reading,
                                           faction=prof.faction, profile_names=list(prof.characters),
-                                          study_hint_gold_per_point=prof.study_hint_gold_per_point)
+                                          study_hint_gold_per_point=prof.study_hint_gold_per_point,
+                                          group=shared.load_group(paths, prof, character))
     except (urllib.error.URLError, TimeoutError) as e:
         print(f"could not download game data ({getattr(e, 'reason', e)}): check your network or VPN, "
               f"then run {command_hint('plan --character ' + character)} again")

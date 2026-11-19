@@ -39,6 +39,8 @@ class Stock:
     bag_slots: int | None = None  # free bag slots while crafting; None = mailbox trips not planned
     keep_greens: bool = False  # keep green crafts to disenchant on another character instead of selling
     reagent_slots: int = 0  # reagent bag slots; 0 = no reagent bag
+    shared: dict[str, dict[int, int]] = field(default_factory=dict)  # your group's other characters' mailable items,
+    # by name (not in the file: set from the other characters' stock files, see shared.Group)
 
 
 MAX_SKILL = 300

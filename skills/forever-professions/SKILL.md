@@ -32,7 +32,14 @@ player what changed, running the planner, and walking them through the result.
 2. **Ask what changed** since the last plan: level, profession skills, gold, Favor standing,
    free bag slots, and what has piled up (greens to disenchant, leftover materials). Update their
    character's `stock.toml` with what they confirm, including the `[skills]` table: the plan
-   starts from those skills.
+   starts from those skills. **Gold is shared by characters on the same ruleset and faction:** ask
+   for it once per ruleset and faction and save it under `[gold]` in `profile.toml`
+   (`"2/alliance" = 45`), not per character; `cash_gold` in a stock file is the old place and is
+   only summed when `[gold]` has no entry for the group and another character of the group has a
+   stock file (a lone character's `cash_gold` is just its budget). Other characters of the group also count:
+   their mailable items (bind on equip, on use or none; not bound on pickup) are used by mail
+   before buying, so ask for each of them to keep an up-to-date `stock.toml`, and say that a plan
+   for another character may count the same items.
    **Ask the goal before every plan:** one profession or two, and for each a target: a milestone
    (150, 225 or 300: the first time a profession reaches each on the account gives a legacy talent
    point), another skill, or one recipe to reach and craft once (often a Merchant's Favor craft).
@@ -41,7 +48,8 @@ player what changed, running the planner, and walking them through the result.
    another character** or sold, and set `keep_greens = true` or `false` in `stock.toml`. A
    character with only a `bags.toml` gets a `stock.toml` made from it the first time `plan` runs
    (`bag_slots`, `reagent_slots` and `[items]` carry over; the file is never overwritten or
-   deleted): help the player fill in level, gold (`cash_gold`), `[skills]` and `[goals]`.
+   deleted): help the player fill in level, `[skills]` and `[goals]` (gold goes under `[gold]` in
+   `profile.toml`, once per ruleset and faction).
 3. **Refresh prices** with `prices`. Prices update about once an hour. If the API can't be
    reached, use a fallback from [references/setup.md](references/setup.md) step 5:
    `prices --remote` (another machine over ssh) or `prices --auctionator PATH` (Auctionator's
@@ -76,6 +84,10 @@ player what changed, running the planner, and walking them through the result.
   bag when it gives `reagent_slots` (materials fill it first).
 - Owned patterns: a pattern in the character's stock teaches its recipe at no cost, and is left
   off the shopping list and the "Sell now" list.
+- Shared gold and items: characters on one ruleset and faction share a gold figure (`[gold]` in
+  the profile) and the mailable items in each other's stock files; the shopping list, mailbox trips
+  and bring lists say "(mail from <Name>)". A character on another ruleset or faction can't be
+  planned yet (no prices for it).
 - Legacy talents from the profile: Working Overtime (a higher skill-up chance) and Dedicated Study
   (the guide says how many days of the free daily point would cover the last points, and hints at
   it on route rows that cost at least `study_hint_gold_per_point` gold a point).
