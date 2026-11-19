@@ -25,8 +25,9 @@ Fill in `profile.toml` with the player:
   `[characters."Aldra Stoneward"]`, with `favor_standing` (`Neutral`, `Friendly`, `Honored`,
   `Revered` or `Exalted`). Pass the same name to `plan --character "Aldra Stoneward"`.
   Optional per character: `working_overtime` (rank of the Working Overtime talent, `0` to `5`,
-  default `0`) and `dedicated_study` (`true` if the character has taken Dedicated Study,
-  default `false`).
+  default `0`), `dedicated_study` (`true` if the character has taken Dedicated Study,
+  default `false`), and `ruleset` and `faction` (see "Ruleset and faction groups" below; they
+  default to the top-level values).
 - Optional, once at the top of the file: `working_overtime_reading = "relative"` (default) or
   `"points"`, how the player reads the Working Overtime bonus: `relative` adds 4% of the base
   chance per rank, `points` adds 4 percentage points per rank. `plan` uses the rank for every
@@ -44,17 +45,50 @@ working_overtime_reading = "relative"
 favor_standing = "Honored"
 working_overtime = 2
 dedicated_study = true
+[gold]                      # gold shared by the characters of one ruleset and faction
+"2/alliance" = 45
 ```
 
 Every character gets the same file, `characters/<Name>/stock.toml`, and its own reports: the
 planner treats all characters alike, whatever the player calls them.
+
+**Ruleset and faction groups.** Characters on the same ruleset and faction share their gold (there
+is no character-bound gold), and mail each other bind-on-equip items and most patterns. The
+auction house belongs to the ruleset and faction too. A character's group is its `ruleset` and
+`faction` (set under `[characters."Name"]`; left out, they are the profile's top-level values).
+Ask the player for gold once per group, not per character:
+
+- `[gold]` in `profile.toml`, keyed `"<ruleset>/<faction>"`, for example `"2/alliance" = 45` (gold,
+  a number, 0 or more). The report's budget line compares the plan's cash with it: "within / over
+  the 45g shared by your 2/alliance characters".
+- A group with no `[gold]` entry uses the sum of `cash_gold` in its characters' `stock.toml` files
+  (older files keep working), and the report says so once in its notes. `[gold]` is preferred:
+  `cash_gold` in a stock file is the old, per-character place for it.
+- The profile may hold characters on two rulesets (for example Normal, `2`, and RP-Normal). Their
+  gold is kept apart, per ruleset and faction.
+- Only the profile's own ruleset and faction have prices (the saved prices and `house.json`). `plan
+  --character X` for a character on another ruleset or faction stops with a message that there are
+  no prices for it yet and that planning it isn't supported yet.
+
+**Items shared by mail.** When planning a character, every other character of its group that has a
+`stock.toml` adds its `[items]` that can be mailed: bonding none, on equip or on use
+(ItemSparse `Bonding` 0, 2 or 3). Items bound on pickup (1) and quest items (4) stay with their
+character, and so do items the game data doesn't know. The planner uses a character's own items
+first, then these by mail, then buys. In the "least total value" route they cost what they would
+sell for, like the character's own items. A mailable pattern held by another character teaches its
+recipe like an owned pattern (free in cash, used up). The shopping list, mailbox trips and bring
+lists name the source: "20 Copper Bar (mail from Aldra Stoneward)", several sources each, in name
+order. The other characters' stock is counted as it is now, with nothing reserved between plans, so
+the report says once that two plans may count the same items. Characters outside the group, or
+without a `stock.toml`, add nothing. A group mate's `stock.toml` that can't be read stops the plan
+and names the file.
 
 Each character planned gets `characters/<Name>/stock.toml`:
 
 ```toml
 level = 40
 favor = 300          # Merchant's Favor points
-cash_gold = 25       # soft budget
+cash_gold = 25       # old place for gold: prefer [gold] in profile.toml (shared by the group)
 mining = 0           # Mining skill, if the character mines
 short_farm_ore = 0
 bag_slots = 40       # free normal bag slots while crafting; gives mailbox trips (leave out to skip them)
