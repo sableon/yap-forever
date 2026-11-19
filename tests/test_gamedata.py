@@ -82,6 +82,13 @@ class GameDataTests(unittest.TestCase):
         self.assertEqual(self.gd.trainer_ranks[164][1], gamedata.Rank(225, 4500, 125, 20))
         self.assertEqual(self.gd.vendor_prices[6217], 124)
 
+    def test_a_rank_with_level_0_gets_the_level_the_others_give(self):
+        # the fixture's Tailoring Master rank says level 0, as the pinned data does; the other two say 35
+        self.assertEqual(self.gd.trainer_ranks[197][2], gamedata.Rank(300, 50000, 200, 35))
+        self.assertEqual(self.gd.trainer_ranks[197][:2], [gamedata.Rank(150, 450, 50, 10),
+                                                          gamedata.Rank(225, 4500, 125, 20)])
+        self.assertEqual(self.gd.trainer_ranks[164][2].level, 35)  # others are left as they were
+
     @unittest.skipUnless((REAL / "ItemSparse.csv").exists(), "real game data not downloaded")
     def test_ore_names_match_itemsparse(self):
         names = gamedata.item_names(REAL / "ItemSparse.csv")
@@ -90,6 +97,43 @@ class GameDataTests(unittest.TestCase):
         for section in ("ore", "bars"):
             for item_id, row in ore[section].items():
                 self.assertEqual(names.get(int(item_id)), row[0], f"{section} {item_id}")
+
+
+class RankLevelFillTests(unittest.TestCase):
+    R = gamedata.Rank
+
+    def fill(self, ranks):
+        return gamedata.fill_rank_levels(ranks)
+
+    def test_the_others_agree(self):
+        got = self.fill({1: [self.R(300, 9, 200, 35)], 2: [self.R(300, 9, 200, 35)], 3: [self.R(300, 9, 200, 0)]})
+        self.assertEqual(got[3], [self.R(300, 9, 200, 35)])
+
+    def test_zeros_in_the_others_are_not_a_level(self):
+        got = self.fill({1: [self.R(300, 9, 200, 35)], 2: [self.R(300, 9, 200, 0)], 3: [self.R(300, 9, 200, 0)]})
+        self.assertEqual([r.level for r in got[2] + got[3]], [35, 35])
+
+    def test_the_others_disagree_so_nothing_is_guessed(self):
+        got = self.fill({1: [self.R(300, 9, 200, 35)], 2: [self.R(300, 9, 200, 30)], 3: [self.R(300, 9, 200, 0)]})
+        self.assertEqual(got[3][0].level, 0)
+
+    def test_nothing_to_copy(self):
+        self.assertEqual(self.fill({3: [self.R(300, 9, 200, 0)]})[3][0].level, 0)
+        self.assertEqual(self.fill({1: [self.R(225, 9, 125, 20)], 3: [self.R(300, 9, 200, 0)]})[3][0].level, 0)
+
+    def test_only_the_same_cap_counts(self):
+        got = self.fill({1: [self.R(225, 9, 125, 20), self.R(300, 9, 200, 35)],
+                         3: [self.R(225, 9, 125, 0), self.R(300, 9, 200, 0)]})
+        self.assertEqual([r.level for r in got[3]], [20, 35])
+
+    def test_a_rank_with_a_level_is_never_changed(self):
+        got = self.fill({1: [self.R(300, 9, 200, 35)], 3: [self.R(300, 9, 200, 40)]})
+        self.assertEqual(got[3][0].level, 40)
+
+    def test_the_input_is_not_changed(self):
+        ranks = {1: [self.R(300, 9, 200, 35)], 3: [self.R(300, 9, 200, 0)]}
+        self.fill(ranks)
+        self.assertEqual(ranks[3][0].level, 0)
 
 
 if __name__ == "__main__":

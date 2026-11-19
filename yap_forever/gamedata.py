@@ -40,6 +40,24 @@ class Rank:
     level: int
 
 
+def fill_rank_levels(ranks: dict[int, list[Rank]]) -> dict[int, list[Rank]]:
+    """Ranks whose required character level is 0 get the level the other professions give the same cap.
+
+    The pinned TrainerRanks give Tailoring's Master rank (cap 300) level 0 while every crafting
+    profession has 35 there (a Master trainer needs level 35). Other professions' zeros are not a level
+    and are ignored; when the others disagree, or none gives a level, the 0 stays. It also fills the
+    gathering professions (and First Aid), which the planner does not plan. `ranks` is not changed.
+    """
+    levels: dict[int, set[int]] = {}
+    for rs in ranks.values():
+        for r in rs:
+            if r.level:
+                levels.setdefault(r.cap, set()).add(r.level)
+    return {prof: [dataclasses.replace(r, level=next(iter(levels[r.cap])))
+                   if not r.level and len(levels.get(r.cap, ())) == 1 else r for r in rs]
+            for prof, rs in ranks.items()}
+
+
 NO_DISENCHANT_FLAG = 0x8000  # ItemSparse Flags_0: item cannot be disenchanted
 
 @dataclass
@@ -241,7 +259,7 @@ def load_gamedata(d: Path | None = None, professions: Iterable[int] = (BS, ENCH)
 
     return GameData(
         recipes=recipes, items=items,
-        trainer_ranks={int(k): [Rank(*map(int, x)) for x in v] for k, v in ranks.items()},
+        trainer_ranks=fill_rank_levels({int(k): [Rank(*map(int, x)) for x in v] for k, v in ranks.items()}),
         vendor_prices={int(k): int(v) for k, v in vendor.items()},
         quest_items=_quest_items(_lua(d / "foreverQuestDB.lua", "questData")),
         tool_items=tool_items, tool_masks=masks, item_tool_category=item_cat)

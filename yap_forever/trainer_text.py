@@ -3,11 +3,12 @@
 Everything here returns None (or "") when the player's faction or the trainer data is missing, so
 the guide then says what it said before trainers were named.
 """
+import dataclasses
 import urllib.error
 from dataclasses import dataclass
 from pathlib import Path
 
-from yap_forever import gamedata, trainers
+from yap_forever import gamedata, trainer_notes, trainers
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.trainers import CAPITALS, RANK_BY_CAP, Services, Trainer, TrainerData
 
@@ -31,6 +32,7 @@ class RemoteStop:
 class TrainerInfo:
     faction: str  # "alliance" or "horde"
     data: TrainerData | None
+    notes: trainer_notes.Notes | None = None  # facts from play; None: say none
 
 
 def _usable(info: TrainerInfo | None, cap: int) -> bool:
@@ -42,11 +44,20 @@ def _no_trainer(rank: str, profession: int) -> str:
            "for your faction in its data."
 
 
-def services_text(s: Services) -> str:
-    """'Nearby: bank, mailbox; no auction house.'"""
-    have = [w for w, ok in (("bank", s.bank), ("auction house", s.auction), ("mailbox", s.mail)) if ok]
+NEUTRAL_AH = "neutral AH (its own prices and a higher deposit)"  # the planner prices the faction AH
+
+
+def services_text(s: Services, closest: trainers.Closest | None = None) -> str:
+    """'Nearby: bank, mailbox; no auction house.' With nothing near, the closest service in the zone
+    (`closest`), when there is one: 'Nearby: nothing within a short walk; the closest is the mailbox.'"""
+    auction = NEUTRAL_AH if s.neutral_auction else "auction house"
+    parts = (("bank", s.bank), (auction, s.auction), ("mailbox", s.mail))
+    have = [w for w, ok in parts if ok]
     lack = [w for w, ok in (("bank", s.bank), ("auction house", s.auction), ("mailbox", s.mail)) if not ok]
     if not have:
+        if closest is not None:
+            what = {"mailbox": "mailbox", "bank": "bank", "auction": NEUTRAL_AH if closest.neutral else "auction house"}
+            return f"Nearby: nothing within a short walk; the closest is the {what[closest.kind]}."
         return "Nearby: none (no bank, auction house or mailbox)."
     if not lack:
         return f"Nearby: {', '.join(have)}."
@@ -59,8 +70,37 @@ def _confirmed_first(found: list[Trainer]) -> list[tuple[Trainer, str]]:
     return sure or [(t, UNCONFIRMED) for t in found]
 
 
-def _place(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
-    """The trainer's place, and whether it says what services are there."""
+def notes_text(note: trainer_notes.TrainerNote | None, level: int | None) -> str:
+    """What the owner learned from play about a trainer, as sentences ("" when there is nothing):
+    from what level the trip is easy, a flight path, a tip. `level` is the character's."""
+    if note is None:
+        return ""
+    out = []
+    if note.group_level is not None:  # an instance: a group's level and a solo level
+        text = f"Go with a group from about level {note.group_level}, solo from about level {note.solo_level}"
+        if level is not None and level < note.group_level:
+            text += f" (you're level {level})"
+        out.append(text + ".")
+    elif note.reach_level is not None or note.flight_path:
+        text = f"Easy to reach from about level {note.reach_level}" if note.reach_level is not None else "With"
+        if note.flight_path:
+            text += (", with" if note.reach_level is not None else "") + " a flight path for repeat visits"
+        if note.reach_level is not None and level is not None and level < note.reach_level:
+            text += f" (you're level {level}: the first trip is harder)"
+        out.append(text + ".")
+    if note.note:
+        out.append(note.note)
+    return " ".join(out)
+
+
+def _place(t: Trainer, flag: str, info: TrainerInfo, level: int | None = None) -> tuple[str, bool]:
+    """The trainer's place (then what is known from play), and whether it says what services are there."""
+    text, known = _where(t, flag, info)
+    said = notes_text(info.notes.trainers.get(t.npc_id) if info.notes else None, level)
+    return (f"{text} {said}" if said else text), known
+
+
+def _where(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
     data = info.data
     zone = data.zone_name(t.zone)
     if t.coords is None:
@@ -70,13 +110,20 @@ def _place(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
     if t.zone in CAPITALS[info.faction]:  # a capital has a bank, an auction house and a mailbox
         return place, True
     near = trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS)
-    return f"{place} {services_text(near)}", True
+    listed = info.notes.trainers[t.npc_id].nearby if info.notes and t.npc_id in info.notes.trainers else ()
+    if listed:  # facts from play beat the radius
+        near = dataclasses.replace(near, bank=near.bank or "bank" in listed,
+                                   auction=near.auction or "auction" in listed, mail=near.mail or "mail" in listed)
+    closest = None if near.bank or near.auction or near.mail else \
+        trainers.closest_service(t, data.npc_rows, data.mailboxes)
+    return f"{place} {services_text(near, closest)}", True
 
 
-def remote_stop(info: TrainerInfo | None, profession: int, cap: int) -> RemoteStop | None:
+def remote_stop(info: TrainerInfo | None, profession: int, cap: int, level: int | None = None) -> RemoteStop | None:
     """Where to train to `cap` in a set town (Artisan and Master): the text that follows
     '**Trip:** <what>: ', or None when the guide should not name trainers.
-    A trainer in the character's own capital gets no "Nearby" line; others outside it do."""
+    A trainer in the character's own capital gets no "Nearby" line; others outside it do.
+    level: the character's level, for what the notes say about a first trip below it."""
     if not _usable(info, cap):
         return None
     rank = RANK_BY_CAP[cap]
@@ -84,7 +131,7 @@ def remote_stop(info: TrainerInfo | None, profession: int, cap: int) -> RemoteSt
     if not found:
         return RemoteStop(_no_trainer(rank, profession), False)
     named = _confirmed_first(found)[:MAX_REMOTE]
-    places = [_place(t, flag, info) for t, flag in named]
+    places = [_place(t, flag, info, level) for t, flag in named]
     return RemoteStop(" ".join(("Or " if i else "") + text for i, (text, _known) in enumerate(places)),
                       True, all(known for _text, known in places))
 
@@ -104,8 +151,11 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int) -> str | None:
                             for t, flag in _confirmed_first(found)[:MAX_EXAMPLES])
         return f"Train {name} to {cap} at {where} (no {rank} {PERSON.get(profession, name)} in a capital in the data)."
     text = f"Train {name} to {cap} at any {rank} {PERSON.get(profession, name)} in a capital"
-    text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")"
-    return text + "."
+    text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")."
+    notes = info.notes
+    tips = [notes.cities[z] for z in dict.fromkeys(t.zone for t, _flag in examples)
+            if notes and z in notes.cities and profession in notes.city_professions.get(z, {profession})]
+    return " ".join([text] + tips)
 
 
 def add_note(text: str, note: str) -> str:
@@ -129,7 +179,11 @@ def load_info(dest: Path, faction: str) -> tuple[TrainerInfo | None, str]:
         return None, ""
     try:
         gamedata.fetch_all(dest=dest, only=gamedata.TRAINER_FILES)
-        return TrainerInfo(faction, trainers.load_trainer_data(dest)), ""
+        data = trainers.load_trainer_data(dest)
+        try:
+            return TrainerInfo(faction, data, trainer_notes.load_notes()), ""
+        except ValueError as e:  # the shipped notes are unusable: name the trainers without them
+            return TrainerInfo(faction, data), f"Trainer notes are left out of this guide: {e}."
     except ValueError as e:  # damaged, with what to do about it
         why = str(e)
     except urllib.error.URLError as e:

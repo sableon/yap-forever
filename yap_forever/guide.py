@@ -233,10 +233,10 @@ def _group_notes(group, items, gd) -> list[str]:
 
 # --- route ---------------------------------------------------------------------
 def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_slots=0,
-               trainer_info=None) -> str:
+               trainer_info=None, level=None) -> str:
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
-        stop = trainer_text.remote_stop(trainer_info, t.profession, t.cap)
+        stop = trainer_text.remote_stop(trainer_info, t.profession, t.cap, level)
         learn = "While there, learn the trainer recipes your skill allows."
         if stop is None:
             where = f"the trainer is in a set town (the planner doesn't say where yet). {learn}"
@@ -348,7 +348,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None) -> No
         if t.profession in caps:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
                 (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots,
-                                          trainer_info)))
+                                          trainer_info, stock.level)))
     for t in city_ranks(plan):
         row = trainer_text.city_row(trainer_info, t.profession, t.cap) if t.profession in caps else None
         if row:

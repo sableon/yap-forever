@@ -3,7 +3,8 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from yap_forever import gamedata, settings, trainer_text, trainers
+from yap_forever import gamedata, settings, trainer_notes, trainer_text, trainers
+from yap_forever.trainer_notes import Notes, TrainerNote
 from yap_forever.trainers import Services, Trainer
 
 FIX = Path(__file__).parent / "fixtures" / "gamedata"
@@ -238,14 +239,15 @@ class NearbyTests(unittest.TestCase):
         return trainers.nearby(self.by_id[npc], self.data.npc_rows, self.data.mailboxes, radius)
 
     def test_banker_auctioneer_and_mailbox_inside_the_radius(self):
-        self.assertEqual(self.near(90001), Services(bank=True, auction=True, mail=True))
+        # the only auctioneer in that zone is friendly to both factions: a neutral one
+        self.assertEqual(self.near(90001), Services(bank=True, auction=True, mail=True, neutral_auction=True))
 
     def test_outside_the_radius(self):
         # the banker at (31, 71) is ~1.41 away, the auctioneer at (29, 69.5) ~1.12, the mailbox ~0.71
         self.assertEqual(self.near(90001, radius=1.0), Services(False, False, True))
         self.assertEqual(self.near(90001, radius=0.5), Services(False, False, False))
-        self.assertEqual(self.near(90001, radius=1.2), Services(False, True, True))
-        self.assertEqual(self.near(90001, radius=1.5), Services(True, True, True))
+        self.assertEqual(self.near(90001, radius=1.2), Services(False, True, True, True))
+        self.assertEqual(self.near(90001, radius=1.5), Services(True, True, True, True))
 
     def test_only_the_same_zone_counts(self):
         # the Stormwind trainer sees the Stormwind banker at (61, 41.5), not the auctioneer at (30, 70)
@@ -273,6 +275,95 @@ class NearbyTests(unittest.TestCase):
 
     def test_radius_is_a_named_constant(self):
         self.assertGreater(trainers.NEARBY_RADIUS, 0)
+
+
+def _near(trainer_at, *service_rows, mailboxes=()):
+    filler = "[99] = {'Peddler',1,1,1,1,0,{[12]={{1,1}}},nil,12,nil,nil,12,\"A\",\"Vendor\",4},"  # an empty table is not parsed
+    rows = trainers.parse_npc_rows(_npc_text(filler, *service_rows))
+    t = Trainer(1, "T", TAILOR, "Master", "A", 12, trainer_at, True)
+    return t, rows, list(mailboxes)
+
+
+def _auctioneer(npc, sides, x, y, zone=12):
+    return (f"[{npc}] = {{'Auc{npc}',1,1,1,1,0,{{[{zone}]={{{{{x},{y}}}}}}},nil,{zone},nil,nil,12,\"{sides}\","
+            "\"Auctioneer\",4097},")
+
+
+class NeutralAuctionTests(unittest.TestCase):
+    def near(self, *rows):
+        t, npcs, boxes = _near((10, 10), *rows)
+        return trainers.nearby(t, npcs, boxes, 5.0)
+
+    def test_an_auctioneer_for_both_factions_is_neutral(self):
+        got = self.near(_auctioneer(2, "AH", 11, 10))
+        self.assertEqual((got.auction, got.neutral_auction), (True, True))
+
+    def test_a_faction_auctioneer_is_not(self):
+        for sides in ("A", "H"):
+            got = self.near(_auctioneer(2, sides, 11, 10))
+            self.assertEqual((got.auction, got.neutral_auction), (True, False), sides)
+
+    def test_a_faction_auctioneer_next_to_a_neutral_one_makes_it_a_plain_auction_house(self):
+        got = self.near(_auctioneer(2, "AH", 11, 10), _auctioneer(3, "A", 12, 10))
+        self.assertEqual((got.auction, got.neutral_auction), (True, False))
+
+    def test_a_neutral_auctioneer_out_of_range_does_not_count(self):
+        got = self.near(_auctioneer(2, "A", 11, 10), _auctioneer(3, "AH", 40, 40))
+        self.assertEqual((got.auction, got.neutral_auction), (True, False))
+
+    def test_no_auction_house_is_not_neutral(self):
+        self.assertFalse(self.near().neutral_auction)
+
+    def test_an_empty_friendly_field_is_for_both(self):  # the loader reads a missing field as "AH" too
+        row = "[2] = {'Auc',1,1,1,1,0,{[12]={{11,10}}},nil,12,nil,nil,nil,nil,\"Auctioneer\",4097},"
+        self.assertTrue(self.near(row).neutral_auction)
+
+    def test_booty_bay_style_fixture_trainer_has_a_neutral_auction_house(self):
+        data = fixture_data()
+        t = next(t for t in data.trainers if t.npc_id == 90001)
+        self.assertTrue(trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS).neutral_auction)
+
+
+class ClosestServiceTests(unittest.TestCase):
+    def closest(self, at, *rows, mailboxes=(), zone=12):
+        t, npcs, boxes = _near(at, *rows, mailboxes=mailboxes)
+        t = Trainer(1, "T", TAILOR, "Master", "A", zone, at, True)
+        return trainers.closest_service(t, npcs, boxes)
+
+    BANK = "[5] = {'Bank',1,1,1,1,0,{[12]={{%s,%s}}},nil,12,nil,nil,12,\"A\",\"Banker\",256},"
+
+    def test_the_nearest_of_the_three(self):
+        self.assertEqual(self.closest((10, 10), self.BANK % (30, 10), mailboxes=[(12, 10, 60)]),
+                         trainers.Closest("bank", False))
+        self.assertEqual(self.closest((10, 10), self.BANK % (30, 10), mailboxes=[(12, 10, 20)]),
+                         trainers.Closest("mailbox", False))
+        self.assertEqual(self.closest((10, 10), self.BANK % (60, 10), _auctioneer(2, "A", 10, 40)),
+                         trainers.Closest("auction", False))
+
+    def test_a_neutral_auction_house_says_so(self):
+        self.assertEqual(self.closest((10, 10), _auctioneer(2, "AH", 10, 40)), trainers.Closest("auction", True))
+
+    def test_the_closest_auctioneer_decides_neutral(self):
+        got = self.closest((10, 10), _auctioneer(2, "A", 10, 30), _auctioneer(3, "AH", 10, 50))
+        self.assertEqual(got, trainers.Closest("auction", False))
+
+    def test_only_the_same_zone_counts(self):
+        self.assertIsNone(self.closest((10, 10), mailboxes=[(13, 11, 11)]))
+        self.assertIsNone(self.closest((10, 10), _auctioneer(2, "A", 11, 11, zone=13)))
+
+    def test_nothing_in_the_zone(self):
+        self.assertIsNone(self.closest((10, 10)))
+
+    def test_unplaced_services_do_not_count(self):
+        self.assertIsNone(self.closest((10, 10), self.BANK % (-1, -1)))
+
+    def test_a_trainer_without_coordinates_has_none(self):
+        t = Trainer(1, "T", TAILOR, "Master", "A", 12, None, True)
+        self.assertIsNone(trainers.closest_service(t, {}, [(12, 1, 1)]))
+
+    def test_a_tie_goes_to_the_mailbox_then_the_bank(self):
+        self.assertEqual(self.closest((10, 10), self.BANK % (10, 30), mailboxes=[(12, 10, 30)]).kind, "mailbox")
+        self.assertEqual(self.closest((10, 10), self.BANK % (10, 30), _auctioneer(2, "A", 10, 30)).kind, "bank")
 
 
 class ZoneNameTests(unittest.TestCase):
@@ -366,11 +457,55 @@ class TextTests(unittest.TestCase):
         self.assertEqual(f(Services(False, True, False)), "Nearby: auction house; no bank or mailbox.")
         self.assertEqual(f(Services(False, False, False)), "Nearby: none (no bank, auction house or mailbox).")
 
+    NEUTRAL = "neutral AH (its own prices and a higher deposit)"
+
     def test_remote_stop_with_coordinates(self):
         stop = trainer_text.remote_stop(self.info("alliance"), BS, 300)
         self.assertTrue(stop.found)
+        # the fixture's only auctioneer near Brakka serves both factions
         self.assertEqual(stop.text, "Brakka Ironfold, Stranglethorn Vale (30.0, 70.0). "
-                               "Nearby: bank, auction house, mailbox.")
+                                    f"Nearby: bank, {self.NEUTRAL}, mailbox.")
+
+    def test_a_neutral_auction_house_is_named_so_in_every_position(self):
+        f = trainer_text.services_text
+        self.assertEqual(f(Services(True, True, True, True)), f"Nearby: bank, {self.NEUTRAL}, mailbox.")
+        self.assertEqual(f(Services(False, True, False, True)), f"Nearby: {self.NEUTRAL}; no bank or mailbox.")
+        self.assertEqual(f(Services(True, True, True, False)), "Nearby: bank, auction house, mailbox.")
+
+    def test_nothing_near_says_the_closest(self):
+        f = trainer_text.services_text
+        none = Services(False, False, False)
+        self.assertEqual(f(none, trainers.Closest("mailbox")),
+                         "Nearby: nothing within a short walk; the closest is the mailbox.")
+        self.assertEqual(f(none, trainers.Closest("bank")),
+                         "Nearby: nothing within a short walk; the closest is the bank.")
+        self.assertEqual(f(none, trainers.Closest("auction")),
+                         "Nearby: nothing within a short walk; the closest is the auction house.")
+        self.assertEqual(f(none, trainers.Closest("auction", True)),
+                         f"Nearby: nothing within a short walk; the closest is the {self.NEUTRAL}.")
+
+    def test_nothing_near_and_nothing_in_the_zone_keeps_todays_text(self):
+        self.assertEqual(trainer_text.services_text(Services(False, False, False), None),
+                         "Nearby: none (no bank, auction house or mailbox).")
+
+    def test_the_closest_is_ignored_when_something_is_near(self):
+        self.assertEqual(trainer_text.services_text(Services(False, False, True), trainers.Closest("bank")),
+                         "Nearby: mailbox; no bank or auction house.")
+
+    def test_a_row_with_nothing_near_names_the_closest_service(self):
+        t = Trainer(1, "Lone Smith", BS, "Master", "AH", 33, (30.0, 70.0), True)
+        npcs = trainers.parse_npc_rows(_npc_text(
+            "[2] = {'Bank',1,1,1,1,0,{[33]={{60,70}}},nil,33,nil,nil,12,\"A\",\"Banker\",256},",
+            "[3] = {'Auc',1,1,1,1,0,{[33]={{30,45}}},nil,33,nil,nil,12,\"AH\",\"Auctioneer\",4097},"))
+        data = trainers.TrainerData([t], npcs, [], {33: "Somewhere"})
+        text = trainer_text.remote_stop(trainer_text.TrainerInfo("alliance", data), BS, 300).text
+        self.assertEqual(text, "Lone Smith, Somewhere (30.0, 70.0). Nearby: nothing within a short walk; "
+                               f"the closest is the {self.NEUTRAL}.")
+        self.assertNotRegex(text, r"\d+ (map|yards|units)")  # no distances
+
+    def test_a_row_with_nothing_in_the_zone_keeps_todays_text(self):
+        self.assertEqual(self.lone(33).text, "Lone Smith, Somewhere (30.0, 70.0). "
+                                             "Nearby: none (no bank, auction house or mailbox).")
 
     def test_remote_stop_several_trainers(self):
         stop = trainer_text.remote_stop(self.info("alliance"), BS, 225)
@@ -468,6 +603,241 @@ class TextTests(unittest.TestCase):
         self.assertIsNone(trainer_text.remote_stop(self.info("alliance"), BS, 100))  # no such rank
 
 
+class NoteRowTests(unittest.TestCase):
+    """What the notes from play add to a trainer row (Artisan and Master)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.data = fixture_data()
+
+    def stop(self, note, level=None, npc=90001, faction="alliance", profession=BS, cap=300):
+        notes = Notes({npc: note} if note is not None else {}, {})
+        info = trainer_text.TrainerInfo(faction, self.data, notes)
+        return trainer_text.remote_stop(info, profession, cap, level).text
+
+    PLACE = "Brakka Ironfold, Stranglethorn Vale (30.0, 70.0). Nearby: bank, " \
+            "neutral AH (its own prices and a higher deposit), mailbox."
+
+    def test_reach_and_flight_path(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=35, flight_path=True), level=40),
+                         self.PLACE + " Easy to reach from about level 35, with a flight path for repeat visits.")
+
+    def test_reach_alone(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=20), level=20),
+                         self.PLACE + " Easy to reach from about level 20.")
+
+    def test_flight_path_alone(self):
+        self.assertEqual(self.stop(TrainerNote(flight_path=True), level=20),
+                         self.PLACE + " With a flight path for repeat visits.")
+
+    def test_note_alone(self):
+        self.assertEqual(self.stop(TrainerNote(note="A tip."), level=20), self.PLACE + " A tip.")
+
+    def test_all_three_in_order(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=20, flight_path=True, note="A tip."), level=25),
+                         self.PLACE + " Easy to reach from about level 20, with a flight path for repeat visits. "
+                                      "A tip.")
+
+    def test_below_the_reach_level_says_so(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=35, flight_path=True, note="A tip."), level=30),
+                         self.PLACE + " Easy to reach from about level 35, with a flight path for repeat visits "
+                                      "(you're level 30: the first trip is harder). A tip.")
+        self.assertEqual(self.stop(TrainerNote(reach_level=35), level=1),
+                         self.PLACE + " Easy to reach from about level 35 (you're level 1: the first trip is harder).")
+
+    def test_at_the_reach_level_it_is_not_harder(self):
+        self.assertNotIn("harder", self.stop(TrainerNote(reach_level=35), level=35))
+
+    def test_below_level_without_a_reach_level_says_nothing(self):
+        self.assertNotIn("you're level", self.stop(TrainerNote(flight_path=True, note="A tip."), level=1))
+
+    def test_unknown_level_says_nothing_about_it(self):
+        self.assertNotIn("you're level", self.stop(TrainerNote(reach_level=35), level=None))
+
+    def test_a_trainer_without_notes_is_unchanged(self):
+        plain = self.stop(None, level=30)
+        self.assertEqual(plain, self.PLACE)
+        self.assertEqual(self.stop(TrainerNote(), level=30), plain)
+        self.assertEqual(self.stop(None, level=30, npc=90001),
+                         trainer_text.remote_stop(trainer_text.TrainerInfo("alliance", self.data), BS, 300).text)
+
+    def test_notes_of_another_trainer_do_not_leak(self):
+        self.assertEqual(self.stop(TrainerNote(reach_level=35), npc=12345, level=1), self.PLACE)
+
+    def test_instance_trainer_group_and_solo(self):
+        note = TrainerNote(group_level=37, solo_level=52, note="A group can go earlier.")
+        self.assertEqual(self.stop(note, level=45, npc=90006, faction="horde", profession=ENCH),
+                         "Zarn Runeweaver, inside Uldaman. Go with a group from about level 37, "
+                         "solo from about level 52. A group can go earlier.")
+
+    def test_instance_trainer_below_the_group_level(self):
+        note = TrainerNote(group_level=37, solo_level=52, note="A group can go earlier.")
+        self.assertEqual(self.stop(note, level=30, npc=90006, faction="horde", profession=ENCH),
+                         "Zarn Runeweaver, inside Uldaman. Go with a group from about level 37, "
+                         "solo from about level 52 (you're level 30). A group can go earlier.")
+        # at the group level, and between group and solo, nothing is added
+        for level in (37, 40, 52, 60):
+            self.assertNotIn("you're level",
+                             self.stop(note, level=level, npc=90006, faction="horde", profession=ENCH), level)
+
+    def test_each_trainer_named_gets_its_own_notes(self):
+        notes = Notes({90002: TrainerNote(note="One."), 90017: TrainerNote(note="Two.")}, {})
+        info = trainer_text.TrainerInfo("alliance", self.data, notes)
+        self.assertEqual(trainer_text.remote_stop(info, BS, 225, 60).text,
+                         "Thessa Hammerlow, Stormwind City (60.5, 40.2). One. "
+                         "Or Wandering Smith, Ironforge (20.0, 20.0). Two.")
+
+    def test_the_notes_say_nothing_about_services_known(self):
+        info = trainer_text.TrainerInfo("alliance", self.data, Notes({90001: TrainerNote(note="A tip.")}, {}))
+        self.assertTrue(trainer_text.remote_stop(info, BS, 300, 60).services_known)
+
+
+class NoteNearbyTests(unittest.TestCase):
+    """Services the owner found in play count as near, whatever the radius says."""
+    @classmethod
+    def setUpClass(cls):
+        cls.data = fixture_data()
+
+    def text(self, nearby, npc=90001, cap=300, faction="alliance", profession=BS):
+        notes = Notes({npc: TrainerNote(nearby=nearby)}, {})
+        info = trainer_text.TrainerInfo(faction, self.data, notes)
+        return trainer_text.remote_stop(info, profession, cap).text
+
+    def lone(self, nearby, mailboxes=(), rows=None):
+        t = Trainer(1, "Lone Smith", BS, "Master", "AH", 33, (30.0, 70.0), True)
+        data = trainers.TrainerData([t], rows or {}, list(mailboxes), {33: "Somewhere"})
+        info = trainer_text.TrainerInfo("alliance", data, Notes({1: TrainerNote(nearby=nearby)}, {}))
+        return trainer_text.remote_stop(info, BS, 300).text
+
+    def test_a_listed_service_replaces_nothing_within_a_short_walk(self):
+        far = [(33, 90, 90)]  # a mailbox in the zone, far away: the closest-service text would say so
+        self.assertEqual(self.lone((), far), "Lone Smith, Somewhere (30.0, 70.0). Nearby: nothing within a short "
+                                             "walk; the closest is the mailbox.")
+        self.assertEqual(self.lone(("mail",), far),
+                         "Lone Smith, Somewhere (30.0, 70.0). Nearby: mailbox; no bank or auction house.")
+
+    def test_listed_services_add_to_what_the_data_finds(self):
+        self.assertEqual(self.lone(("bank", "auction"), [(33, 30.5, 70)]),
+                         "Lone Smith, Somewhere (30.0, 70.0). Nearby: bank, auction house, mailbox.")
+
+    def test_a_listed_service_the_data_finds_is_said_once(self):
+        self.assertEqual(self.lone(("mail",), [(33, 30.5, 70)]),
+                         "Lone Smith, Somewhere (30.0, 70.0). Nearby: mailbox; no bank or auction house.")
+
+    def test_a_found_neutral_auction_house_stays_neutral(self):
+        self.assertIn("neutral AH", self.text(("auction",)))
+
+    def test_no_listed_services_changes_nothing(self):
+        self.assertEqual(self.text(()), trainer_text.remote_stop(
+            trainer_text.TrainerInfo("alliance", self.data), BS, 300).text)
+
+    def test_a_capital_trainer_still_has_no_nearby_line(self):
+        self.assertNotIn("Nearby", self.text(("mail",), npc=90002, cap=225))
+
+
+class CityTipTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.data = fixture_data()
+
+    def row(self, cities, faction="alliance", profession=BS, cap=150, data=None):
+        info = trainer_text.TrainerInfo(faction, data or self.data, Notes({}, cities))
+        return trainer_text.city_row(info, profession, cap)
+
+    def test_the_tip_follows_the_row(self):
+        got = self.row({1519: "A tip."}, profession=TAILOR, cap=75)
+        self.assertEqual(got, "Train Tailoring to 75 at any Journeyman Tailor in a capital "
+                              "(for example Olla Stitchwell, Stormwind City). A tip.")
+
+    def test_a_tip_for_some_professions_shows_only_on_their_rows(self):
+        notes = Notes({}, {1519: "A tip."}, {1519: frozenset({TAILOR})})
+        info = trainer_text.TrainerInfo("alliance", self.data, notes)
+        self.assertTrue(trainer_text.city_row(info, TAILOR, 75).endswith("Stormwind City). A tip."))
+        self.assertNotIn("A tip", trainer_text.city_row(trainer_text.TrainerInfo("horde", self.data, notes), BS, 150))
+        ts = [Trainer(1, "Smith", BS, "Expert", "A", 1519, (1, 1), True)]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City"})
+        self.assertNotIn("A tip", trainer_text.city_row(trainer_text.TrainerInfo("alliance", data, notes), BS, 150))
+
+    def test_a_tip_without_professions_shows_on_every_profession(self):
+        self.assertIn("A tip.", self.row({1519: "A tip."}, profession=TAILOR, cap=75))
+
+    def test_a_city_without_a_tip_is_unchanged(self):
+        plain = trainer_text.city_row(trainer_text.TrainerInfo("horde", self.data), BS, 150)
+        self.assertEqual(self.row({1519: "A tip."}, faction="horde"), plain)
+        self.assertNotIn("A tip", plain)
+
+    def test_each_tip_once_in_example_order(self):
+        ts = [Trainer(i, f"Smith {i}", BS, "Expert", "A", z, (1, 1), True)
+              for i, z in ((1, 1519), (2, 1537), (3, 1519))]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge"})
+        got = self.row({1519: "Stormwind tip.", 1537: "Ironforge tip."}, data=data)
+        self.assertEqual(got, "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                              "(for example Smith 1, Stormwind City or Smith 2, Ironforge). "
+                              "Stormwind tip. Ironforge tip.")
+        data = trainers.TrainerData([ts[0], ts[2]], {}, [], {1519: "Stormwind City"})
+        self.assertEqual(self.row({1519: "Stormwind tip."}, data=data).count("Stormwind tip."), 1)
+
+    def test_a_tip_for_a_city_not_named_is_left_out(self):
+        ts = [Trainer(i, f"Smith {i}", BS, "Expert", "A", z, (1, 1), True)
+              for i, z in ((1, 1519), (2, 1537), (3, 1657))]
+        data = trainers.TrainerData(ts, {}, [], {1519: "Stormwind City", 1537: "Ironforge", 1657: "Darnassus"})
+        self.assertNotIn("Darnassus tip", self.row({1657: "Darnassus tip."}, data=data))
+
+    def test_a_row_without_a_capital_trainer_has_no_tip(self):
+        data = trainers.TrainerData([Trainer(1, "Far Smith", BS, "Expert", "A", 33, (1, 1), True)],
+                                    {}, [], {33: "Somewhere"})
+        self.assertNotIn("tip", self.row({33: "A tip."}, data=data))
+
+    def test_no_notes_is_todays_row(self):
+        info = trainer_text.TrainerInfo("horde", self.data)
+        self.assertEqual(trainer_text.city_row(info, BS, 150),
+                         "Train Blacksmithing to 150 at any Expert Blacksmith in a capital "
+                         "(for example Grom Anvilhand, Orgrimmar).")
+
+
+class ShippedNotesTests(unittest.TestCase):
+    def test_every_city_tip_is_for_a_capital(self):
+        for zone in trainer_notes.load_notes().cities:
+            self.assertIn(zone, trainers.CAPITALS["alliance"] + trainers.CAPITALS["horde"])
+
+
+REAL = settings.paths(settings.home({})).gamedata  # the player's real cache (read only), not the test home
+HAVE_REAL = all((REAL / n).exists() for n in gamedata.TRAINER_FILES)
+
+
+@unittest.skipUnless(HAVE_REAL, "real trainer data not downloaded")
+class RealDataTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.data = trainers.load_trainer_data(REAL)
+        cls.by_id = {t.npc_id: t for t in cls.data.trainers}
+
+    def test_every_noted_npc_is_an_artisan_or_master_trainer(self):
+        for npc in trainer_notes.load_notes().trainers:
+            self.assertIn(npc, self.by_id, npc)
+            self.assertIn(self.by_id[npc].rank, ("Artisan", "Master"), npc)
+
+    def test_booty_bay_auctioneers_serve_both_factions(self):
+        # Brikk Keencraft, Master Blacksmith in Booty Bay
+        near = trainers.nearby(self.by_id[2836], self.data.npc_rows, self.data.mailboxes, trainers.NEARBY_RADIUS)
+        self.assertTrue(near.auction and near.neutral_auction)
+        info = trainer_text.TrainerInfo("alliance", self.data)
+        self.assertIn("neutral AH (its own prices and a higher deposit)", trainer_text.remote_stop(info, BS, 300).text)
+
+    def test_the_rank_fill_changes_only_tailoring_master_for_the_planned_professions(self):
+        d = REAL
+        raw = gamedata.parse(gamedata.extract_table((d / "Trainer.lua").read_text(encoding="utf-8"), "TrainerRanks"))
+        before = {int(k): [gamedata.Rank(*map(int, x)) for x in v] for k, v in raw.items()}
+        after = gamedata.fill_rank_levels(before)
+        changed = [(prof, b.cap) for prof in gamedata.PROFESSIONS for b, a in zip(before[prof], after[prof])
+                   if a != b]
+        self.assertEqual(changed, [(TAILOR, 300)])
+
+    def test_pinned_tailoring_master_rank_has_a_level(self):
+        gd = gamedata.load_gamedata(REAL, professions=[TAILOR])
+        self.assertEqual(gd.trainer_ranks[TAILOR][-1].cap, 300)
+        self.assertEqual(gd.trainer_ranks[TAILOR][-1].level, 35)
+
+
 class LoadInfoTests(unittest.TestCase):
     def folder(self, d):
         for p in FIX.iterdir():
@@ -480,6 +850,32 @@ class LoadInfoTests(unittest.TestCase):
         fetch.assert_called_once_with(dest=Path(d), only=gamedata.TRAINER_FILES)
         self.assertEqual((info.faction, note), ("horde", ""))
         self.assertTrue(info.data.trainers)
+
+    def test_loads_the_shipped_notes(self):
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(gamedata, "fetch_all"):
+            info, _note = trainer_text.load_info(self.folder(d), "horde")
+        self.assertEqual(info.notes, trainer_notes.load_notes())
+
+    def test_unusable_notes_are_a_note_and_the_trainers_are_still_named(self):
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(gamedata, "fetch_all"), \
+                unittest.mock.patch.object(trainer_notes, "load_notes", side_effect=ValueError("trainers.1 is wrong")):
+            info, note = trainer_text.load_info(self.folder(d), "horde")
+        self.assertIsNone(info.notes)
+        self.assertTrue(info.data.trainers)
+        self.assertEqual(note, "Trainer notes are left out of this guide: trainers.1 is wrong.")
+
+    def test_shipped_notes_with_a_wrongly_typed_list_are_a_note_not_a_traceback(self):
+        bad = ('[trainers.1]\nnearby = [["bank"]]\n', '[trainers.1]\nnearby = [{}]\n',
+               '[cities.1519]\ntip = "t"\nprofessions = [["alchemy"]]\n')
+        for text in bad:
+            with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as static, \
+                    unittest.mock.patch.object(gamedata, "fetch_all"), \
+                    unittest.mock.patch.object(trainer_notes, "STATIC_DIR", Path(static)):
+                (Path(static) / "trainer_notes.toml").write_text(text, encoding="utf-8")
+                info, note = trainer_text.load_info(self.folder(d), "horde")
+            self.assertIsNone(info.notes, text)
+            self.assertTrue(info.data.trainers)
+            self.assertTrue(note.startswith("Trainer notes are left out of this guide: "), text)
 
     def test_no_faction_downloads_nothing(self):
         with unittest.mock.patch.object(gamedata, "fetch_all") as fetch:
