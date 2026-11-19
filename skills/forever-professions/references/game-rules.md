@@ -29,7 +29,11 @@ say so.
 - Buying is never the limit: auction house purchases wait in the mail for 30 days.
 - The limit is crafting and selling space: each crafted gear piece takes a slot.
 - Bag slots: the backpack (16) plus 4 normal bags and **1 reagent bag**. A reagent bag holds any
-  crafting materials, so materials can sit there while normal slots hold the crafts.
+  crafting materials, so materials can sit there while normal slots hold the crafts. The planner
+  counts them apart: `bag_slots` are free normal slots, `reagent_slots` the slots of the reagent bag.
+  Any item a loaded recipe uses as a reagent, and any trade good (item class 7: crafted
+  intermediates and disenchant materials too), goes in the reagent bag first; gear (weapons,
+  armor), patterns and tools never do. Packed essences count as reagents.
 - A mail a player sends holds at most 12 attachments; auction house mail can hold more.
 - Items move in stacks. Usually 20; potions often 5; armor kits 10. The client's `Stackable`
   field has matched every in-game check so far; when an item has none, or two item IDs exist,

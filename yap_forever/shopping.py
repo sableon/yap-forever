@@ -51,6 +51,45 @@ def carried_slots(counts: dict, stack: dict) -> int:
     return slots(pack(counts, stack), stack)
 
 
+def reagent_items(gd) -> set[int]:
+    """Items a reagent bag holds: any item a loaded recipe uses as a reagent, or trade goods (ItemSparse
+    class 7), crafted intermediates and disenchant materials included. Gear (class 2 weapons, 4 armor),
+    patterns (class 9) and tools never go in it."""
+    out = {i for r in gd.recipes.values() for i in r.reagents}
+    out |= {i for i, it in gd.items.items() if it.class_id == 7}
+    never = {i for i, it in gd.items.items() if it.class_id in (2, 4, 9)}
+    return out - never - set(gd.item_tool_category) - set(gd.tool_items.values())
+
+
+def _split_slots(counts: dict, stack: dict, reagents, reagent_slots: int) -> tuple[int, int]:
+    """(normal slots, reagent bag slots) used by `counts` as they are: reagent stacks fill the reagent
+    bag first, what does not fit and every other stack take normal slots."""
+    reagents = set(reagents or ()) | {ESSENCE_PAIRS[i] for i in (reagents or ()) if i in ESSENCE_PAIRS}  # packed essences
+    mine = slots({i: q for i, q in counts.items() if i in reagents}, stack)
+    rest = slots({i: q for i, q in counts.items() if i not in reagents}, stack)
+    in_bag = min(mine, max(reagent_slots, 0))
+    return rest + mine - in_bag, in_bag
+
+
+def carried_split(counts: dict, stack: dict, reagents, reagent_slots: int) -> tuple[int, int]:
+    """(normal slots, reagent bag slots) for carrying `counts`, essences packed."""
+    return _split_slots(pack(counts, stack), stack, reagents, reagent_slots)
+
+
+def carried_slots_split(counts: dict, stack: dict, reagents, reagent_slots: int) -> int:
+    """Normal slots for carrying `counts` after the reagent bag takes reagent stacks first (essences
+    packed; packed essences count as reagents). Without a reagent bag it is `carried_slots`."""
+    return carried_split(counts, stack, reagents, reagent_slots)[0]
+
+
+def slots_text(split: tuple[int, int]) -> str:
+    """'4 bag slots', or '1 bag slot + 3 reagent bag slots' when the reagent bag holds some."""
+    normal, bag = split
+    parts = [f"{n} {word}slot{'s' if n != 1 else ''}"
+             for n, word, show in ((normal, "bag ", normal or not bag), (bag, "reagent bag ", bag)) if show]
+    return " + ".join(parts)
+
+
 def pack_note(gd, counts: dict, stack: dict, unpack: str) -> str:
     """'to save slots, pack 90 Lesser X into 30 Greater X (3 to 1) and unpack ...', or ''."""
     packed = pack(counts, stack)
@@ -63,12 +102,14 @@ def pack_note(gd, counts: dict, stack: dict, unpack: str) -> str:
     return f"to save slots, pack {', '.join(parts)} (3 to 1) and unpack {unpack}" if parts else ""
 
 
-def batch_size(per_craft: dict, output, stack: dict, free: int) -> int:
-    """Most crafts whose mats (from the mail) and products (until sold) fit in `free` slots at once."""
+def batch_size(per_craft: dict, output, stack: dict, free: int, reagents=None, reagent_slots: int = 0) -> int:
+    """Most crafts whose mats (from the mail) and products (until sold) fit in `free` normal slots at
+    once; the reagent bag (`reagent_slots`) takes reagent stacks first."""
     best = 0
     for k in range(1, 1000):
-        peak = max(slots({i: q * (k - t) for i, q in per_craft.items()}, stack)
-                   + (slots({output[0]: output[1] * t}, stack) if output else 0) for t in range(k + 1))
+        peak = max(_split_slots({i: q * (k - t) for i, q in per_craft.items()}
+                                | ({output[0]: output[1] * t} if output else {}), stack, reagents, reagent_slots)[0]
+                   for t in range(k + 1))
         if peak > free:
             return best
         best = k
@@ -177,14 +218,18 @@ def route_rows(plan, gd) -> list[dict]:
     return rows
 
 
-def group_trips(rows, cap: int, stack: dict) -> list[list[dict]]:
-    """Consecutive rows whose mats fit in `cap` slots: one mailbox trip each."""
+def group_trips(rows, cap: int, stack: dict, reagents=None, reagent_slots: int = 0) -> list[list[dict]]:
+    """Consecutive rows whose mats fit in `cap` normal slots, after the reagent bag takes its share
+    of reagent stacks: one mailbox trip each."""
+    def used(counts):
+        return carried_slots_split(counts, stack, reagents, reagent_slots)
+
     trips, need = [[]], {}
     for r in rows:
         trial = dict(need)
         for i, q in r["need"].items():
             trial[i] = trial.get(i, 0) + q
-        if trips[-1] and carried_slots(trial, stack) > max(cap, carried_slots(need, stack)):  # rows adding no stacks stay
+        if trips[-1] and used(trial) > max(cap, used(need)):  # rows adding no stacks stay
             trips.append([])
             trial = dict(r["need"])
         trips[-1].append(r)
@@ -219,10 +264,11 @@ def _split(rows, plan, gd=None, left=None) -> dict[tuple[int, str], int]:
     return out
 
 
-def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None) -> tuple[int, list[tuple[int, int, str]]]:
+def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0) -> tuple[int, list[tuple[int, int, str]]]:
     """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
     owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
-    the trip use the bank first, as on the shopping list."""
+    the trip use the bank first, as on the shopping list. reagent_slots: a reagent bag holds mats
+    first; CRAFT_ROOM stays on normal slots."""
     every = route_rows(plan, gd)
     at = next((k for k, r in enumerate(every)
                if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
@@ -236,25 +282,25 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None)
         rows = [r for r in rows if r["st"].skill_to <= min(later)] or rows[:1]
     if bag_slots:
         items = {i for r in rows for i in r["need"]}
-        rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items))[0]
+        rows = group_trips(rows, bag_slots - CRAFT_ROOM, stacks(gd, items), reagent_items(gd), reagent_slots)[0]
     else:
         rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
     split = _split(rows, plan, gd, left)
     return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
 
 
-def bring_text(plan, gd, trip, bag_slots, owned=None) -> str:
-    reach, items = bring_list(plan, gd, trip, bag_slots, owned)
+def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0) -> str:
+    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots)
     if not items:
         return ""
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
     parts = [f"{n} {gd.name(i)} ({where[src]})" for i, n, src in items]
     total = _sum({i: n} for i, n, _src in items)
     stack = stacks(gd, total)
-    n_slots = carried_slots(total, stack)
+    split = carried_split(total, stack, reagent_items(gd), reagent_slots)
     note = pack_note(gd, total, stack, "them at the trainer")
     return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
-            f"({n_slots} bag slot{'s' if n_slots != 1 else ''}{'; ' + note if note else ''}); the town may have "
+            f"({slots_text(split)}{'; ' + note if note else ''}); the town may have "
             "no auction house, mailbox or bank, so buy and collect before you go.")
 
 
@@ -297,9 +343,11 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
     if not stock.bag_slots:
         return lines, None
     stack = stacks(gd, {i for r in rows for i in r["need"]})
-    trips = group_trips(rows, stock.bag_slots - CRAFT_ROOM, stack)
+    reagents, bag = reagent_items(gd), stock.reagent_slots
+    trips = group_trips(rows, stock.bag_slots - CRAFT_ROOM, stack, reagents, bag)
     lines += ["## Mailbox trips", "",
-              f"Planned for {stock.bag_slots} free bag slots; bought materials wait in the mail.", ""]
+              f"Planned for {stock.bag_slots} free bag slots"
+              + (f" and {bag} reagent bag slots" if bag else "") + "; bought materials wait in the mail.", ""]
     left = dict(owned)
     for t, trip in enumerate(trips, 1):
         parts = {"mail": [], "vendor": [], "bank": []}
@@ -312,8 +360,9 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
                 need[i] = need.get(i, 0) + q
         whole = {i: math.ceil(q - 1e-6) for i, q in need.items()}
         note = pack_note(gd, whole, stack, "them as you craft")
-        lines.append(f"- 📬 **Trip {t}** (skill {first.skill_from}–{last.skill_to}, "
-                     f"{carried_slots(whole, stack)} stacks)."
+        normal, in_bag = carried_split(whole, stack, reagents, bag)
+        stacks_text = f"{normal + in_bag} stacks" + (f" ({normal} bag, {in_bag} reagent bag)" if bag else "")
+        lines.append(f"- 📬 **Trip {t}** (skill {first.skill_from}–{last.skill_to}, {stacks_text})."
                      + (f" From the mail: {', '.join(parts['mail'])}." if parts["mail"] else "")
                      + (f" From a vendor: {', '.join(parts['vendor'])}." if parts["vendor"] else "")
                      + (f" From the bank: {', '.join(parts['bank'])}." if parts["bank"] else "")

@@ -96,6 +96,13 @@ def _skills(table: dict) -> dict[int, int]:
     return out
 
 
+def _slots(d: dict, key: str, default):
+    n = int(d[key]) if key in d else default
+    if n is not None and n < 0:
+        raise ValueError(f"{key} must be 0 or more, not {n}")
+    return n
+
+
 def load_stock(path: Path) -> Stock:
     with open(path, "rb") as f:
         d = tomllib.load(f)
@@ -116,7 +123,7 @@ def load_stock(path: Path) -> Stock:
         quest_item_sales=int(d["quest_item_sales"]) if "quest_item_sales" in d else None,
         skills=_skills(d.get("skills", {})),
         goals={_profession_id(k): parse_goal(v) for k, v in d.get("goals", {}).items()},
-        bag_slots=int(d["bag_slots"]) if "bag_slots" in d else None,
+        bag_slots=_slots(d, "bag_slots", None),
         keep_greens=bool(d.get("keep_greens", False)),
-        reagent_slots=int(d.get("reagent_slots", 0)),
+        reagent_slots=_slots(d, "reagent_slots", 0),
     )

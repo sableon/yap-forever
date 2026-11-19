@@ -106,6 +106,13 @@ class GoalsTests(unittest.TestCase):
         self.assertEqual(s.reagent_slots, 6)
         self.assertEqual(plain.reagent_slots, 0)
 
+    def test_stock_negative_slots_are_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            for key in ("reagent_slots", "bag_slots"):
+                with self.subTest(key=key), self.assertRaisesRegex(ValueError, key):
+                    config.load_stock(write(d, "stock.toml", f"{key} = -1\n" + STOCK))
+            self.assertEqual(config.load_stock(write(d, "zero.toml", "bag_slots = 0\nreagent_slots = 0\n" + STOCK)).bag_slots, 0)
+
 
 class CredentialTests(unittest.TestCase):
     def test_credentials_repr_masks(self):
