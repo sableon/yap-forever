@@ -707,3 +707,28 @@ class TalentLineTests(unittest.TestCase):
         from yap_forever.profile import Character
         text = self.render(Character("A B", dedicated_study=False), skills={BS: 30, ENCH: 10})
         self.assertNotIn("Dedicated Study", text)
+
+
+class BudgetLineTests(unittest.TestCase):
+    def render(self, next_stop, order=None):
+        from yap_forever import budget
+        from yap_forever.config import Budget
+        rs = base_recipes()
+        p = run(rs, BARS, cap=225)
+        cut = budget.BudgetCut({BS: 225, ENCH: 225}, p, 341200, next_stop, {}, {BS: 225, ENCH: 225}, {BS: 1, ENCH: 1})
+        goal = Budget(30, order)
+        return render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(), {BS: 225, ENCH: 225},
+                            budget_lines=budget.lines(cut, goal), order=order)
+
+    def test_budget_lines(self):
+        from yap_forever.guide import gold
+        text = self.render({BS: (300, 1200000)})
+        header = text[:text.index("## Route")]
+        self.assertIn(f"30g takes Blacksmithing to 225 and Enchanting to 225 ({gold(341200)}).", header)
+        self.assertIn(f"The next stop, Blacksmithing 300, costs about {gold(1200000)} more.", header)
+        self.assertNotIn("The next stop", self.render({}))
+
+    def test_one_at_a_time_intro(self):
+        self.assertIn("Level one profession at a time: Enchanting first, then Blacksmithing.",
+                      self.render({}, order=(ENCH, BS)))
+        self.assertIn("Level both professions side by side", self.render({}))

@@ -462,6 +462,24 @@ class CliTests(unittest.TestCase):
         self.assertIn("Tailoring", out)
         self.assertIn("not planned", out)
 
+    def test_plan_with_a_budget_cuts_both_routes(self):
+        self.ready_home()
+        me = ["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"]
+        code, out = run(me + ["--budget", "0"], self.paths)
+        self.assertEqual(code, 0, out)
+        for m in ("gold", "value"):
+            guide = next(self.paths.reports.glob(f"*-guide-{m}.md")).read_text(encoding="utf-8")
+            report = next(self.paths.reports.glob(f"*-plan-{m}.md")).read_text(encoding="utf-8")
+            for text in (guide, report):
+                self.assertIn("0g doesn't reach the first stop: nothing is planned yet.", text)
+                self.assertIn("The next stop, Blacksmithing 20, costs about", text)
+            self.assertIn("planned to your 0g budget", report)
+        code, out = run(me + ["--budget", "1000"], self.paths)
+        self.assertEqual(code, 0, out)
+        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
+        self.assertIn("1000g takes Blacksmithing to 20 (", guide)
+        self.assertNotIn("The next stop", guide)
+
 
 if __name__ == "__main__":
     unittest.main()

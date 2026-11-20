@@ -51,7 +51,7 @@ class StopsTests(unittest.TestCase):
     def test_stops_are_the_rank_caps_and_the_target(self):
         self.assertEqual(budget.STOPS, (75, 150, 225, 300))
         self.assertEqual(budget.stops_for(1, 225), [75, 150, 225])
-        self.assertEqual(budget.stops_for(184, 300), [225, 300])
+        self.assertEqual(budget.stops_for(190, 300), [225, 300])
         self.assertEqual(budget.stops_for(150, 200), [200])
         self.assertEqual(budget.stops_for(225, 225), [])
 
@@ -134,6 +134,39 @@ class CutTests(unittest.TestCase):
         self.assertEqual(crafts, sorted(crafts))  # every Blacksmithing step first (164 < 333)
         even = cut(inputs(both(), {BS: 150, ENCH: 150}), 2)  # side by side, the same gold stops both at 75
         self.assertEqual(even.caps, {BS: 75, ENCH: 75})
+
+
+class RenderTests(unittest.TestCase):
+    """The guide and the report of a cut route: what the budget reaches and why."""
+    def render(self, i, c, goal):
+        from yap_forever.guide import render_guide
+        from yap_forever.report import render, verdict
+        lines = budget.lines(c, goal)
+        guide = render_guide(c.plan, i.gd, i.market, i.stock, c.planned_caps, budget_lines=lines)
+        report = render(c.plan, verdict(c.plan, i.stock), i.market, i.gd, i.stock, i.favor, c.planned_caps,
+                        budget_lines=lines, goal=goal)
+        return guide, report
+
+    def test_budget_below_first_stop_says_what_it_costs(self):  # RF1
+        i = inputs(bs_only(), {BS: 225})
+        goal = Budget(0.5)
+        guide, report = self.render(i, budget.cut(i, "gold", goal, gold_of(i)), goal)
+        for text in (guide, report):
+            self.assertIn("0.5g doesn't reach the first stop: nothing is planned yet.", text)
+            self.assertIn(f"The next stop, Blacksmithing 75, costs about {gold(TO_75)} more.", text)
+            self.assertNotIn("already at", text)
+        self.assertIn("**Gold to bring: 0c**", guide)
+
+    def test_stalled_profession_says_why(self):  # RF4
+        i = inputs(both(), {BS: 225, ENCH: 300}, skills={ENCH: 225}, level=30,
+                   ranks={ENCH: [Rank(300, 10000, 200, 35)]})
+        goal = Budget(1.6)
+        guide, report = self.render(i, budget.cut(i, "gold", goal, gold_of(i)), goal)
+        for text in (guide, report):
+            self.assertIn(f"1.6g takes Blacksmithing to 150 ({gold(TO_150)}).", text)
+            self.assertIn("Enchanting gets none of it: next rank needs character level 35.", text)
+            self.assertIn("The next stop, Blacksmithing 225, costs about", text)
+            self.assertNotIn("The next stop, Enchanting", text)
 
 
 if __name__ == "__main__":

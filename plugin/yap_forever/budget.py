@@ -133,7 +133,7 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
 
 
 def amount(budget: Budget) -> str:
-    """The budget as the player gave it: '36g', '12.5g'."""
+    """The budget as the player gave it: '30g', '12.5g'."""
     return f"{budget.gold:.2f}".rstrip("0").rstrip(".") + "g"
 
 
