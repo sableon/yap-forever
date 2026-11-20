@@ -165,6 +165,17 @@ class BringListTests(unittest.TestCase):
             self.assertEqual(reach, 200, bags)
             self.assertEqual(items, [(S, 60, "mail")], bags)
 
+    def test_bring_list_stops_at_the_next_recipe_visit(self):
+        import dataclasses
+        from yap_forever.shopping import bring_list
+        p, gd = rank_trip_plan()
+        gd.recipes[2] = dataclasses.replace(gd.recipes[2], required_skill=232)  # unlocks after the rank trip
+        p.learn_log = [(BS, 235, 2, "trainer")]  # learned at 235: a trip back to the trainer then
+        self.assertEqual(bring_list(p, gd, self.trip(), bag_slots=None)[0], 245)  # as before without start skills
+        reach, items = bring_list(p, gd, self.trip(), bag_slots=None, start_skills={BS: 225})
+        self.assertEqual(reach, 235)  # level at home after that, and come back at 235
+        self.assertEqual({i for i, _n, _src in items}, {S})
+
 
 if __name__ == "__main__":
     unittest.main()

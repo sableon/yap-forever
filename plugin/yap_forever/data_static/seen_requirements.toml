@@ -1,0 +1,6 @@
+# Trainer recipes seen learnable in game at a skill below the Classic requirement the data infers.
+# The planner never raises their requirement above this skill.
+[[seen]]
+spell_id = 14380
+name = "Truesilver Rod"
+skill = 184   # learned at Blacksmithing 184 (owner, in game, 2026-11-20); Forever lists 175

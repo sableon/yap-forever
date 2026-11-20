@@ -407,5 +407,36 @@ class MainTests(unittest.TestCase):
         fetch.assert_not_called()
 
 
+class SeenRequirementTests(unittest.TestCase):
+    """Trainer recipes seen learnable in game below their inferred Classic requirement."""
+
+    def recipe(self, spell, req, inferred):
+        from tests import toy
+        r = toy.recipe(spell, f"spell {spell}", 164, {toy.IRON_BAR: 1}, req=req)
+        r.inferred_skill = inferred
+        return r
+
+    def test_seen_requirement_caps_inferred(self):
+        from tests import toy
+        gd = gamedata.safe_requirements(toy.gamedata([self.recipe(14380, 175, 200)]))
+        r = gd.recipes[14380]  # Truesilver Rod: learned at Blacksmithing 184, so the Classic 200 is wrong
+        self.assertEqual((r.required_skill, r.listed_skill), (175, None))
+
+    def test_inferred_at_or_below_the_seen_skill_still_raises(self):
+        from tests import toy
+        gd = gamedata.safe_requirements(toy.gamedata([self.recipe(7, 150, 180), self.recipe(8, 150, 190)]),
+                                        seen={7: 180, 8: 185})
+        self.assertEqual((gd.recipes[7].required_skill, gd.recipes[7].listed_skill), (180, 150))
+        self.assertEqual((gd.recipes[8].required_skill, gd.recipes[8].listed_skill), (150, None))
+
+    def test_shipped_rows_have_a_spell_a_name_and_a_skill(self):
+        # the fixture game data has none of these spells, so their trainer source is not checked here
+        rows = gamedata.load_seen_requirements()
+        self.assertEqual(rows[14380], 184)
+        self.assertTrue(all(isinstance(s, int) and 1 <= s <= 300 for s in rows.values()))
+        with open(gamedata.SEEN_REQUIREMENTS, "rb") as f:
+            self.assertTrue(all(isinstance(row.get("name"), str) and row["name"] for row in tomllib.load(f)["seen"]))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -184,9 +184,10 @@ class GuideNotesTests(unittest.TestCase):
     def test_learn_row_says_where_the_forever_data_lists_the_recipe(self):
         gd = safe_requirements(toy.gamedata(cheap_recipes()))
         text = self.guide(self.learn_plan(gd), gd, toy.stock(skills={BS: 50}))
-        (row,) = [l for l in text.splitlines() if l.startswith("- *At 50: Learn BS cheap")]
-        self.assertEqual(row, "- *At 50: Learn BS cheap (trainer 45s 0c; listed from 20 in the Forever data: "
-                              "if the trainer offers it then, you can start it earlier)*")
+        (row,) = [l for l in text.splitlines() if l.startswith("- *At 50: start crafting BS cheap")]
+        # learned before the start (reachable at 50): its fee is on no row, the note stays
+        self.assertEqual(row, "- *At 50: start crafting BS cheap (learned before you start; listed from 20 in the "
+                              "Forever data: if the trainer offers it then, you can start it earlier)*")
 
     def test_old_fallback_wording_is_gone(self):
         gd = safe_requirements(toy.gamedata(cheap_recipes()))
@@ -370,11 +371,14 @@ class WriteReportsTests(unittest.TestCase):
     def test_the_belt_is_learned_at_its_inferred_skill_with_a_note(self):
         texts = self.reports()
         learn = [l for t in (texts["guide-gold"], texts["guide-value"]) for l in t.splitlines()
-                 if "Learn Copper Chain Belt" in l]
+                 if "start crafting Copper Chain Belt" in l and l.startswith("- *At")]
         self.assertEqual(len(learn), 2)  # one learn row in each guide
         for row in learn:
             self.assertRegex(row, r"At (3[5-9]|[4-9]\d):")  # never before the inferred 35
             self.assertIn("listed from 30 in the Forever data", row)
+        stops = [l for t in (texts["guide-gold"], texts["guide-value"]) for l in t.splitlines()
+                 if l.startswith("- Learn Copper Chain Belt (90c) at any Journeyman Blacksmith")]
+        self.assertEqual(len(stops), 2)  # the capital stop that learns it carries the fee
 
     def test_a_recipe_goal_is_planned_to_the_inferred_skill(self):
         from yap_forever import plan as plan_mod
@@ -406,6 +410,19 @@ class WriteReportsTests(unittest.TestCase):
         texts = self.reports(study_hint_gold_per_point=0.0001)
         self.assertIn("Dedicated Study (one free point a day) would cover these", texts["guide-gold"])
 
+    def test_the_same_route_is_not_planned_again_for_its_alternatives(self):
+        from unittest import mock
+
+        from yap_forever import compare, plan as plan_mod
+        real = compare.settle_routes
+
+        def same(candidates, caps):
+            routes, _same = real(candidates, caps)
+            return {"gold": routes["gold"], "value": routes["gold"]}, True
+        with mock.patch.object(plan_mod, "settle_routes", side_effect=same), \
+                mock.patch.object(plan_mod, "trip_alternatives", wraps=plan_mod.trip_alternatives) as alts:
+            self.reports()
+        self.assertEqual(alts.call_count, 1)
 
 if __name__ == "__main__":
     unittest.main()

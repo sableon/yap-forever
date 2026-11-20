@@ -981,19 +981,28 @@ class TripKindTests(unittest.TestCase):
     def test_expert_rank_is_not_a_trip(self):
         from yap_forever.trips import trips
         from tests import toy
-        got = trips(self.plan(), toy.gamedata([]))
+        got = trips(self.plan(), toy.gamedata([]), {BS: 1})
         self.assertEqual([(t.kind, t.skill, t.cap) for t in got], [("rank", 200, 225), ("rank", 275, 300)])
 
     def test_city_ranks_are_the_ranks_below_the_remote_ones(self):
-        from yap_forever.trips import city_ranks
-        got = city_ranks(self.plan())
-        self.assertEqual([(t.kind, t.skill, t.cap, t.profession) for t in got], [("city", 60, 150, BS)])
+        from yap_forever.trips import visits
+        from tests import toy
+        got = [v for v in visits(self.plan(), toy.gamedata([]), {BS: 1}) if not v.remote]
+        self.assertEqual([(v.kind, v.skill, v.rank_cap, v.profession) for v in got], [("rank", 60, 150, BS)])
 
 
 class ListedNoteTests(unittest.TestCase):
     def test_listed_note_names_the_forever_skill(self):
         self.assertEqual(trainer_text.listed_note(180),
                          " (listed from 180 in the Forever data: if the trainer offers it then, you can start it earlier)")
+
+
+class RecipeRankTests(unittest.TestCase):
+    def test_recipe_rank_caps(self):
+        from yap_forever.trips import recipe_rank_cap
+        for required, cap in ((1, 75), (75, 75), (76, 150), (150, 150), (175, 225), (225, 225), (240, 300)):
+            with self.subTest(required=required):
+                self.assertEqual(recipe_rank_cap(required), cap)
 
 
 if __name__ == "__main__":

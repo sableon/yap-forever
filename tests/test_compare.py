@@ -43,7 +43,7 @@ class TripTests(unittest.TestCase):
         p = Plan(ranks=[(BS, 60, 150, 450), (BS, 200, 225, 4500), (BS, 275, 300, 9000)],
                  learn_log=[(BS, 10, 1, "trainer"), (BS, 20, 2, "ah"), (BS, 30, 3, "vendor"),
                             (BS, 40, 4, "favor"), (BS, 50, 5, "quest")])
-        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd)],
+        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, {BS: 1})],
                          [("vendor", 30), ("favor", 40), ("rank", 200), ("rank", 275)])
 
     def test_planner_logs_learning_and_ranks(self):

@@ -12,7 +12,8 @@ from yap_forever import trainer_text
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, mail_text
 from yap_forever.talents import lowest_profession, talent_lines
-from yap_forever.trips import city_ranks, trips
+from yap_forever.trainers import RANK_BY_CAP
+from yap_forever.trips import REMOTE_RANK, before_start, recipe_rank_cap, trips, visits
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
     SOURCES = {group: {int(k): v for k, v in items.items()} for group, items in tomllib.load(_f).items()}
@@ -108,7 +109,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
                  saving_line="", mode="gold", study_hint_gold_per_point=100, extra_notes=(),
                  budget_lines=(), order=None, nothing_in_budget=False) -> str:
     """caps: profession -> target skill (see planner.resolve_goals).
-    alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
+    alts: Trip.key (a recipe, or a recipe trip's recipes) -> what skipping the trip costs (None: no other way),
+    from trips.trip_alternatives.
     character, reading: the profile.Character and Working Overtime reading, for the talent lines.
     today: the date the staleness of imported prices is judged against (default: today).
     trainer_info: trainer_text.TrainerInfo, to name trainers on rank rows (None: say a set town);
@@ -261,31 +263,130 @@ def _group_notes(group, items, gd, mines=True) -> list[str]:
 
 
 # --- route ---------------------------------------------------------------------
+def _skip(key, alts) -> str:
+    """'; or skip it: +X for the route without it' for a trip in alts (trips.trip_alternatives), else ""."""
+    if key not in alts:
+        return ""
+    diff = alts[key]
+    return ("; there is no other way to reach the target without it" if diff is None
+            else "; or skip it at no extra cost" if diff <= 0.5
+            else f"; or skip it: +{gold(diff)} for the route without it")
+
+
+def _groups(spells, v) -> list[list[int]]:
+    """The spells grouped by the rank that teaches them: the visit trainer's own rank first, then each lower
+    rank (v.fallback), highest first; route order inside a group."""
+    groups: dict[int | None, list[int]] = {}
+    for spell in spells:
+        groups.setdefault(v.fallback.get(spell), []).append(spell)
+    return [groups[c] for c in sorted(groups, key=lambda c: (c is not None, -(c or 0)))]
+
+
+def _names(spells, gd, fees) -> str:
+    """'A (10s), B (25s)' (fees: with each recipe's trainer fee, when it has one)."""
+    rs = [(s, gd.recipes[s]) for s in spells]
+    return ", ".join(recipe_name(s, r.name, gd) + (f" ({gold(r.fee)})" if fees and r.fee else "") for s, r in rs)
+
+
+def _other(spells, v, trainer_info) -> str:
+    """Who else teaches recipes below the visit trainer's rank (all of one rank)."""
+    cap = v.fallback[spells[0]]
+    return trainer_text.fallback_trainer(trainer_info, v.profession, cap, cap >= REMOTE_RANK)
+
+
+def _recipes_text(spells, v, gd, trainer_info, fees) -> str:
+    """'A (10s), B (25s) (if <trainer> doesn't list them: <who else>)': each group of recipes below the visit
+    trainer's rank says once who else teaches them (see _groups)."""
+    who = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
+    parts = []
+    for group in _groups(spells, v):
+        text = _names(group, gd, fees)
+        if group[0] in v.fallback:
+            text += f" (if {who} doesn't list {'it' if len(group) == 1 else 'them'}: {_other(group, v, trainer_info)})"
+        parts.append(text)
+    return ", ".join(parts)
+
+
+def _fallback_notes(spells, v, gd, trainer_info) -> str:
+    """' (if <trainer> doesn't list <recipes>: <who else>)' for each group below the visit trainer's rank,
+    naming the recipes: for a row that lists the recipes before the place."""
+    who = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
+    return "".join(f" (if {who} doesn't list {_names(group, gd, False)}: {_other(group, v, trainer_info)})"
+                   for group in _groups(spells, v) if group[0] in v.fallback)
+
+
+def _visit_text(v, gd, trainer_info, learn=True) -> str:
+    """What a trainer visit's row says to learn: the recipes the route needs later ("While there, learn: ...")
+    and those reachable from the start ("If you don't have them yet: ..."). "" for nothing."""
+    out = []
+    if learn and v.learn:
+        out.append(f"While there, learn: {_recipes_text(v.learn, v, gd, trainer_info, True)}.")
+    if v.if_missing:
+        it = "it" if len(v.if_missing) == 1 else "them"
+        out.append(f"If you don't have {it} yet: {_recipes_text(v.if_missing, v, gd, trainer_info, False)}.")
+    return " ".join(out)
+
+
+def _before_start(profession, spells, gd) -> list[str]:
+    """'- **Before you start**, make sure you know: A, B (any Artisan Blacksmith teaches them).', one row per
+    rank that teaches them."""
+    by_rank: dict[int, list[int]] = {}
+    for spell in spells:
+        by_rank.setdefault(recipe_rank_cap(gd.recipes[spell].required_skill), []).append(spell)
+    return [f"- **Before you start**, make sure you know: "
+            f"{', '.join(recipe_name(s, gd.recipes[s].name, gd) for s in group)} "
+            f"(any {RANK_BY_CAP[cap]} {trainer_text.person(profession)} teaches {'it' if len(group) == 1 else 'them'})."
+            for cap, group in sorted(by_rank.items())]
+
+
+def _city_stop(v, gd, trainer_info, planned, said, named) -> str | None:
+    """The row (with its dash) of a trainer visit below the remote ranks: a rank trained in a capital, or a
+    stop there only for recipes; None for a rank row the guide can't name trainers for and nothing to learn.
+    said, named: what earlier rows of the guide already said (see trainer_text.city_row)."""
+    rank, person = RANK_BY_CAP[v.rank_cap], trainer_text.person(v.profession)
+    if v.kind == "rank":
+        row = trainer_text.city_row(trainer_info, v.profession, v.rank_cap, planned, said, named=named)
+        if row is None and (v.learn or v.if_missing):
+            row = f"Train {PROFESSIONS.get(v.profession, v.profession)} to {v.rank_cap} at any {rank} {person} in a capital."
+        more = _visit_text(v, gd, trainer_info)
+    else:  # "city": a stop only to learn recipes
+        lead = f"Learn {_names([s for g in _groups(v.learn, v) for s in g], gd, True)}"
+        after = _fallback_notes(v.learn, v, gd, trainer_info)
+        row = (trainer_text.city_row(trainer_info, v.profession, v.rank_cap, planned, said, lead, after, named, True)
+               or f"{lead} at any {rank} {person} in a capital{after}.")
+        more = _visit_text(v, gd, trainer_info, learn=False)
+    if row is None:
+        return None
+    return f"- {row}" + (f" {more}" if more else "")
+
+
 def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_slots=0,
-               trainer_info=None, level=None) -> str:
+               trainer_info=None, level=None, start_skills=None) -> str:
+    """start_skills: profession -> the route's start skill, so a rank trip's bring list ends at the next trip
+    back for recipes (shopping.bring_list)."""
+    known = t.visit is not None and gd is not None
+    learn = _visit_text(t.visit, gd, trainer_info) if known else ""
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
         stop = trainer_text.remote_stop(trainer_info, t.profession, t.cap, level)
-        learn = "While there, learn the trainer recipes your skill allows."
-        if stop is None:
-            where = f"the trainer is in a set town (the planner doesn't say where yet). {learn}"
-        else:
-            where = f"{stop.text} {learn}" if stop.found else stop.text
-        return (f"- **Trip:** {t.what}: {where}"
-                + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots, bool(stop and stop.services_known))
-                   if plan is not None else ""))
+        where = "the trainer is in a set town (the planner doesn't say where yet)." if stop is None else stop.text
+        return (f"- **Trip:** {t.what}: {where}" + (f" {learn}" if learn else "")
+                + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots, bool(stop and stop.services_known),
+                              start_skills) if plan is not None else ""))
+    if t.kind == "recipe":
+        names = _recipes_text(t.visit.learn, t.visit, gd, trainer_info, True) if known else t.what
+        missing = _visit_text(t.visit, gd, trainer_info, learn=False) if known else ""
+        return (f"- **Trip:** back to {trainer_text.trip_trainer(trainer_info, t.profession, t.cap)}, at {t.skill} "
+                f"for {names}{_skip(t.key, alts)}." + (f" {missing}" if missing else ""))
     if t.kind == "vendor":
         line = (f"- **Trip:** buy the pattern for {t.what} from a vendor (patterns are sold in particular "
                 "towns); buy every vendor pattern the route uses on one visit: patterns can be bought before "
                 "you can learn them")
-    else:
+    elif t.kind == "favor":
         line = f"- **Trip:** the Merchant's Favor vendor (one place per faction) for {t.what}"
-    if t.spell in alts:
-        diff = alts[t.spell]
-        line += ("; there is no other way to reach the target without it" if diff is None
-                 else "; or skip it at no extra cost" if diff <= 0.5
-                 else f"; or skip it: +{gold(diff)} for the route without it")
-    return line + "."
+    else:
+        raise ValueError(f"unknown trip kind {t.kind!r}")
+    return line + _skip(t.key, alts) + "."
 
 
 @dataclass(frozen=True)
@@ -353,6 +454,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None) -> No
                 text = f"- **Craft {recipe_name(s.spell_id, s.name, gd)} once**" + (f" — {mats}" if mats else "")
                 lines.setdefault((stage(p, s.skill_from, True), p), []).append((s.skill_from, 3, text))
     listed = _listed_notes(plan, gd)
+    learned = _learned_at(plan, gd, trainer_info, stock.skills)
     de: dict[str, list] = {}  # item name -> [first skill, last skill, count]
     for e in plan.events:
         m = EVENT.match(e)
@@ -366,25 +468,32 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None) -> No
             first_at, _last, n = de.get(d.group(2), [at, at, 0])
             de[d.group(2)] = [first_at, at, n + float(d.group(1))]
             continue
-        note = listed.get((p, at, text.split(" (", 1)[0].removeprefix("Learn ")), "")
+        name = text.split(" (", 1)[0].removeprefix("Learn ")
+        note, where = listed.get((p, at, name), ""), learned.get((p, at, name)) if text.startswith("Learn ") else None
+        if where:  # learned at a visit (its row has the fee) or before the start: shown after the visit's row
+            text = f"start crafting {name} ({where})"
         lines.setdefault((stage(p, at, True), p), []).append(
-            (at, 0, f"- *At {at}: {trainer_text.add_note(_fix_names(text, gd), note)}*"))
+            (at, 0.75 if where else 0, f"- *At {at}: {trainer_text.add_note(_fix_names(text, gd), note)}*"))
     for item, (first_at, last, n) in de.items():
         text = (f"- *At {first_at}: disenchant {count(n)} {item}*" if first_at == last else
                 f"- *From {first_at}: disenchant your {item} as you make them ({count(n)} in all, by {last})*")
         lines.setdefault((stage(ENCH, first_at, True), ENCH), []).append((first_at, 2, text))
-    for t in trips(plan, gd):
+    for t in trips(plan, gd, stock.skills):
         if t.profession in caps:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
                 (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots,
-                                          trainer_info, stock.level)))
-    planned, said = tuple(caps), set()
+                                          trainer_info, stock.level, stock.skills)))
+    planned, said, named = tuple(caps), set(), set()
     # in the order the guide shows them, so a city's "different parts" sentence is on its first row
-    for t in sorted((t for t in city_ranks(plan) if t.profession in caps),
-                    key=lambda t: (stage(t.profession, t.skill, True), planned.index(t.profession), t.skill)):
-        row = trainer_text.city_row(trainer_info, t.profession, t.cap, planned, said)
+    for v in sorted((v for v in visits(plan, gd, stock.skills) if not v.remote and v.profession in caps),
+                    key=lambda v: (stage(v.profession, v.skill, True), planned.index(v.profession), v.skill)):
+        row = _city_stop(v, gd, trainer_info, planned, said, named)
         if row:
-            lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append((t.skill, 0.5, f"- {row}"))
+            lines.setdefault((stage(v.profession, v.skill, True), v.profession), []).append((v.skill, 0.5, row))
+    for p, spells in before_start(plan, gd, stock.skills).items():
+        if p in caps:
+            lines.setdefault((stage(p, first[p][0], True), p), []).extend(
+                (first[p][0], -1, text) for text in _before_start(p, spells, gd))
 
     out += ["## Route", ""]
     for line in reached_lines(plan):
@@ -410,6 +519,20 @@ def _listed_notes(plan, gd) -> dict[tuple[int, int, str], str]:
         if how == "trainer" and r and r.listed_skill is not None and r.listed_skill < at:
             out[(prof, at, r.name)] = trainer_text.listed_note(r.listed_skill)
     return out
+
+
+def _learned_at(plan, gd, trainer_info, start_skills) -> dict[tuple[int, int, str], str]:
+    """(profession, skill, recipe name) -> where a trainer recipe the route learns there was learned instead:
+    "learned at <trainer>" (a visit that learns it ahead, or lists it as "if you don't have it yet") or
+    "learned before you start" (trips.before_start)."""
+    where: dict[int, str] = {}
+    for v in visits(plan, gd, start_skills):
+        label = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
+        where.update({s: f"learned at {label}" for s in v.learn + v.if_missing})
+    for spells in before_start(plan, gd, start_skills).values():
+        where.update({s: "learned before you start" for s in spells})
+    return {(prof, at, gd.recipes[spell].name): where[spell] for prof, at, spell, how in plan.learn_log
+            if how == "trainer" and spell in where}
 
 
 def _ranges(steps, gd, rows=None) -> list[dict]:

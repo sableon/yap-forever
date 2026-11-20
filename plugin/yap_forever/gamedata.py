@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import sys
+import tomllib
 import urllib.error
 import urllib.request
 from collections.abc import Iterable, Iterator
@@ -151,15 +152,29 @@ class GameData:
         return i.name if i else f"item {item_id}"
 
 
-def safe_requirements(gd: GameData, skip: Iterable[int] = ()) -> GameData:
+SEEN_REQUIREMENTS = Path(__file__).resolve().parent / "data_static" / "seen_requirements.toml"
+
+
+def load_seen_requirements(path: Path = SEEN_REQUIREMENTS) -> dict[int, int]:
+    """spell -> the highest skill the recipe was seen learnable at in game, below its inferred Classic
+    requirement (`seen_requirements.toml`)."""
+    with open(path, "rb") as f:
+        return {int(row["spell_id"]): int(row["skill"]) for row in tomllib.load(f).get("seen", [])}
+
+
+def safe_requirements(gd: GameData, skip: Iterable[int] = (), seen: dict[int, int] | None = None) -> GameData:
     """The game data as the planner plans with it: a trainer recipe whose inferred skill is above the
     Forever requirement needs the inferred one, so the route works wherever the trainer sets the bar.
     The Forever value stays in `listed_skill`. Other sources are unchanged, and so is `gd` (a copy).
-    skip: spells the planner turns into quest recipes (the quest plans), which are left alone."""
+    skip: spells the planner turns into quest recipes (the quest plans), which are left alone.
+    seen: spell -> a skill it was seen learnable at in game (default: `seen_requirements.toml`); an
+    inferred skill above it is wrong for Forever, so that recipe keeps the Forever requirement."""
     skip = set(skip)
+    seen = load_seen_requirements() if seen is None else seen
     recipes = {}
     for spell, r in gd.recipes.items():
-        if spell not in skip and r.source == "trainer" and r.listed_skill is None and r.inferred_skill and r.inferred_skill > r.required_skill:
+        if (spell not in skip and r.source == "trainer" and r.listed_skill is None and r.inferred_skill
+                and r.inferred_skill > r.required_skill and r.inferred_skill <= seen.get(spell, r.inferred_skill)):
             r = dataclasses.replace(r, required_skill=r.inferred_skill, listed_skill=r.required_skill)
         recipes[spell] = r
     return dataclasses.replace(gd, recipes=recipes)
