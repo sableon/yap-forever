@@ -2,8 +2,9 @@
 
 yap-forever runs on each player's own computer. It stores the player's Battle.net API client in
 `~/.yap-forever/credentials.json` (mode 600 on macOS and Linux) and a short-lived access token in
-`~/.yap-forever/cache/token.json`. Nothing is sent anywhere except Blizzard's API and the pinned
-game-data downloads listed in [plugin/CREDITS.md](plugin/CREDITS.md).
+`~/.yap-forever/cache/token.json`. Nothing is sent anywhere except Blizzard's API, the pinned
+game-data downloads listed in [plugin/CREDITS.md](plugin/CREDITS.md), and, only with
+`prices --remote`, the machine the player names in `remote.toml` (over ssh).
 
 ## Reporting a problem
 

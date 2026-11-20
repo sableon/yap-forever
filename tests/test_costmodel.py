@@ -143,6 +143,24 @@ class ValuerTests(unittest.TestCase):
         # + essence/shard at vendor (30, 50)
         self.assertEqual(v.output_value(toy.BELT, 10), int(3.75 * 300 + 0.225 * 30 + 0.1 * 50))
 
+    def test_made_materials_scored_at_value(self):
+        v = Valuer(toy.market({toy.ESSENCE: [(3000, 10)]}), toy.gamedata([]), toy.stock())
+        pools = Pools.from_stock(v.stock)
+        pools.made[toy.ESSENCE] = 2
+        c = v.take(toy.ESSENCE, 1, pools, skills={})
+        self.assertEqual(c.economic, 0)
+        self.assertEqual(c.score, 2850)
+
+    def test_coal_recorded_when_farming_steel(self):
+        gd = toy.gamedata([])
+        gd.items[3859] = toy.item(3859, "Steel Bar", sell=100)
+        gd.vendor_prices[3857] = 500
+        v = Valuer(toy.market({}), gd, toy.stock(mining=171))
+        pools = Pools.from_stock(v.stock)
+        c = v.take(3859, 2, pools, skills={})
+        self.assertEqual(c.cash, 1000)
+        self.assertEqual(pools.vendor.get(3857), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

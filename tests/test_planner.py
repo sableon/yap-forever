@@ -28,6 +28,14 @@ def run(recipes, listings=None, stock=None, favor=toy.NO_FAVOR, quest=(), cap=22
 BARS = {toy.COPPER_BAR: [(100, 100000)]}
 
 
+def run_with_data(recipes, listings, stock=None):
+    """Plan both professions to 225; return the plan with its game data, market and stock."""
+    gd = toy.gamedata(recipes)
+    st = stock or toy.stock()
+    m = toy.market(listings)
+    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={BS: 225, ENCH: 225}), gd, m, st
+
+
 class PlannerTests(unittest.TestCase):
     def test_reaches_cap_both(self):
         p = run(base_recipes(), BARS)
@@ -241,6 +249,53 @@ class PlannerTests(unittest.TestCase):
         self.assertGreater(p.cash_total, 0)
         self.assertGreaterEqual(p.economic_total, p.cash_total - p.sale_proceeds - p.leftover_value)
 
+    def test_tool_and_reagent_share_thin_supply_no_crash(self):
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench dust", ENCH, {toy.DUST: 1}, tools=[373]),
+              toy.recipe(5, "Runed Copper Rod", ENCH, {toy.ROD: 1, toy.DUST: 1}, (toy.ROD_TOOL, 1),
+                         t=(1, 2, 2, 2), source="trainer")]
+        p, *_ = run_with_data(rs, {**BARS, toy.DUST: [(300, 1)]})  # only one dust listed
+        self.assertEqual(p.final_skill[BS], 225)
+
+    def test_stall_lifted_when_other_profession_makes_materials(self):
+        # Strange Dust only comes from disenchanting a BS green that needs BS 30.
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(3, "Belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1), req=30),
+              toy.recipe(2, "Ench start", ENCH, {toy.ROD: 1}, t=(1, 10, 10, 10)),
+              toy.recipe(4, "Ench dust", ENCH, {toy.DUST: 1}, req=10)]
+        gd = toy.gamedata(rs)
+        gd.items[toy.BELT].item_level = 18  # disenchantable from Enchanting 1
+        st = toy.stock()
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 225, ENCH: 225})
+        self.assertGreater(p.final_skill[ENCH], 10)
+
+    def test_intermediate_craft_charges_learning(self):
+        # Ench recipe needs the rod tool; the rod recipe costs 5g to learn.
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench rod-needing", ENCH, {toy.COPPER_BAR: 1}, tools=[373]),
+              toy.recipe(5, "Runed Copper Rod", ENCH, {toy.ROD: 1}, (toy.ROD_TOOL, 1),
+                         t=(1, 1, 1, 1), fee=50000)]
+        p, *_ = run_with_data(rs, BARS)
+        self.assertIn(5, p.learned)
+        self.assertTrue(any("Runed Copper Rod" in e and "5g" in e for e in p.events))
+
+    def test_planned_recipe_not_listed_as_excluded(self):
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(3, "BS iron", BS, {toy.IRON_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        # only a few iron bars: planned early, unpriceable later
+        p, *_ = run_with_data(rs, {**BARS, toy.IRON_BAR: [(1, 5)]})
+        self.assertIn(3, {s.spell_id for s in p.steps})
+        self.assertNotIn(3, dict(p.skipped))
+
+    def test_shopping_list_includes_scroll_tool_and_coal(self):
+        rs = [toy.recipe(1, "BS hammer", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1), tools=[162]),
+              toy.recipe(3, "Scrolled", BS, {}, (toy.STONE, 1), source="scroll", scroll=toy.SCROLL),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        p, *_ = run_with_data(rs, {**BARS, toy.SCROLL: [(500, 1)]})
+        self.assertIn(toy.SCROLL, p.bought)
+        p2, *_ = run_with_data([rs[0], rs[2]], BARS)  # only the hammer recipe for Blacksmithing
+        self.assertIn(toy.HAMMER, p2.vendor_bought)
 
 
 def crafts_of(p, prof, spell=None):
@@ -443,6 +498,16 @@ class ResolveGoalsTests(unittest.TestCase):
         self.assertEqual(resolve_goals({BS: self.Goal(recipe="BS Mystery")}, self.gd, favor=favor),
                          ({BS: 50}, {BS: 4}))
 
+    def test_favor_recipe_target_uses_the_favor_skill(self):
+        from yap_forever.config import Goal
+        from yap_forever.favor import FavorData
+        from yap_forever.planner import resolve_goals
+        gd = toy.gamedata([toy.recipe(5, "Veteran Belt", BS, {toy.IRON_BAR: 2}, (toy.BELT, 1), t=(1, 50, 60, 70),
+                                      source="unknown")])
+        favor = FavorData({5: 30}, {5: 45}, [])
+        caps, once = resolve_goals({BS: Goal(recipe="Veteran Belt")}, gd, favor)
+        self.assertEqual((caps, once), ({BS: 45}, {BS: 5}))
+
 
 class RouteModeTests(unittest.TestCase):
     def run_mode(self, mode, recipes, listings, bank):
@@ -506,3 +571,27 @@ class CraftOnceToolTests(unittest.TestCase):
         self.assertEqual((last.spell_id, last.crafts), (5, 1))
         self.assertGreaterEqual(last.cash, 700 + 18)  # the Blacksmith Hammer from a vendor
         self.assertTrue(any(e.endswith(": Buy tool Blacksmith Hammer (vendor 0s 18c)") for e in p.events))
+
+
+class GreensForDisenchantingTests(unittest.TestCase):
+    """Greens are held for disenchanting when that is the only source and Enchanting reaches their gate."""
+
+    def test_greens_held_when_de_is_only_source(self):
+        rs = [toy.recipe(1, "Belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),
+              toy.recipe(2, "Ench start", ENCH, {toy.ROD: 1}, t=(1, 30, 30, 30)),
+              toy.recipe(4, "Ench dust", ENCH, {toy.DUST: 1}, req=25)]
+        p, *_ = run_with_data(rs, BARS)  # no dust on the AH at all
+        self.assertGreater(p.final_skill[ENCH], 30)
+
+    def test_green_not_held_when_enchanting_stops_below_its_gate(self):
+        from yap_forever.costmodel import Valuer
+        from yap_forever.planner import plan
+        rs = [toy.recipe(1, "BS green", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        gd = toy.gamedata(rs)
+        gd.items[toy.BELT].item_level = 48  # disenchanting needs Enchanting 150
+        listings = {**BARS, 11176: [(5000, 1000)]}  # Dream Dust worth far more than the belt
+        st = toy.stock()
+        p = plan(gd, Valuer(toy.market(listings), gd, st), st, toy.NO_FAVOR, caps={BS: 20, ENCH: 20})
+        self.assertEqual(p.final_skill[ENCH], 20)
+        self.assertNotIn(toy.BELT, p.held_for_de)

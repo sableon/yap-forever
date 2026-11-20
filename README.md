@@ -1,7 +1,8 @@
 # yap-forever
 
-> **Work in progress.** Phase 1 of 5: the planner works for one or two crafting professions on
-> the Alliance side; setup for other regions and factions is in, but only EU has been tried.
+> **Work in progress.** Phase 2 of 5: the planner works for any one or two crafting professions,
+> with trainer stops, legacy talents, bag space and price fallbacks. Setup covers every region
+> and both factions, but only EU has been tried.
 
 **Yet another planner** for WoW: Forever. A Claude Code plugin that finds the cheapest way to
 level your professions from **your own auction house prices**, and writes the route the way you
@@ -13,7 +14,9 @@ skill-ups.
 - [Claude Code](https://claude.com/claude-code)
 - Python 3.11 or newer (Windows: from python.org, then `py -3 --version`; macOS and Linux:
   `python3 --version`)
-- A free Blizzard API client from [develop.battle.net](https://develop.battle.net/access/clients)
+- For prices, one of: a free Blizzard API client from [develop.battle.net](https://develop.battle.net/access/clients)
+  (the usual way), Auctionator's saved data from your game folder, or another machine that can reach the API
+  (over ssh); the setup guide covers all three
 
 ## Install
 
