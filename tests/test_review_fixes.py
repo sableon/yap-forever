@@ -21,7 +21,7 @@ def run(recipes, listings, stock=None):
     gd = toy.gamedata(recipes)
     st = stock or toy.stock()
     m = toy.market(listings)
-    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR), gd, m, st
+    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={BS: 225, ENCH: 225}), gd, m, st
 
 
 class CriticalTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class CriticalTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         gd.items[toy.BELT].item_level = 18  # disenchantable from Enchanting 1
         st = toy.stock()
-        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR)
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 225, ENCH: 225})
         self.assertGreater(p.final_skill[ENCH], 10)
 
 

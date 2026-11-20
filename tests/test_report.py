@@ -17,7 +17,7 @@ def sample():
     gd = toy.gamedata(rs)
     st = toy.stock({toy.COPPER_BAR: 5})
     m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.STONE: [(50, 3)]})
-    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR), m, gd, st
+    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 225, 333: 225}), m, gd, st
 
 
 class VerdictTests(unittest.TestCase):
@@ -103,7 +103,7 @@ class BankGreensReportTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock({toy.BELT: 30})
         m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.DUST: [(300, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=40)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 40, 333: 40})
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
         self.assertRegex(text, r"\| Enchanting \| 1→\d+ \| Disenchant greens \| \d+ \| 0s 0c \| 0s 0c \|")
         self.assertIn("Enchanting 1: disenchant 30 Runed Copper Belt from your bank", text)
@@ -114,7 +114,7 @@ class BankGreensReportTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock({toy.BELT: 30})
         m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.DUST: [(300, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=40)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 40, 333: 40})
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
         self.assertNotIn("wait in the bank or mail", text)
         self.assertIn("disenchanted first", text)
@@ -127,7 +127,7 @@ class BufferTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock(skills={333: 60})
         m = toy.market({toy.COPPER_BAR: [(100, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=60)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 60, 333: 60})
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
         self.assertIn("| Blacksmithing | 1→60 | BS basic | 59 |", text)
 
@@ -139,7 +139,7 @@ class BufferTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock()
         m = toy.market({toy.COPPER_BAR: [(100, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=11)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 11, 333: 11})
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
         yellow = [s for s in p.steps if s.spell_id == 1 and s.crafts > 1]
         self.assertTrue(yellow)

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from yap_forever.costmodel import VENDOR_TOOLS, Cost, Pools, bars_to_ore, money, skillup_chance
 from yap_forever.disenchant import DE_THRESHOLDS, de_skill_needed, de_yield
-from yap_forever.gamedata import BS, ENCH, PROFESSIONS
+from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.shared import allocate, mail_used
 
 START_CAP = 75  # Apprentice
@@ -117,31 +117,31 @@ def apply_favor(recipes: dict, favor) -> dict:
     return out
 
 
-def plan(gd, valuer, stock, favor, cap: int = 225, quests: dict | None = None,
-         reuse: dict[int, tuple[float, float]] | None = None, caps: dict[int, int] | None = None,
+def plan(gd, valuer, stock, favor, caps: dict[int, int], quests: dict | None = None,
+         reuse: dict[int, tuple[float, float]] | None = None,
          craft_once: dict[int, int] | None = None, exclude: frozenset[int] = frozenset(),
          one_time_in_full: bool = False, overtime: int = 0, reading: str = "relative") -> Plan:
-    """caps: profession -> target skill (default Blacksmithing and Enchanting to `cap`).
+    """caps: profession -> target skill (one or two professions; see resolve_goals).
     craft_once: profession -> recipe crafted once on reaching its cap. exclude: recipes not to use.
     one_time_in_full: in gold mode, charge a recipe's one-time costs (pattern, fee, tools) in full
     rather than spread over the points it could cover (a candidate route; see compare.settle_routes).
     reuse: item -> (count later steps consume, value per unit), credited when a step makes it.
     overtime, reading: the character's Working Overtime rank and how it reads (see skillup_chance);
     it raises the chance of every skill-up, disenchanting included."""
-    return _Route(gd, valuer, stock, favor, cap, quests, reuse, caps, craft_once, exclude, one_time_in_full,
+    return _Route(gd, valuer, stock, favor, caps, quests, reuse, craft_once, exclude, one_time_in_full,
                   overtime, reading).run()
 
 
 class _Route:
     """The state one plan() call shares between its steps."""
 
-    def __init__(self, gd, valuer, stock, favor, cap, quests, reuse, caps, craft_once, exclude,
+    def __init__(self, gd, valuer, stock, favor, caps, quests, reuse, craft_once, exclude,
                  one_time_in_full, overtime, reading):
         self.gd, self.valuer, self.stock, self.favor = gd, valuer, stock, favor
         self.one_time_in_full, self.overtime, self.reading = one_time_in_full, overtime, reading
         self.quests = quests or {}
         self.reuse = reuse or {}
-        self.caps = dict(caps) if caps else {BS: cap, ENCH: cap}
+        self.caps = dict(caps)
         self.craft_once = craft_once or {}
         self.profs = tuple(self.caps)
         self.has_ench = ENCH in self.caps

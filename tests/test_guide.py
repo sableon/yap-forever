@@ -215,7 +215,7 @@ class QuestItemNoteTests(unittest.TestCase):
         listings = {**BARS, toy.VEST: [(5000, 3)]}
         from yap_forever.costmodel import Valuer
         from yap_forever.planner import plan
-        p = plan(gd, Valuer(toy.market(listings), gd, st), st, toy.NO_FAVOR, cap=60)
+        p = plan(gd, Valuer(toy.market(listings), gd, st), st, toy.NO_FAVOR, caps={BS: 60, ENCH: 60})
         text = render_guide(p, gd, toy.market(listings), st)
         self.assertIn("sell up to 20 on the AH (quest item), the rest to a vendor", text)
 
