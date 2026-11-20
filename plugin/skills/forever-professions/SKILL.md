@@ -1,6 +1,10 @@
 ---
 name: forever-professions
 description: Plan WoW: Forever profession levelling from the player's own auction house prices - cheapest craft route, shopping list, mailbox trips, Merchant's Favor recipes. Use when a player asks how to level a crafting profession on WoW: Forever (Blacksmithing, Enchanting, Leatherworking, Tailoring, Alchemy, Engineering), what to buy for it, what it will cost, or wants their yap-forever prices or setup checked.
+allowed-tools:
+  - Bash(python3 "${CLAUDE_PLUGIN_ROOT}/yap-forever.py" *)
+  - Bash(python "${CLAUDE_PLUGIN_ROOT}/yap-forever.py" *)
+  - Bash(py -3 "${CLAUDE_PLUGIN_ROOT}/yap-forever.py" *)
 ---
 
 # Forever professions
@@ -11,13 +15,17 @@ player what changed, running the planner, and walking them through the result.
 
 ## Running the planner
 
-- The code lives at the plugin root: two folders above this skill's base directory (the
-  directory you were given when this skill loaded). `cd` there before every command.
-- Find the Python command once per session: on Windows try `py -3`, otherwise `python3`, then
-  `python`; keep the first whose `--version` says 3.11 or newer. Below it is written `<python>`.
-- Run `<python> -m yap_forever <command>`. Commands: `init`, `check [--offline]`,
-  `probe --item ID --buyout COPPER`, `prices`, `plan --character "FIRST LAST" --prof NAME:TARGET [--prof NAME:TARGET]` (Forever
-  character names are two words; quote them; `TARGET` is a skill 1-300 or a recipe name).
+- Run every command in exactly this form, from any folder, with no `cd` before it:
+  `<python> "${CLAUDE_PLUGIN_ROOT}/yap-forever.py" <command>`. This skill and its references
+  write it `<planner> <command>`. The skill's `allowed-tools` match this form only, so the player
+  isn't asked to approve each run; any other form (a `cd` first, `-m yap_forever`) asks.
+- `<python>`: on Windows try `py -3`, otherwise `python3`, then `python`. Keep the first with
+  which `<planner> check --offline` runs and doesn't say it needs a newer Python.
+- When the planner's output says to run `python3 -m yap_forever X` (or `py -3 -m ...`), run
+  `<planner> X`.
+- Commands: `init`, `check [--offline]`, `probe --item ID --buyout COPPER`, `prices`,
+  `plan --character "FIRST LAST" --prof NAME:TARGET [--prof NAME:TARGET]` (Forever character
+  names are two words; quote them; `TARGET` is a skill 1-300 or a recipe name).
 - The player's files are in `~/.yap-forever/` (or `$YAP_FOREVER_HOME`).
 - **Never open, print or ask for `credentials.json`.** The player pastes their API client ID and
   secret into it themselves. If they paste them into the chat, tell them to create a new secret

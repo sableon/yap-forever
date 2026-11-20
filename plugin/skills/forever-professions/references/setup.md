@@ -1,6 +1,7 @@
 # Setup
 
-Go one step at a time and run `check --offline` after each.
+Go one step at a time and run `check --offline` after each. `<planner>` is the command form
+in SKILL.md, "Running the planner".
 
 ## 1. Python 3.11 or newer
 
@@ -12,7 +13,7 @@ Go one step at a time and run `check --offline` after each.
 
 ## 2. Home folder
 
-`<python> -m yap_forever init` creates `~/.yap-forever/` with `profile.toml`,
+`<planner> init` creates `~/.yap-forever/` with `profile.toml`,
 `credentials.json` (readable only by the player), `characters/`, `cache/` and `reports/`. It
 never overwrites existing files.
 
@@ -131,7 +132,7 @@ the top says what to fill in: `level`, `[skills]` and `[goals]`, and that gold g
 the new file, and never overwrites a `stock.toml` or deletes the `bags.toml`. Fill the values in
 with the player, then plan.
 
-**Moving an old planner folder.** `<python> -m yap_forever migrate --from-data DIR --character
+**Moving an old planner folder.** `<planner> migrate --from-data DIR --character
 "NAME=FILE" [--character "NAME=FILE" ...]` (at least one `--character`; `--region`, `--ruleset` and
 `--faction` set the profile) copies the old data folder's house, prices and game data and gives every
 character `characters/<NAME>/stock.toml`. An existing `stock.toml` is kept, never overwritten. `FILE`
@@ -159,7 +160,7 @@ The player creates it themselves; you never see the secret.
 2. Any name. No redirect URL needed. "Service URL" can be left empty.
 3. The player opens `~/.yap-forever/credentials.json` in a text editor and pastes the Client ID
    and Client Secret between the quotes. Set `"region"` to the same region as the profile.
-4. `<python> -m yap_forever check` (without `--offline`) should now say `API token OK`.
+4. `<planner> check` (without `--offline`) should now say `API token OK`.
 
 If the API can't be reached at all (timeouts), the player's network may block it. Two fallbacks
 for prices are in step 5: another machine over ssh, or Auctionator's saved data.
@@ -176,13 +177,13 @@ theirs:
 1. In game, list one cheap item on the auction house at an odd buyout no one else would use,
    e.g. 7g 13s 13c (= 71313 copper). Note the item ID (Wowhead or an addon shows it).
 2. Wait for the next API snapshot, up to about an hour.
-3. `<python> -m yap_forever probe --item <ID> --buyout <copper>`.
+3. `<planner> probe --item <ID> --buyout <copper>`.
 4. If it finds the marker in no house or several, wait an hour or pick a stranger buyout and
    try again. The saved house is only replaced when exactly one house matches.
 
 ## 5. Prices
 
-`<python> -m yap_forever prices`. Then `check` should show every line `OK`.
+`<planner> prices`. Then `check` should show every line `OK`.
 
 If the API can't be reached from the player's machine, there are two fallbacks. Both save the
 same prices file the normal command does, so `plan` works unchanged.
@@ -190,7 +191,7 @@ same prices file the normal command does, so `plan` works unchanged.
 **From another machine (`--remote`).** Needs OpenSSH (`ssh` and `scp` on the PATH: included with
 Windows 10 and later (an optional feature on some builds), macOS and Linux) and a machine that can
 reach the API and has this tool set up. Write `remote.toml` in the home folder (the keys are in step
-2), then run `<python> -m yap_forever prices --remote`. It runs the remote command over ssh, copies
+2), then run `<planner> prices --remote`. It runs the remote command over ssh, copies
 the prices file back and replaces the saved prices only when the copy is a valid prices file with
 listings, for the profile's region and ruleset (and for the saved auction house, when `house.json`
 exists). A copy for another region, ruleset or house is refused and the saved prices stay.
@@ -204,7 +205,7 @@ public.
 
 **From Auctionator (`--auctionator`).** For a player with the Auctionator addon who has scanned the
 auction house in game. Log out or `/reload` first so the game writes its saved data, then run
-`<python> -m yap_forever prices --auctionator PATH`, where PATH is the addon's file:
+`<planner> prices --auctionator PATH`, where PATH is the addon's file:
 `WTF/Account/<account>/SavedVariables/Auctionator.lua` inside the game folder, for example
 `.../World of Warcraft/<game version folder>/WTF/Account/MYACCOUNT/SavedVariables/Auctionator.lua`.
 The game version folder depends on the install, and `<account>` is the player's account folder. If

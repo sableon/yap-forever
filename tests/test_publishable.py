@@ -23,6 +23,18 @@ def frontmatter(text: str) -> dict[str, str]:
     return out
 
 
+def frontmatter_list(text: str, key: str) -> list[str]:
+    """The items of a YAML block list under `key` in the frontmatter (`  - item` lines)."""
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    items, inside = [], False
+    for line in (m.group(1) if m else "").splitlines():
+        if not line.startswith(" "):
+            inside = line.split(":", 1)[0].strip() == key
+        elif inside and line.lstrip().startswith("- "):
+            items.append(line.lstrip()[2:].strip())
+    return items
+
+
 def tracked_text_files() -> list[Path]:
     names = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True,
                            encoding="utf-8", check=True).stdout.split()
@@ -79,6 +91,25 @@ class PublishableTests(unittest.TestCase):
         fm = frontmatter((SKILL / "SKILL.md").read_text(encoding="utf-8"))
         self.assertEqual(fm.get("name"), SKILL.name)
         self.assertTrue(0 < len(fm.get("description", "")) <= 1024)
+
+    def test_skill_runs_the_planner_by_the_plugin_root(self):
+        """Finding 8: the plugin root comes from ${CLAUDE_PLUGIN_ROOT}, never a guessed path, and
+        each interpreter has an allowed-tools rule whose text is the command the skill writes."""
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        launcher = '"${CLAUDE_PLUGIN_ROOT}/yap-forever.py"'
+        self.assertTrue((PLUGIN / "yap-forever.py").is_file())
+        self.assertIn(f"`<python> {launcher} <command>`", text)
+        rules = frontmatter_list(text, "allowed-tools")
+        self.assertEqual(rules, [f"Bash({python} {launcher} *)" for python in ("python3", "python", "py -3")])
+        for python in ("py -3", "python3", "python"):
+            self.assertIn(f"`{python}`", text.split("## Workflow")[0])
+        self.assertNotIn("two folders above", text)
+        self.assertNotRegex(text, r"`cd [^`]*`")
+
+    def test_references_use_the_planner_form(self):
+        for ref in (SKILL / "references").glob("*.md"):
+            body = ref.read_text(encoding="utf-8")
+            self.assertNotIn("<python> -m yap_forever", body, ref.name)
 
     def test_skill_reference_links_exist(self):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
