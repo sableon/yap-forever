@@ -176,54 +176,15 @@ class _Route:
     def run(self) -> Plan:
         gd, valuer, stock = self.gd, self.valuer, self.stock
         one_time_in_full, overtime, reading = self.one_time_in_full, self.overtime, self.reading
-        quests, reuse, caps, craft_once = self.quests, self.reuse, self.caps, self.craft_once
+        reuse, caps, craft_once = self.reuse, self.caps, self.craft_once
         profs, has_ench, recipes = self.profs, self.has_ench, self.recipes
         pools, p, skill, rank_cap = self.pools, self.p, self.skill, self.rank_cap
         learned, produced, held, skipped = self.learned, self.produced, self.held, self.skipped
         soft_stalls = self.soft_stalls
 
-        def learn_now(r, lo, s, name):
-            learn_cost, favor_cost, scroll_kind, _reqs = lo
-            learned.add(r.spell_id)
-            p.learned.append(r.spell_id)
-            p.learn_log.append((r.skill_line, s, r.spell_id, scroll_kind or r.source))
-            if r.source == "starter":
-                return Cost()
-            self.favor_left -= favor_cost
-            p.favor_spent += favor_cost
-            if scroll_kind == "owned":
-                pools.stock[r.scroll_item] -= 1  # consumed: no longer owned, sellable or bought
-            elif scroll_kind == "mail":
-                pools.mail[r.scroll_item] -= 1  # consumed: the other character no longer has it to mail
-            elif scroll_kind:
-                pool = pools.bought if scroll_kind == "ah" else pools.vendor
-                pool[r.scroll_item] = pool.get(r.scroll_item, 0) + 1
-            if r.source == "quest":
-                q = quests[r.spell_id]
-                items = ", ".join(f"{n} {gd.name(i)}" for i, n in q.items.items())
-                p.events.append(f"{name} {s}: Learn {r.name} (quest from {q.giver}: hand in {items}; level {q.level})")
-                return Cost()  # the hand-ins are taken and costed with the crafts
-            pattern = {"owned": "your own pattern", "mail": "a pattern mailed by another of your characters"}
-            how = {"trainer": "trainer", "scroll": pattern.get(scroll_kind, "scroll"),
-                   "favor": f"{favor_cost} Favor"}[r.source]
-            price = f" {money(learn_cost.cash)}" if learn_cost.cash else ""
-            p.events.append(f"{name} {s}: Learn {r.name} ({how}{price})")
-            return learn_cost
-
         for x in profs:
             if skill[x] >= caps[x]:
                 p.events.append(f"{PROFESSIONS[x]} already at {skill[x]}")
-        def train_in_window(prof, s, name):
-            """A trainer visit to learn a recipe also trains the next rank when the skill is in its window
-            and the target needs that rank."""
-            nxt = next((r for r in gd.trainer_ranks.get(prof, []) if r.cap > rank_cap[prof]), None)
-            if nxt is None or caps[prof] <= rank_cap[prof] or s < nxt.required_skill or stock.level < nxt.level:
-                return
-            p.fees += nxt.fee
-            self.spent += Cost(nxt.fee, nxt.fee)
-            rank_cap[prof] = nxt.cap
-            p.ranks.append((prof, s, nxt.cap, nxt.fee))
-            p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
 
         def get_tools(tools, s, name):
             """Craft or buy the tools a step needs; their materials are taken with the step's.
@@ -241,7 +202,7 @@ class _Route:
                 elif t["how"] == "craft":
                     tr = t["recipe"]
                     if tr.spell_id not in learned:
-                        cost += learn_now(tr, self._learn_option(tr), s, PROFESSIONS[tr.skill_line])
+                        cost += self._learn_now(tr, self._learn_option(tr), s, PROFESSIONS[tr.skill_line])
                     p.events.append(f"{name} {s}: Craft tool {gd.name(item)}")
                     for i, q in t["requests"]:
                         extra[i] = extra.get(i, 0) + q
@@ -279,7 +240,7 @@ class _Route:
                 return
             step_cost = Cost()
             if spell not in learned:
-                step_cost += learn_now(r, lo, s, name)
+                step_cost += self._learn_now(r, lo, s, name)
             tool_cost, extra, bought, tools_mailed = get_tools(tools, s, name)
             step_cost += tool_cost
             for i, q in lo[3]:
@@ -389,12 +350,12 @@ class _Route:
             _key, r, crafts, lo, tools, requests = best
             step_cost, extra = Cost(), {}
             if r.spell_id not in learned and r.source == "trainer":
-                train_in_window(prof, s, name)
+                self._train_in_window(prof, s, name)
             if r.spell_id not in learned:
                 requests = lo[3] + requests  # quest hand-ins, taken with the crafts
                 for i, q in lo[3]:
                     extra[i] = extra.get(i, 0) + q
-                step_cost += learn_now(r, lo, s, name)
+                step_cost += self._learn_now(r, lo, s, name)
             tool_cost, tool_extra, bought, tools_mailed = get_tools(tools, s, name)
             step_cost += tool_cost
             for i, q in tool_extra.items():
@@ -635,6 +596,47 @@ class _Route:
             return True
         # Disenchanting is the only source of an Enchanting reagent missing from the AH.
         return any(m in self.ench_reagents and self.valuer.market.depth(m) == 0 for m in de_yield(info))
+
+    def _learn_now(self, r, lo, s, name):
+        learn_cost, favor_cost, scroll_kind, _reqs = lo
+        self.learned.add(r.spell_id)
+        self.p.learned.append(r.spell_id)
+        self.p.learn_log.append((r.skill_line, s, r.spell_id, scroll_kind or r.source))
+        if r.source == "starter":
+            return Cost()
+        self.favor_left -= favor_cost
+        self.p.favor_spent += favor_cost
+        if scroll_kind == "owned":
+            self.pools.stock[r.scroll_item] -= 1  # consumed: no longer owned, sellable or bought
+        elif scroll_kind == "mail":
+            self.pools.mail[r.scroll_item] -= 1  # consumed: the other character no longer has it to mail
+        elif scroll_kind:
+            pool = self.pools.bought if scroll_kind == "ah" else self.pools.vendor
+            pool[r.scroll_item] = pool.get(r.scroll_item, 0) + 1
+        if r.source == "quest":
+            q = self.quests[r.spell_id]
+            items = ", ".join(f"{n} {self.gd.name(i)}" for i, n in q.items.items())
+            self.p.events.append(f"{name} {s}: Learn {r.name} (quest from {q.giver}: hand in {items}; level {q.level})")
+            return Cost()  # the hand-ins are taken and costed with the crafts
+        pattern = {"owned": "your own pattern", "mail": "a pattern mailed by another of your characters"}
+        how = {"trainer": "trainer", "scroll": pattern.get(scroll_kind, "scroll"),
+               "favor": f"{favor_cost} Favor"}[r.source]
+        price = f" {money(learn_cost.cash)}" if learn_cost.cash else ""
+        self.p.events.append(f"{name} {s}: Learn {r.name} ({how}{price})")
+        return learn_cost
+
+    def _train_in_window(self, prof, s, name):
+        """A trainer visit to learn a recipe also trains the next rank when the skill is in its window
+        and the target needs that rank."""
+        nxt = next((r for r in self.gd.trainer_ranks.get(prof, []) if r.cap > self.rank_cap[prof]), None)
+        if (nxt is None or self.caps[prof] <= self.rank_cap[prof] or s < nxt.required_skill
+                or self.stock.level < nxt.level):
+            return
+        self.p.fees += nxt.fee
+        self.spent += Cost(nxt.fee, nxt.fee)
+        self.rank_cap[prof] = nxt.cap
+        self.p.ranks.append((prof, s, nxt.cap, nxt.fee))
+        self.p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
 
 
 def _snapshot(pools) -> dict:
