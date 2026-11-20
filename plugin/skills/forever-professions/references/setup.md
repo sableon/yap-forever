@@ -188,7 +188,7 @@ theirs:
 
 ## 5. Prices
 
-`<planner> prices`. Then `check` should show every line `OK`.
+`<planner> prices`. Then `check` should show every line `OK`. Prices update about once an hour.
 
 If the API can't be reached from the player's machine, there are two fallbacks. Both save the
 same prices file the normal command does, so `plan` works unchanged.

@@ -135,6 +135,15 @@ class PublishableTests(unittest.TestCase):
             self.assertNotIn(rule, text)
         self.assertIn("references/coverage.md", text)
 
+    def test_milestones_are_the_expert_artisan_and_master_caps(self):
+        """game-rules.md: a legacy talent point the first time a profession reaches 150, 225 and 300,
+        the caps of the Expert, Artisan and Master ranks the planner trains."""
+        from yap_forever.trainers import RANK_BY_CAP
+        text = (SKILL / "references" / "game-rules.md").read_text(encoding="utf-8")
+        m = re.search(r"\*\*Milestones:\*\* the first time a profession on the account reaches (\d+), (\d+) and (\d+)", text)
+        caps = [c for c, rank in RANK_BY_CAP.items() if rank in ("Expert", "Artisan", "Master")]
+        self.assertEqual([int(g) for g in m.groups()], sorted(caps))
+
     def test_skill_reference_links_exist(self):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         refs = set(re.findall(r"references/[\w-]+\.md", text))

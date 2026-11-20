@@ -17,8 +17,8 @@ player what changed, running the planner, and walking them through the result.
 
 - Run every command in exactly this form, from any folder, with no `cd` before it:
   `<python> "${CLAUDE_PLUGIN_ROOT}/yap-forever.py" <command>`. This skill and its references
-  write it `<planner> <command>`. The skill's `allowed-tools` match this form only, so the player
-  isn't asked to approve each run; any other form (a `cd` first, `-m yap_forever`) asks.
+  write it `<planner> <command>`. The skill's `allowed-tools` approve this form, and only it, in
+  the turn that loads the skill; any other form (a `cd` first, `-m yap_forever`) always asks.
 - `<python>`: on Windows try `py -3`, otherwise `python3`, then `python`. Keep the first with
   which `<planner> check --offline` runs and doesn't say it needs a newer Python.
 - When the planner's output says to run `python3 -m yap_forever X` (or `py -3 -m ...`), run
@@ -39,9 +39,9 @@ when a question or answer needs it.
 1. **Setup, if needed.** Run `<planner> check --offline`. For every `MISSING` line, follow
    [references/setup.md](references/setup.md) with the player, one step at a time.
 2. **Ask what changed** since the last plan, and save what the player confirms:
-   - Level, profession skills, Favor standing, free bag slots, and what has piled up (greens to
-     disenchant, leftover materials): into the character's `stock.toml`
-     ([setup.md](references/setup.md), step 2, the `stock.toml` example).
+   - Level, profession skills, free bag slots, and what has piled up (greens to disenchant,
+     leftover materials): into the character's `stock.toml`. Favor standing: `favor_standing` in
+     `profile.toml` ([setup.md](references/setup.md), step 2).
    - Gold: once per ruleset and faction, not per character, into `[gold]` in `profile.toml`
      ([setup.md](references/setup.md), "Ruleset and faction groups").
    - Other characters on the same ruleset and faction: ask the player to keep each one's

@@ -53,8 +53,9 @@ Afterwards: `rm -rf "$HOME/.claude-skill-check" "$HOME/.yap-skill-check" ~/yap-c
 
 ## 2. A plan for one profession
 
-- **Starting state:** a working home: `cp -R ~/.yap-forever/. "$YAP_FOREVER_HOME"/` (your own
-  home; the copy stays on your machine), with prices less than an hour old.
+- **Starting state:** a working home, copied from your own (the copy stays on your machine):
+  `mkdir -p "$YAP_FOREVER_HOME" && cp -R ~/.yap-forever/. "$YAP_FOREVER_HOME"/`, with prices less
+  than an hour old.
 - **Prompt:** "Plan Blacksmithing to 150 for <a character in the profile>."
 - **Must happen:**
   - Claude asks what changed: level, skills, Favor standing, free bag slots, what has piled up,
