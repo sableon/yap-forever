@@ -357,9 +357,9 @@ def made_later_by(src: str) -> int | None:
 def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int, float]]]:
     """row index -> (origin, material, count) of the disenchants done just before that row (see _own_sources): an
     event at Enchanting skill s comes before the first Enchanting row that reaches past s. Its greens are the oldest
-    ones made by then (before the trip, the trip's profession or the other one); greens no row made (from the bank
-    or the mail), and every green of an Enchanting trip disenchanted at or below the trip's skill, count as before
-    the trip."""
+    ones made by then (before the trip, the trip's profession or the other one), then those of rows placed after it
+    (a merged run's row comes where the run starts); greens no row made (from the bank or the mail), and every green
+    of an Enchanting trip disenchanted at or below the trip's skill, count as before the trip."""
     names = {it.name: i for i, it in gd.items.items()}
     made: dict[int, list[list]] = {}  # green -> [[row index, origin, count left]] in route order
     for k, r in enumerate(every):
@@ -382,8 +382,9 @@ def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int
         k = next((k for k, r in enumerate(every) if r["st"].profession == ENCH and r["st"].skill_to > s), len(every))
         parts: list[tuple[str | int, float]] = []
         if not (trip.profession == ENCH and s <= trip.skill):
-            for lot in made.get(green, ()):
-                if lot[0] >= k or n <= 1e-9:
+            lots = made.get(green, [])  # those made by then first; a merged run's row can come before its greens
+            for lot in [x for x in lots if x[0] < k] + [x for x in lots if x[0] >= k]:
+                if n <= 1e-9:
                     break
                 used = min(n, lot[2])
                 if used > 1e-9:
