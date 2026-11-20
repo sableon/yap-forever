@@ -223,6 +223,43 @@ class BringListTests(unittest.TestCase):
         self.assertEqual(render_guide(*args, trainer_trips="as_needed"), render_guide(*args))
         self.assertIn("enough to craft to 235 at the trainer", render_guide(*args))
 
+    def warning(self, p, gd, bags, trainer_trips="one_go"):
+        from yap_forever.shopping import bring_text
+        text = bring_text(p, gd, self.trip(), bags, trainer_trips=trainer_trips)
+        return text[text.index(" This needs"):] if " This needs" in text else ""
+
+    def test_bag_warning_when_too_wide(self):
+        # one go from 225: 60 S, 80 T and 55 rods in stacks of 20 are 10 bag slots, + 10 kept free for crafts
+        p, gd = rank_trip_plan()
+        self.assertEqual(CRAFT_ROOM, 10)
+        self.assertEqual(self.warning(p, gd, 16),
+                         " This needs 20 free slots and you have 16: get bigger bags, bank what this stretch doesn't "
+                         "need, or set a lower goal (for example 235) so it fits.")
+        self.assertEqual(self.warning(p, gd, 20), "")  # just fits
+        self.assertIn("This needs 20 free slots and you have 19:", self.warning(p, gd, 19))
+        # even the first row (3 slots) doesn't fit in 2: no example
+        self.assertEqual(self.warning(p, gd, 12),
+                         " This needs 20 free slots and you have 12: get bigger bags, bank what this stretch doesn't "
+                         "need, or set a lower goal so it fits.")
+        # as needed the list is cut to the bags: a warning only when its first row is too wide on its own
+        self.assertEqual(self.warning(p, gd, 16, "as_needed"), "")
+        self.assertEqual(self.warning(p, gd, 12, "as_needed"),
+                         " This needs 13 free slots and you have 12: get bigger bags, bank what this stretch doesn't "
+                         "need, or set a lower goal so it fits.")
+
+    def test_no_bag_warning_without_bag_slots(self):
+        p, gd = rank_trip_plan()
+        for trips in ("one_go", "as_needed"):
+            self.assertEqual(self.warning(p, gd, None, trips), "")
+            self.assertEqual(self.warning(p, gd, 0, trips), "")
+
+    def test_lower_goal_example_fits(self):
+        p, gd = rank_trip_plan()
+        self.assertIn("(for example 235)", self.warning(p, gd, 16))
+        p.steps = [st for st in p.steps if st.skill_to <= 235]  # the route to that goal
+        p.final_skill = {BS: 235}
+        self.assertEqual(self.warning(p, gd, 16), "")
+
 
 if __name__ == "__main__":
     unittest.main()

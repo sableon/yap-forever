@@ -4,6 +4,7 @@ Ported from the old scripts/shopping.py, working on Plan steps. Rows are counted
 the buffer on yellow and green steps (planner.step_factor), so every material is a whole number of
 crafts' worth: nothing is left over that is too little for another craft.
 """
+import copy
 import dataclasses
 import math
 
@@ -396,26 +397,53 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
     return rows[-1]["st"].skill_to, _bring_items(plan, gd, rows, left, mail, trainer_trips)
 
 
+def _carried(gd, items, reagents, reagent_slots) -> tuple[dict, dict, tuple[int, int]]:
+    """(item -> count, stack sizes, (normal slots, reagent bag slots)) for carrying bring-list items."""
+    total = _sum({i: n} for i, n, _src in items)
+    stack = stacks(gd, total)
+    return total, stack, carried_split(total, stack, reagents, reagent_slots)
+
+
+def _lower_goal(plan, gd, rows, left, mail, trainer_trips, bag_slots, reagents, reagent_slots) -> int | None:
+    """The highest skill whose bring list (rows up to it) fits in bag_slots, CRAFT_ROOM kept free; None when not even
+    the first row's does."""
+    for k in range(len(rows) - 1, 0, -1):
+        items = _bring_items(plan, gd, rows[:k], dict(left), copy.deepcopy(mail), trainer_trips)
+        if _carried(gd, items, reagents, reagent_slots)[2][0] <= bag_slots - CRAFT_ROOM:
+            return rows[k - 1]["st"].skill_to
+    return None
+
+
 def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
                services_known: bool = False, start_skills: dict[int, int] | None = None,
                trainer_trips: str = AS_NEEDED) -> str:
     """services_known: the row already says what is near the trainer (or that it is a capital).
-    start_skills, trainer_trips: see bring_list."""
+    start_skills, trainer_trips: see bring_list. With bag_slots, a list that doesn't fit in them (CRAFT_ROOM kept
+    free, the reagent bag taking reagents first) says so, with the highest skill whose list fits."""
     reagents = reagent_items(gd) if reagent_slots else None
-    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills, trainer_trips)
+    rows, left, mail = _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills,
+                                   trainer_trips)
+    if not rows:
+        return ""
+    start = dict(left), copy.deepcopy(mail)
+    items = _bring_items(plan, gd, rows, left, mail, trainer_trips)
     if not items:
         return ""
+    reach = rows[-1]["st"].skill_to
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor", YOURS: "yours"}
     parts = [f"{n} {gd.name(i)} ({where[src] if src in where else 'mail from ' + from_character(src)})"
              for i, n, src in items]
-    total = _sum({i: n} for i, n, _src in items)
-    stack = stacks(gd, total)
-    split = carried_split(total, stack, reagents, reagent_slots)
+    total, stack, split = _carried(gd, items, reagents, reagent_slots)
     note = pack_note(gd, total, stack, "them at the trainer")
     town = "" if services_known else "the town may have no auction house, mailbox or bank, so "
+    warn = ""
+    if bag_slots and split[0] > bag_slots - CRAFT_ROOM:
+        lower = _lower_goal(plan, gd, rows, *start, trainer_trips, bag_slots, reagents, reagent_slots)
+        warn = (f" This needs {split[0] + CRAFT_ROOM} free slots and you have {bag_slots}: get bigger bags, bank what "
+                f"this stretch doesn't need, or set a lower goal{f' (for example {lower})' if lower else ''} so it fits.")
     return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
             f"({slots_text(split)}{'; ' + note if note else ''}); "
-            f"{town}buy and collect before you go.")
+            f"{town}buy and collect before you go.{warn}")
 
 
 def _patterns(plan, gd, market) -> list[tuple[str, str, float]]:
