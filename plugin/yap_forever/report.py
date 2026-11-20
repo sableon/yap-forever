@@ -114,6 +114,8 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     section("Merchant's Favor")
     fav_events = [e for e in plan.events if "Favor)" in e]
     out.append(f"Spent {plan.favor_spent} of {stock.favor} Favor.")
+    if favor.note:
+        out += ["", favor.note, ""]
     out += [f"- {e}" for e in fav_events]
     if favor.turnins:
         out += ["", "Crate turn-ins, cheapest Favor first (materials at what they'd sell for; "
