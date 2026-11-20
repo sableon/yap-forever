@@ -279,6 +279,19 @@ class _Route:
             return None
         return min(opts, key=lambda o: o["cost"].economic + (o["peek"].score if "peek" in o else 0))
 
+    def _tools_to_get(self, r):
+        """The tools r needs that are not held, each the cheapest way to get it: (tools, None), or
+        (None, the first tool category that can't be bought or made)."""
+        tools = []
+        for cat in r.tools:
+            if self._tool_held(cat):
+                continue
+            t = self._tool_option(cat)
+            if t is None:
+                return None, cat
+            tools.append(t)
+        return tools, None
+
     def _release_held(self, where=""):
         released = False
         if not self.has_ench:
@@ -446,15 +459,10 @@ class _Route:
         if isinstance(lo, str):
             self.p.stall_reasons[prof] = f"{name}: can't learn {r.name}: {lo}"
             return
-        tools = []
-        for cat in r.tools:
-            if self._tool_held(cat):
-                continue
-            t = self._tool_option(cat)
-            if t is None:
-                self.p.stall_reasons[prof] = f"{name}: {r.name} needs a tool that can't be bought or made"
-                return
-            tools.append(t)
+        tools, missing = self._tools_to_get(r)
+        if missing is not None:
+            self.p.stall_reasons[prof] = f"{name}: {r.name} needs a tool that can't be bought or made"
+            return
         requests = [rq for t in tools for rq in t["requests"]] + lo[3] + list(r.reagents.items())
         if self.valuer.take_many(requests, self.pools, self.skill, commit=False, learned=self.learned) is None:
             self.p.stall_reasons[prof] = f"{name}: materials for {r.name} not available"
@@ -515,18 +523,10 @@ class _Route:
             if isinstance(lo, str):
                 self.skipped[r.spell_id] = lo
                 continue
-            tools, ok = [], True
-            for cat in r.tools:
-                if self._tool_held(cat):
-                    continue
-                t = self._tool_option(cat)
-                if t is None:
-                    item = self.gd.tool_items.get(cat)
-                    self.skipped[r.spell_id] = f"tool not available: {self.gd.name(item) if item else cat}"
-                    ok = False
-                    break
-                tools.append(t)
-            if not ok:
+            tools, missing = self._tools_to_get(r)
+            if missing is not None:
+                item = self.gd.tool_items.get(missing)
+                self.skipped[r.spell_id] = f"tool not available: {self.gd.name(item) if item else missing}"
                 continue
             requests = [rq for t in tools for rq in t["requests"]] + \
                 [(item, q * crafts) for item, q in r.reagents.items()]
