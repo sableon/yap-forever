@@ -132,7 +132,13 @@ def load_profile(path: Path) -> Profile:
     _check("working_overtime_reading", reading, OVERTIME_READINGS)
     hint = _positive("study_hint_gold_per_point", d.get("study_hint_gold_per_point", 100))
     chars = {}
-    for name, c in d.get("characters", {}).items():
+    table = d.get("characters", {})
+    if not isinstance(table, dict):
+        raise ValueError(f'characters = {table!r} in profile.toml: use one [characters."Full Name"] table '
+                         "per character")
+    for name, c in table.items():
+        if not isinstance(c, dict):
+            raise ValueError(f'characters.{name} = {c!r} in profile.toml: use a [characters."{name}"] table')
         standing = c.get("favor_standing", "Neutral")
         _check(f"characters.{name}.favor_standing", standing, STANDINGS)
         overtime = _overtime(f"characters.{name}.working_overtime", c.get("working_overtime", 0))

@@ -117,5 +117,6 @@ def load_group(paths, prof: "profile_mod.Profile", character: str) -> Group:
         try:
             out.others[name] = load_stock(path)
         except (ValueError, KeyError, TypeError, OSError) as e:
-            out.skipped.append((path, str(e) or type(e).__name__))  # said in the notes; the plan goes on
+            why = getattr(e, "detail", None) or str(e) or type(e).__name__  # the path is in the note
+            out.skipped.append((path, why))  # said in the notes; the plan goes on
     return out
