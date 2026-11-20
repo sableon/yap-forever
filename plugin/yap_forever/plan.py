@@ -172,13 +172,13 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
             savings.update(listed_savings(per_mode[modes[0]], {m: routes[m] for m in modes}))
     else:
         savings = listed_savings(inputs, routes)
-    table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same)
+    trainer_trips = character.trainer_trips if character else "as_needed"
+    table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same, trainer_trips=trainer_trips)
     today = date.today().isoformat()
     paths.reports.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
     who = f"{report_name(character.name, profile_names)}-" if character else ""
     alt_cache: dict = {}
-    trainer_trips = character.trainer_trips if character else "as_needed"
     alts_of: dict[str, dict] = {}
     for m, route in routes.items():
         caps = per_mode[m].caps

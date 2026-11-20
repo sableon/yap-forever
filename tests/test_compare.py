@@ -35,6 +35,19 @@ class CompareTests(unittest.TestCase):
         row = next(line for line in text.splitlines() if line.startswith("| Thin markets"))
         self.assertIn("Iron Bar", row)
 
+    def test_compare_counts_trips_for_trainer_trips(self):
+        from yap_forever.compare import compare
+        gd = toy.gamedata([toy.recipe(1, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=100)])
+        p = Plan(ranks=[(BS, 225, 300, 500)], learn_log=[(BS, 240, 1, "trainer")], final_skill={BS: 300})
+        st = toy.stock(skills={BS: 225})
+
+        def away(**kw):
+            text = compare({"gold": p, "value": p}, gd, toy.market({}), st, **kw)
+            return next(line for line in text.splitlines() if line.startswith("| Trips away"))
+        self.assertEqual(away(), "| Trips away | 2 | 2 |")
+        self.assertEqual(away(trainer_trips="as_needed"), "| Trips away | 2 | 2 |")
+        self.assertEqual(away(trainer_trips="one_go"), "| Trips away | 1 | 1 |")
+
 
 class TripTests(unittest.TestCase):
     def test_trips_kinds(self):
