@@ -174,34 +174,27 @@ class _Route:
         self.held_mail: dict[int, tuple[float, str]] = {}
 
     def run(self) -> Plan:
-        gd, valuer, stock = self.gd, self.valuer, self.stock
-        caps, craft_once = self.caps, self.craft_once
-        profs, has_ench = self.profs, self.has_ench
-        pools, p, skill, rank_cap = self.pools, self.p, self.skill, self.rank_cap
-        learned, held, skipped = self.learned, self.held, self.skipped
-        soft_stalls = self.soft_stalls
-
-        for x in profs:
-            if skill[x] >= caps[x]:
-                p.events.append(f"{PROFESSIONS[x]} already at {skill[x]}")
+        for x in self.profs:
+            if self.skill[x] >= self.caps[x]:
+                self.p.events.append(f"{PROFESSIONS[x]} already at {self.skill[x]}")
 
         self._disenchant_bank()
         while True:
-            active = [x for x in profs if x not in p.stalled and skill[x] < caps[x]]
+            active = [x for x in self.profs if x not in self.p.stalled and self.skill[x] < self.caps[x]]
             if not active:
                 break
-            prof = min(active, key=lambda x: (skill[x], x))
-            s = skill[prof]
+            prof = min(active, key=lambda x: (self.skill[x], x))
+            s = self.skill[prof]
             name = PROFESSIONS[prof]
 
-            if s >= rank_cap[prof]:
+            if s >= self.rank_cap[prof]:
                 self._rank_step(prof, s, name)
                 continue
 
             best = self._best_recipe(prof, s)
             if best is None:
-                p.stalled[prof], p.stall_reasons[prof] = s, f"{name}: no usable recipe at {s}"
-                soft_stalls.add(prof)
+                self.p.stalled[prof], self.p.stall_reasons[prof] = s, f"{name}: no usable recipe at {s}"
+                self.soft_stalls.add(prof)
                 continue
 
             done = self._commit(prof, s, name, best)
@@ -209,41 +202,13 @@ class _Route:
                 continue
             step_cost, parts, made_something = done
             self._merge_step(prof, s, best[1], best[2], step_cost, parts)
-            skill[prof] = s + 1
+            self.skill[prof] = s + 1
             self._after_step(prof, made_something)
 
-        for prof, spell in craft_once.items():
+        for prof, spell in self.craft_once.items():
             self._craft_once_step(prof, spell)
 
-        # --- wrap up -------------------------------------------------------------
-        p.final_skill = dict(skill)
-        p.skipped = sorted((k, v) for k, v in skipped.items() if k not in learned)
-        p.crafted = dict(pools.crafted)
-        p.held_for_de = {i: (n, de_skill_needed(gd.items[i].item_level)) for i, n in held.items()}
-        p.bought, p.vendor_bought, p.farmed_bars = pools.bought, pools.vendor, pools.farmed
-        p.farm = bars_to_ore(pools.farmed)
-        p.used_stock = {i: n - pools.stock.get(i, 0) for i, n in stock.items.items()
-                        if n - pools.stock.get(i, 0) > 1e-9}
-        p.shared = {name: dict(items) for name, items in getattr(stock, "shared", {}).items()}
-        p.used_mail = mail_used(p.shared, pools.mail)
-        de_mats = set(p.de_materials)
-        keep_greens = getattr(stock, "keep_greens", False) and not has_ench
-        for item, n in list(pools.made.items()) + list(held.items()):
-            if n < 1e-9:
-                continue
-            p.leftovers[item] = p.leftovers.get(item, 0) + n
-            if item in held:
-                continue  # kept for disenchanting, not sold
-            if item in de_mats:
-                p.leftover_value += n * valuer.owned_value(item)
-            elif keep_greens and (de := valuer.output_options(item, 0).get("de")):
-                p.kept_greens[item] = n  # for another character's Enchanting: worth its materials
-                p.leftover_value += n * de
-            else:
-                p.sale_proceeds += sale_value(valuer, gd, item, n)
-        p.cash_total = self.spent.cash
-        p.economic_total = self.spent.economic - p.sale_proceeds - p.leftover_value
-        return p
+        return self._finish()
 
     def _tool_held(self, cat):
         return any(self.gd.satisfies(i, cat) for i in self.pools.held())
@@ -667,6 +632,38 @@ class _Route:
                 self.soft_stalls.discard(other)
                 self.p.stalled.pop(other, None)
                 self.p.stall_reasons.pop(other, None)
+
+    def _finish(self) -> Plan:
+        """The plan's totals, leftovers and what they sell for, once every step is planned."""
+        p = self.p
+        p.final_skill = dict(self.skill)
+        p.skipped = sorted((k, v) for k, v in self.skipped.items() if k not in self.learned)
+        p.crafted = dict(self.pools.crafted)
+        p.held_for_de = {i: (n, de_skill_needed(self.gd.items[i].item_level)) for i, n in self.held.items()}
+        p.bought, p.vendor_bought, p.farmed_bars = self.pools.bought, self.pools.vendor, self.pools.farmed
+        p.farm = bars_to_ore(self.pools.farmed)
+        p.used_stock = {i: n - self.pools.stock.get(i, 0) for i, n in self.stock.items.items()
+                        if n - self.pools.stock.get(i, 0) > 1e-9}
+        p.shared = {name: dict(items) for name, items in getattr(self.stock, "shared", {}).items()}
+        p.used_mail = mail_used(p.shared, self.pools.mail)
+        de_mats = set(p.de_materials)
+        keep_greens = getattr(self.stock, "keep_greens", False) and not self.has_ench
+        for item, n in list(self.pools.made.items()) + list(self.held.items()):
+            if n < 1e-9:
+                continue
+            p.leftovers[item] = p.leftovers.get(item, 0) + n
+            if item in self.held:
+                continue  # kept for disenchanting, not sold
+            if item in de_mats:
+                p.leftover_value += n * self.valuer.owned_value(item)
+            elif keep_greens and (de := self.valuer.output_options(item, 0).get("de")):
+                p.kept_greens[item] = n  # for another character's Enchanting: worth its materials
+                p.leftover_value += n * de
+            else:
+                p.sale_proceeds += sale_value(self.valuer, self.gd, item, n)
+        p.cash_total = self.spent.cash
+        p.economic_total = self.spent.economic - p.sale_proceeds - p.leftover_value
+        return p
 
 
 def _snapshot(pools) -> dict:
