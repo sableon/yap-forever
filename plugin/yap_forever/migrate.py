@@ -106,7 +106,7 @@ def bags_to_stock(bags: Path, stock: Path) -> bool:
 
 def migrate(data_dir: Path, dest: Paths, characters: dict[str, Path], region: str = "eu",
             ruleset: int = 2, faction: str = "alliance") -> list[str]:
-    """Give every character a stock.toml, copy house, prices and game data, and write a profile if
+    """Give every character a stock.toml, copy house and prices (game data is downloaded by the next plan), and write a profile if
     there is none. characters: name -> a stock file (copied) or a bags file (converted); a file with a
     `profs` key is a bags file. A file that can't be read raises ValueError before anything is written.
 

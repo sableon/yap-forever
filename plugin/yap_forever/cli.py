@@ -327,7 +327,7 @@ def main(argv: list[str], paths: Paths | None = None) -> int:
     pl.add_argument("--prof", action="append", default=[], metavar="NAME:TARGET",
                     help="a profession and its target: a skill 1-300 or a recipe (once or twice)")
     m = sub.add_parser("migrate", help="move a pre-yap-forever planner folder into your home folder")
-    m.add_argument("--from-data", type=Path, required=True, help="old data folder (house, prices, game data)")
+    m.add_argument("--from-data", type=Path, required=True, help="old data folder (house and prices are copied)")
     m.add_argument("--character", action="append", required=True, metavar="NAME=FILE",
                    help="a character and its stock file or bags file (repeat for every character)")
     m.add_argument("--region", choices=profile.REGIONS, default="eu", help="your region (default eu)")
