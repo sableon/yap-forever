@@ -71,7 +71,7 @@ def count(q: float) -> str:
 
 
 def gold(copper: float) -> str:
-    c = int(round(copper))
+    c = round(copper)
     if c >= 1000000:  # from 100g, silver is under 1% of the amount
         return f"{c / 10000:,.0f}g"
     if c >= 10000:
@@ -91,7 +91,7 @@ def _title(caps, route) -> str:
     if len(set(caps.values())) == 1:
         title = " + ".join(names) + f" to {next(iter(caps.values()))}"
     else:
-        title = " + ".join(f"{n} to {c}" for n, c in zip(names, caps.values()))
+        title = " + ".join(f"{n} to {c}" for n, c in zip(names, caps.values(), strict=True))
     return title + (f" — {route} route" if route else "")
 
 
@@ -165,7 +165,7 @@ def _keep(out, plan, gd, market, by_mail=None) -> None:
             _add(need, _less(row["need"], row["tools"]))  # a bought tool is no material to keep
         _add(bank, s.from_stock)
     groups: dict[str, list] = {}
-    for item, q in need.items():
+    for item in need:
         groups.setdefault(source_group(item, gd), []).append(item)
 
     out += ["## Keep while levelling", "",

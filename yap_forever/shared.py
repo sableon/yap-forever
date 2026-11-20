@@ -91,7 +91,7 @@ class Group:
         character being planned included). With no entry and no other character, it is this character's
         own figure: not shared, and not a sum."""
         if self.gold is not None:
-            return Budget(int(round(self.gold * COPPER_PER_GOLD)), self.label)
+            return Budget(round(self.gold * COPPER_PER_GOLD), self.label)
         alone = not self.others
         return Budget(stock.cash + sum(s.cash for s in self.others.values()), self.label, not alone, not alone)
 
@@ -117,5 +117,6 @@ def load_group(paths, prof: "profile_mod.Profile", character: str) -> Group:
         try:
             out.others[name] = load_stock(path)
         except (ValueError, KeyError, TypeError, OSError) as e:
-            out.skipped.append((path, str(e) or type(e).__name__))  # said in the notes; the plan goes on
+            why = getattr(e, "detail", None) or str(e) or type(e).__name__  # the path is in the note
+            out.skipped.append((path, why))  # said in the notes; the plan goes on
     return out

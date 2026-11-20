@@ -6,9 +6,9 @@ import re
 import tomllib
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Iterable
+from collections.abc import Iterable
 
 from yap_forever.settings import command_hint
 
@@ -71,7 +71,7 @@ def report_name(name: str, names: Iterable[str] = ()) -> str:
     part = _file_part(name)
     clash = any(other != name and _file_part(other) == part for other in names)
     if not part or clash:
-        part += "-" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+        part += "-" + hashlib.sha1(name.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
     return part
 
 
@@ -132,7 +132,13 @@ def load_profile(path: Path) -> Profile:
     _check("working_overtime_reading", reading, OVERTIME_READINGS)
     hint = _positive("study_hint_gold_per_point", d.get("study_hint_gold_per_point", 100))
     chars = {}
-    for name, c in d.get("characters", {}).items():
+    table = d.get("characters", {})
+    if not isinstance(table, dict):
+        raise ValueError(f'characters = {table!r} in profile.toml: use one [characters."Full Name"] table '
+                         "per character")
+    for name, c in table.items():
+        if not isinstance(c, dict):
+            raise ValueError(f'characters.{name} = {c!r} in profile.toml: use a [characters."{name}"] table')
         standing = c.get("favor_standing", "Neutral")
         _check(f"characters.{name}.favor_standing", standing, STANDINGS)
         overtime = _overtime(f"characters.{name}.working_overtime", c.get("working_overtime", 0))
@@ -151,7 +157,7 @@ def save_house(path: Path, house: int, region: str, ruleset: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
         "house": house, "region": region, "ruleset": ruleset,
-        "found": datetime.now(timezone.utc).isoformat(timespec="seconds")}), encoding="utf-8")
+        "found": datetime.now(UTC).isoformat(timespec="seconds")}), encoding="utf-8")
 
 
 def load_house(path: Path) -> int:

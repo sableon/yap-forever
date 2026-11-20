@@ -27,6 +27,16 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual((prof.region, prof.ruleset, prof.faction), ("eu", 2, "alliance"))
         self.assertEqual(prof.characters, {"Main": profile.Character("Main", "Neutral")})
 
+    def test_characters_must_be_a_table(self):
+        for text in ('characters = "x"\n', "[characters]\nAna = 1\n"):
+            with tempfile.TemporaryDirectory() as d, self.subTest(text=text):
+                path = Path(d) / "profile.toml"
+                path.write_text('region = "eu"\nfaction = "alliance"\n' + text, encoding="utf-8")
+                with self.assertRaises(ValueError) as cm:
+                    profile.load_profile(path)
+                self.assertIn("characters", str(cm.exception))
+                self.assertIn("profile.toml", str(cm.exception))
+
     def test_load_profile_bad_faction(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(ValueError) as cm:

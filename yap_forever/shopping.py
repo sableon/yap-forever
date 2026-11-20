@@ -36,7 +36,7 @@ def pack(counts: dict, stack: dict) -> dict:
         had = out.get(greater, 0)
 
         def cost(k):
-            return slots({lesser: whole - 3 * k, greater: had + k}, stack)
+            return slots({lesser: whole - 3 * k, greater: had + k}, stack)  # noqa: B023 (called in this loop pass only)
 
         k = min(range(whole // 3 + 1), key=lambda k: (cost(k), -k))
         if k:
@@ -447,4 +447,4 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
                      + (f" From the bank: {', '.join(parts['bank'])}." if parts["bank"] else "")
                      + (f" Mailed by your other characters: {', '.join(parts['other'])}." if parts["other"] else "")
                      + (f" {note[0].upper()}{note[1:]}." if note else ""))
-    return lines + [""], len(trips)
+    return [*lines, ""], len(trips)

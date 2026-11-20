@@ -87,44 +87,104 @@ def parse_prof_arg(text: str) -> tuple[int, Goal]:
 
 def _skills(table: dict) -> dict[int, int]:
     out = {}
-    for name, value in table.items():
+    for name, value in _table(table, "skills").items():
         key = str(name).lower()
         if key.isdigit():
-            out[int(key)] = int(value)
+            out[int(key)] = _whole(value, f"skills.{name}")
         elif key in PROFESSION_IDS:
-            out[PROFESSION_IDS[key]] = int(value)
+            out[PROFESSION_IDS[key]] = _whole(value, f"skills.{name}")
         else:
             raise ValueError(f"[skills] {name}: use one of {', '.join(sorted(PROFESSION_IDS))}")
     return out
 
 
+class StockError(ValueError):
+    """A stock file that can't be read: `path` and what is wrong in it (`detail`)."""
+
+    def __init__(self, path: Path, detail: str):
+        super().__init__(f"{path}: {detail}")
+        self.path, self.detail = path, detail
+
+
+def _table(value, key: str) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} = {value!r}: use a [{key}] table")
+    return value
+
+
+def _whole(value, key: str) -> int:
+    """A whole number from TOML (also 47.0, or a string of digits as older files have them)."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, bool) or not isinstance(value, (int, str)) or (
+            isinstance(value, str) and not value.strip().lstrip("-").isdigit()):
+        raise ValueError(f"{key} = {value!r}: use a whole number")
+    return int(value)
+
+
+def _number(value, key: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError(f"{key} = {value!r}: use a number")
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"{key} = {value!r}: use a number") from None
+
+
 def _slots(d: dict, key: str, default):
-    n = int(d[key]) if key in d else default
+    n = _whole(d[key], key) if key in d else default
     if n is not None and n < 0:
         raise ValueError(f"{key} must be 0 or more, not {n}")
     return n
 
 
 def load_stock(path: Path) -> Stock:
-    with open(path, "rb") as f:
-        d = tomllib.load(f)
-    m = d.get("marker", {})
+    """The stock file; a mistake in it is a StockError that names the file and the key."""
+    try:
+        with open(path, "rb") as f:
+            d = tomllib.load(f)
+        return _stock(d)
+    except tomllib.TOMLDecodeError as e:
+        raise StockError(path, f"not valid TOML ({e})") from None
+    except StockError:
+        raise
+    except ValueError as e:
+        raise StockError(path, str(e)) from None
+
+
+def _stock(d: dict) -> Stock:
+    m = _table(d.get("marker", {}), "marker")
     marker = None
     if m.get("item_id") and m.get("buyout_copper"):
-        marker = (int(m["item_id"]), int(m["buyout_copper"]))
+        marker = (_whole(m["item_id"], "marker.item_id"), _whole(m["buyout_copper"], "marker.buyout_copper"))
+
+    def whole(key, default):
+        return _whole(d[key], key) if key in d else default
+
+    items = {}
+    for k, v in _table(d.get("items", {}), "items").items():
+        if not str(k).isdigit():
+            raise ValueError(f"items.{k}: use an item ID (a number) as the key")
+        items[int(k)] = _whole(v, f"items.{k}")
+    goals = {}
+    for k, v in _table(d.get("goals", {}), "goals").items():
+        try:
+            goals[_profession_id(k)] = parse_goal(v)
+        except ValueError as e:
+            raise ValueError(f"goals.{k}: {e}") from None
     return Stock(
-        items={int(k): int(v) for k, v in d.get("items", {}).items()},
-        favor=int(d.get("favor", 0)),
-        cash=int(round(float(d.get("cash_gold", 0)) * 10000)),
-        level=int(d.get("level", 1)),
-        mining=int(d.get("mining", 0)),
-        short_farm_ore=int(d.get("short_farm_ore", 200)),
+        items=items,
+        favor=whole("favor", 0),
+        cash=round(_number(d.get("cash_gold", 0), "cash_gold") * 10000),
+        level=whole("level", 1),
+        mining=whole("mining", 0),
+        short_farm_ore=whole("short_farm_ore", 200),
         marker=marker,
-        target=int(d.get("target", 225)),
-        mining_goal=int(d.get("mining_goal", d.get("mining", 0))),
-        quest_item_sales=int(d["quest_item_sales"]) if "quest_item_sales" in d else None,
+        target=whole("target", 225),
+        mining_goal=_whole(d["mining_goal"], "mining_goal") if "mining_goal" in d else whole("mining", 0),
+        quest_item_sales=whole("quest_item_sales", None),
         skills=_skills(d.get("skills", {})),
-        goals={_profession_id(k): parse_goal(v) for k, v in d.get("goals", {}).items()},
+        goals=goals,
         bag_slots=_slots(d, "bag_slots", None),
         keep_greens=bool(d.get("keep_greens", False)),
         reagent_slots=_slots(d, "reagent_slots", 0),

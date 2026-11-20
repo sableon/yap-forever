@@ -1,6 +1,8 @@
 """Auction house prices: download a house's snapshot and answer price questions."""
 import datetime
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from yap_forever import bnet
@@ -75,7 +77,14 @@ class Market:
                 "house": self.house, "region": self.region, "ruleset": self.ruleset,
                 "source": self.source, "scan_day": self.scan_day, "dropped": self.dropped,
                 "listings": {str(i): v for i, v in self.listings.items()}}
-        path.write_text(json.dumps(data), encoding="utf-8")
+        # A temporary file renamed into place: a stop in the middle leaves the old prices whole.
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(json.dumps(data))
+            os.replace(tmp, path)
+        finally:
+            Path(tmp).unlink(missing_ok=True)
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Market":

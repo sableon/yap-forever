@@ -48,7 +48,7 @@ class PlannerTests(unittest.TestCase):
     def test_skips_unpriceable_with_reason(self):
         rs = base_recipes() + [toy.recipe(3, "BS odd", BS, {toy.ODD: 1}, (toy.STONE, 1))]
         p = run(rs, BARS)
-        self.assertIn((3, f"unpriceable: Odd Thing"), p.skipped)
+        self.assertIn((3, "unpriceable: Odd Thing"), p.skipped)
 
     def test_not_planned_below_required_skill(self):
         rs = base_recipes() + [toy.recipe(3, "BS iron", BS, {toy.IRON_BAR: 1}, (toy.STONE, 1), req=30)]

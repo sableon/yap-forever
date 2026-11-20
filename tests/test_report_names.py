@@ -67,7 +67,7 @@ class ReportNameTests(unittest.TestCase):
 
     def test_hash_is_utf8_sha1_first_8_hex(self):
         self.assertEqual(digest("Élise Brightforge"),
-                         hashlib.sha1("Élise Brightforge".encode("utf-8")).hexdigest()[:8])
+                         hashlib.sha1("Élise Brightforge".encode()).hexdigest()[:8])
         self.assertRegex(report_name("<>", ["<>"]), r"^-[0-9a-f]{8}$")
 
 

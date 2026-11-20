@@ -55,9 +55,15 @@ def compare(routes: dict, gd, market, stock, mailbox_trips: dict | None = None, 
     def row(label, f):
         return f"| {label} | " + " | ".join(f(routes[m], m) for m in modes) + " |"
 
-    reached = lambda p, _m: ", ".join(f"{PROFESSIONS.get(x, x)} {s}" for x, s in p.final_skill.items()) or "—"
-    away = lambda p, _m: str(len(trips(p, gd))) if trips(p, gd) else "none"
-    mail = lambda _p, m: str(mailbox_trips[m]) if mailbox_trips and m in mailbox_trips else "—"
+    def reached(p, _m):
+        return ", ".join(f"{PROFESSIONS.get(x, x)} {s}" for x, s in p.final_skill.items()) or "—"
+
+    def away(p, _m):
+        return str(len(trips(p, gd))) if trips(p, gd) else "none"
+
+    def mail(_p, m):
+        return str(mailbox_trips[m]) if mailbox_trips and m in mailbox_trips else "—"
+
     return "\n".join([
         "| | " + " | ".join(ROUTE_NAMES[m] for m in modes) + " |",
         "|---|" + "---:|" * len(modes),
