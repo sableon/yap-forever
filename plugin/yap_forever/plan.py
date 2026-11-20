@@ -8,7 +8,7 @@ from yap_forever import gamedata, trainer_text
 from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
 from yap_forever.config import Stock, load_stock
 from yap_forever.costmodel import Valuer
-from yap_forever.favor import FavorData, load_favor
+from yap_forever.favor import FavorData, load_favor, no_favor
 from yap_forever.guide import gold, render_guide
 from yap_forever.planner import DISENCHANT, plan, resolve_goals
 from yap_forever.prices import Market
@@ -123,7 +123,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                   group=None) -> tuple[str, dict[str, Path]]:
     """Plan both routes from the player's prices and stock; return (comparison, written files).
     character: the profile.Character, for its talents; reading: how Working Overtime applies.
-    faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none.
+    faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none. Horde gets no
+    Merchant's Favor recipes or crate turn-ins (see favor.no_favor).
     study_hint_gold_per_point: a route row of the lowest profession that costs this much gold a point
     gets a Dedicated Study hint (profile.toml, default 100).
     group: the shared.Group of the character: the mailable items of its other characters join the plan, and
@@ -142,7 +143,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     if group is not None:
         stock.shared = group.shared_items(gd)
         budget = group.budget(stock)
-    favor = load_favor(standing)
+    favor = no_favor() if faction == "horde" else load_favor(standing)  # the Favor list is Alliance's
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
     inputs = PlanInputs(gd=gd, market=market, stock=stock, favor=favor, caps=caps, craft_once=once,
@@ -159,7 +160,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         alts = trip_alternatives(route, inputs, m)
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
-        full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps,
+        full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,
                                notes=group.notes() if group else ()), encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"
@@ -168,7 +169,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                        trainer_info=trainer_info, trainer_note=trainer_note,
                                        saving_line=line, mode=m,
                                        study_hint_gold_per_point=study_hint_gold_per_point,
-                                       extra_notes=group.notes() if group else ()),
+                                       extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else [])]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
     return table, files

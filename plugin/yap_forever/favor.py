@@ -19,6 +19,7 @@ class FavorData:
     recipes: dict[int, int]  # recipe spell -> Favor price
     skills: dict[int, int] = field(default_factory=dict)  # recipe spell -> required skill, when known
     turnins: list[Turnin] = field(default_factory=list)
+    note: str = ""  # said in the guide and the report when this is not the character's whole list
 
 
 def load_favor(standing: str, path: Path | None = None) -> FavorData:
@@ -39,3 +40,8 @@ def load_favor(standing: str, path: Path | None = None) -> FavorData:
     turnins = [Turnin(t["name"], {int(k): int(v) for k, v in t.get("items", {}).items()}, int(t["favor"]))
                for t in d.get("turnin", [])]
     return FavorData(recipes, skills, turnins)
+
+
+def no_favor() -> FavorData:
+    """No Favor recipes and no crate turn-ins: the list is Alliance's, and Horde's isn't in the planner yet."""
+    return FavorData({}, {}, [], "Merchant's Favor recipes for Horde aren't in the planner yet.")

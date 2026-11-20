@@ -23,10 +23,10 @@ def sample():
 
 class VerdictTests(unittest.TestCase):
     def test_verdict_now(self):
-        self.assertEqual(verdict(Plan(farm={}), toy.stock()), "Switch now")
+        self.assertEqual(verdict(Plan(farm={}), toy.stock()), "Ready to level")
 
     def test_verdict_short(self):
-        self.assertEqual(verdict(Plan(farm={2770: 100, 2771: 50}), toy.stock()), "Switch after a short farm")
+        self.assertEqual(verdict(Plan(farm={2770: 100, 2771: 50}), toy.stock()), "Short farm first")
 
     def test_verdict_not_yet(self):
         self.assertEqual(verdict(Plan(farm={2770: 250}), toy.stock()), "Not yet")
@@ -68,7 +68,7 @@ class RenderTests(unittest.TestCase):
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         positions = [text.index(f"## {s}\n") for s in SECTIONS]
         self.assertEqual(positions, sorted(positions))
-        self.assertEqual(len(SECTIONS), 9)
+        self.assertEqual(len(SECTIONS), 7)
 
     def test_report_has_no_secrets(self):
         creds = Credentials("myclientid", "s3cr3tvalue", "eu")
@@ -109,6 +109,30 @@ class RenderTests(unittest.TestCase):
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
         self.assertTrue("Crafted for reagents" in text)
 
+    def test_reached_target_is_said(self):
+        from tests.test_planner import run_caps
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1))]
+        st = toy.stock(skills={BS: 300})
+        p = run_caps(rs, {BS: 300}, BARS, stock=st)
+        gd, m = toy.gamedata(rs), toy.market(BARS)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 300})
+        verdict_part = text[text.index("## Verdict"):text.index("## Route")]
+        self.assertIn("Blacksmithing is already at 300: nothing to plan.", verdict_part)
+        self.assertNotIn("Ready to level", verdict_part)  # every target reached: no verdict is claimed
+        self.assertNotIn("Planned to", verdict_part)
+
+    def test_a_verdict_stays_while_another_target_is_still_to_plan(self):
+        from tests.test_planner import run_caps
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        st = toy.stock(skills={BS: 300})
+        p = run_caps(rs, {BS: 300, ENCH: 20}, BARS, stock=st)
+        text = render(p, verdict(p, st), toy.market(BARS), toy.gamedata(rs), st, toy.NO_FAVOR, {BS: 300, ENCH: 20})
+        verdict_part = text[text.index("## Verdict"):text.index("## Route")]
+        self.assertIn("Blacksmithing is already at 300: nothing to plan.", verdict_part)
+        self.assertIn("**Ready to level.**", verdict_part)
+        self.assertIn("Planned to:", verdict_part)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -125,17 +149,6 @@ class BankGreensReportTests(unittest.TestCase):
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertRegex(text, r"\| Enchanting \| 1→\d+ \| Disenchant greens \| \d+ \| 0s 0c \| 0s 0c \|")
         self.assertIn("Enchanting 1: disenchant 30 Runed Copper Belt from your bank", text)
-
-    def test_order_a_text_matches_planner(self):
-        rs = [toy.recipe(1, "BS basic", 164, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
-              toy.recipe(2, "Ench dust", 333, {toy.DUST: 1})]
-        gd = toy.gamedata(rs)
-        st = toy.stock({toy.BELT: 30})
-        m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.DUST: [(300, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 40, 333: 40})
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
-        self.assertNotIn("wait in the bank or mail", text)
-        self.assertIn("disenchanted first", text)
 
 
 class BufferTests(unittest.TestCase):
@@ -176,15 +189,36 @@ class AnyPairReportTests(unittest.TestCase):
         self.assertNotIn("## Switch order", text)
         self.assertNotIn("## Farm before switching", text)
 
-    def test_report_keeps_switch_order_for_the_main_pair(self):
-        from yap_forever.planner import Plan
-        p = Plan(final_skill={164: 40, 333: 40})
-        text = render(p, "Switch now", toy.market(), toy.gamedata([]), toy.stock(), toy.NO_FAVOR, {164: 225, 333: 225})
-        self.assertIn("## Switch order", text)
-
     def test_verdict_for_other_pairs(self):
         from yap_forever.planner import Plan
-        self.assertEqual(verdict(Plan(), toy.stock(), caps={197: 40}), "Ready to level")
+        self.assertEqual(verdict(Plan(), toy.stock()), "Ready to level")
+
+    def test_no_switch_texts_for_blacksmithing_enchanting(self):
+        rs = [toy.recipe(1, "BS basic", 164, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench dust", 333, {toy.DUST: 1})]
+        gd = toy.gamedata(rs)
+        st = toy.stock({toy.BELT: 30})
+        m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.DUST: [(300, 100000)]})
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 40, 333: 40})
+        self.assertTrue(sum(p.de_materials.values()))
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
+        for gone in ("Switch order", "Order A", "Order B", "Farm before switching"):
+            self.assertNotIn(gone, text)
+        self.assertIn("Disenchanting in this route yields about", text)
+
+    def test_ore_section_only_when_farming(self):
+        from yap_forever.planner import Plan
+        gd = toy.gamedata([])
+        ore, bar = toy.IRON_ORE, toy.IRON_BAR
+        farming = Plan(final_skill={164: 40}, farm={ore: 30}, farmed_bars={bar: 10})
+        text = render(farming, "Short farm first", toy.market(), gd, toy.stock(), toy.NO_FAVOR, {BS: 40})
+        self.assertIn("## Ore to mine\n", text)
+        self.assertIn("| Iron Ore | 30 |", text)
+        self.assertIn("Smelts into: 10 Iron Bar.", text)
+        self.assertLess(text.index("## Ore to mine"), text.index("## Route"))
+        plain = render(Plan(final_skill={164: 40}), "Ready to level", toy.market(), gd, toy.stock(),
+                       toy.NO_FAVOR, {BS: 40})
+        self.assertNotIn("Ore to mine", plain)
 
 
 class TalentNoteTests(unittest.TestCase):

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from yap_forever.config import STATIC_DIR
 from yap_forever.costmodel import BARS, ORES, STONES
 from yap_forever.gamedata import ENCH, PROFESSIONS
-from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
+from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, reached_lines, step_factor
 from yap_forever import trainer_text
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, mail_text
@@ -86,6 +86,11 @@ def _add(into: dict, more: dict) -> None:
         into[i] = into.get(i, 0) + q
 
 
+def _gathers(plan, stock) -> bool:
+    """The character mines, or the plan farms ore (it can with Mining 0 and a mining_goal: costmodel.farmable)."""
+    return bool(stock.mining or stock.mining_goal or plan.farm)
+
+
 def _title(caps, route) -> str:
     names = [PROFESSIONS.get(p, str(p)) for p in caps]
     if len(set(caps.values())) == 1:
@@ -117,8 +122,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     intro = []
     if len(caps) > 1:
         intro.append("Level both professions side by side: craft in whichever one is lower.")
-    if stock.mining or plan.farm:
-        intro.append("Until you switch, gather and keep the materials below instead of selling them.")
+    if _gathers(plan, stock):
+        intro.append("Gather and keep the materials below instead of selling them.")
     if intro:
         out += [" ".join(intro), ""]
     if trainer_note:
@@ -127,13 +132,13 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
         out += [line, ""]
     from yap_forever.shopping import mailed  # shopping imports this module
     by_mail = mailed(plan, gd, stock) if plan.used_mail else {}  # the shopping list's counts
-    _keep(out, plan, gd, market, by_mail)
+    _keep(out, plan, gd, market, by_mail, stock)
     hint = _StudyHint(lowest_profession(caps, stock), mode, study_hint_gold_per_point, character)
     _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint)
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)
-    _notes(out, plan, market, gatherer=bool(stock.mining or plan.farm),
+    _notes(out, plan, market, gatherer=_gathers(plan, stock), skins=bool(stock.skinning),
            mailed=by_mail, gd=gd, notes=extra_notes)
     return "\n".join(out) + "\n"
 
@@ -150,8 +155,9 @@ def _less(counts: dict, minus: dict) -> dict:
     return {i: q for i, q in out.items() if q > 1e-9}
 
 
-def _keep(out, plan, gd, market, by_mail=None) -> None:
-    """by_mail: item -> (character, count) mailed by your other characters, as the shopping list counts it."""
+def _keep(out, plan, gd, market, by_mail=None, stock=None) -> None:
+    """by_mail: item -> (character, count) mailed by your other characters, as the shopping list counts it.
+    stock: the character's, for the notes that only fit a miner."""
     need, bank = {}, {}
     mail = {i: sum(n for _who, n in sources) for i, sources in (by_mail or {}).items()}
     rows, seen = _whole(plan, gd), set()
@@ -189,13 +195,13 @@ def _keep(out, plan, gd, market, by_mail=None) -> None:
                        + (f"| {count(mail.get(item, 0))} " if by_mail else "")
                        + f"| {count(still)} | {price} |")
         out.append("")
-        out += _group_notes(group, items, gd)
+        out += _group_notes(group, items, gd, bool(stock and _gathers(plan, stock)))
 
     vendor = groups.get("Vendor", [])
     if vendor:
         total = sum(need[i] * gd.vendor_prices.get(i, 0) for i in vendor)
         listed = ", ".join(f"{count(need[i])} {gd.name(i)}" for i in sorted(vendor, key=lambda i: -need[i]))
-        out += ["### Buy from a vendor when you switch", "",
+        out += ["### Buy from a vendor", "",
                 f"No need to stockpile: {listed}. About {gold(total)} in total.", ""]
 
 
@@ -219,11 +225,11 @@ def _label(item, gd) -> str:
     return gd.name(item)
 
 
-def _group_notes(group, items, gd) -> list[str]:
+def _group_notes(group, items, gd, mines=True) -> list[str]:
     notes = []
     if group == "Mining":
         bars = [i for i in items if i in BARS]
-        if bars:
+        if bars and mines:
             notes.append("Bars: mine the ore and smelt it. Bronze = Copper + Tin; "
                          "Steel = Iron + Coal (Coal from a vendor).")
         unused = [n for i, n in SOURCES["mining"].items() if i not in items]
@@ -367,6 +373,8 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None) -> No
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append((t.skill, 0.5, f"- {row}"))
 
     out += ["## Route", ""]
+    for line in reached_lines(plan):
+        out += [line, ""]
     for k in sorted({k for k, _p in lines}):
         out += [f"### Stage {k + 1}: to {STAGE_CAPS[min(k, len(STAGE_CAPS) - 1)]}", ""]
         for p in caps:
@@ -464,7 +472,7 @@ def _money(out, plan, stock) -> None:
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 
-def _notes(out, plan, market, gatherer=True, mailed=None, gd=None, notes=()) -> None:
+def _notes(out, plan, market, gatherer=True, mailed=None, gd=None, notes=(), skins=False) -> None:
     """mailed: item -> (character, count) your other characters are asked to mail (shopping.mailed).
     notes: further lines the caller wants said (a character's file that was left out)."""
     out += ["## Notes", ""]
@@ -477,7 +485,7 @@ def _notes(out, plan, market, gatherer=True, mailed=None, gd=None, notes=()) -> 
         out.append("- Imperial Plate plans come from quests that need character level 50; "
                    "bring the Thorium Bars shown in the route.")
     if gatherer:
-        out += ["- Leather is costed as bought on the AH; since you skin, gather it instead.",
+        out += ["- Leather is costed as bought on the AH" + ("; since you skin, gather it instead." if skins else "."),
                 "- Stones are counted as mined along with the ore."]
     if market.source == "auctionator":  # the limits of an import are stated at the top of the guide
         out.append(f"- Prices: Auctionator scan of {market.scan_day or 'unknown date'}.")

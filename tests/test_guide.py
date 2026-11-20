@@ -182,7 +182,7 @@ class GuideTests(unittest.TestCase):
         text = guide(rs, BARS)
         keep = text[text.index("## Keep while levelling"):text.index("## Route")]
         self.assertFalse(any(l.startswith("| Copper Rod") for l in keep.splitlines()))
-        self.assertIn("Buy from a vendor when you switch", text)
+        self.assertIn("### Buy from a vendor\n", text)
 
     def test_bought_tool_not_a_material_on_rows_or_keep_table(self):
         from yap_forever.guide import render_guide
@@ -196,6 +196,49 @@ class GuideTests(unittest.TestCase):
         rows = [l for l in guide.splitlines() if l.startswith("- **") and "× BS hammer" in l]
         self.assertTrue(rows)
         self.assertFalse(any("Blacksmith Hammer" in l for l in rows))
+
+    def test_reached_target_is_said(self):
+        from tests.test_planner import run_caps
+        rs = base_recipes()
+        st = toy.stock(skills={BS: 300})
+        p = run_caps(rs, {BS: 300}, BARS, stock=st)
+        text = render_guide(p, toy.gamedata(rs), toy.market(BARS), st, {BS: 300})
+        route = text[text.index("## Route"):text.index("## Money")]
+        self.assertIn("Blacksmithing is already at 300: nothing to plan.", route)
+
+    def test_vendor_heading_has_no_switch(self):
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        text = guide(rs, BARS)
+        self.assertIn("### Buy from a vendor\n", text)
+        self.assertNotIn("when you switch", text)
+
+    def test_bars_note_only_for_miners(self):
+        for mining, expected in ((120, True), (0, False)):
+            with self.subTest(mining=mining):
+                text = guide(base_recipes(), BARS, stock=toy.stock(mining=mining))
+                self.assertIn("### Mining", text)
+                self.assertEqual("Bars: mine the ore" in text, expected)
+
+    def test_bars_note_when_the_plan_farms_with_a_mining_goal(self):
+        st = toy.stock(mining=0)
+        st.mining_goal = 150  # farms ore without mining yet (costmodel.farmable)
+        text = guide(base_recipes(), BARS, stock=st)
+        self.assertIn("Bars: mine the ore", text)
+
+    def test_gathering_intro_has_no_switch(self):
+        text = guide(base_recipes(), BARS, stock=toy.stock(mining=120))
+        self.assertIn("Gather and keep the materials below instead of selling them.", text)
+        self.assertNotIn("Until you switch", text)
+
+    def test_skin_clause_only_for_skinners(self):
+        for skinning, expected in ((100, True), (0, False)):
+            with self.subTest(skinning=skinning):
+                st = toy.stock(mining=120)  # the leather note sits with the gatherer notes
+                st.skinning = skinning
+                text = guide(base_recipes(), BARS, stock=st)
+                self.assertIn("Leather is costed as bought on the AH", text)
+                self.assertEqual("since you skin" in text, expected)
 
 
 if __name__ == "__main__":

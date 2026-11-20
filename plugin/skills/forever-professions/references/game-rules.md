@@ -60,6 +60,12 @@ say so.
   everything at once.
 - Disenchanting gives Enchanting skill-ups, with thresholds near 1 / 20 / 40 / 60: roughly 19
   disenchants to reach 20, 46 to 40, 73 to 50, 190 to 60.
+- Disenchanting levels Enchanting only up to 60 (the last threshold). Enchanting from 1 to 60 costs
+  about 41s by recipes (measured 2026-11-20 on a fresh character, at that day's auction house
+  prices), so using a crafting profession's greens for those skill-ups would save under 1g, and
+  only for a character starting both professions from scratch. The planner never reorders
+  professions for it: both level side by side, and the greens are disenchanted for materials in
+  any order, since Forever has no disenchant gate.
 - Enchanting wands can't be disenchanted.
 - Disenchanting "compresses" green crafts into stackable dust, essences and shards, which saves
   bag space on long routes.

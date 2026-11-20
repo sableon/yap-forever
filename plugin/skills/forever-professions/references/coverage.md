@@ -16,6 +16,7 @@ says what is there.
 - Merchant's Favor recipes for the character's standing (Alliance, Blacksmithing and Enchanting),
   as far as their vendor, standing and price are known: up to the Honored Wristguards and Brilliant
   Wand. Other Favor-era recipes (the Blacksmithing plans at 300 among them) are not listed yet.
+  Horde characters get no Favor recipes or crate turn-ins yet: the guide and report say so.
 - A shopping list in every guide; mailbox trips when `stock.toml` gives `bag_slots`, and a reagent
   bag when it gives `reagent_slots` ([list-layout.md](list-layout.md), "Mailbox trips").
 - Owned patterns: a pattern in the character's stock teaches its recipe at no cost, and is left

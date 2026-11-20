@@ -1,8 +1,11 @@
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from yap_forever import config, settings
 
@@ -113,6 +116,27 @@ class CredentialsTests(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 settings.load_credentials(p)
         self.assertIn("fill in client_id and client_secret", str(cm.exception))
+
+
+class HintTests(unittest.TestCase):
+    def test_hint_through_launcher(self):
+        launcher = "/p/plugin/yap-forever.py"
+        self.assertEqual(settings.command_hint("init", "posix", launcher), 'python3 "/p/plugin/yap-forever.py" init')
+        self.assertEqual(settings.command_hint("init", "nt", launcher), 'py -3 "/p/plugin/yap-forever.py" init')
+
+    def test_hint_without_launcher_keeps_module_form(self):
+        with mock.patch.object(settings, "LAUNCHER", None):
+            self.assertEqual(settings.command_hint("init", "posix", None), "python3 -m yap_forever init")
+
+    def test_launcher_sets_its_path(self):
+        launcher = Path(__file__).resolve().parent.parent / "plugin" / "yap-forever.py"
+        with tempfile.TemporaryDirectory() as d:
+            env = dict(os.environ, YAP_FOREVER_HOME=str(Path(d) / "empty"))
+            env.pop("PYTHONPATH", None)
+            r = subprocess.run([sys.executable, str(launcher), "check", "--offline"], cwd=d, env=env,
+                               capture_output=True, text=True, encoding="utf-8", timeout=60)
+        self.assertIn('yap-forever.py" init', r.stdout)
+        self.assertNotIn("-m yap_forever", r.stdout)
 
 
 if __name__ == "__main__":

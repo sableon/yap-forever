@@ -122,7 +122,7 @@ def _gold_table(table) -> dict[tuple[int, str], float]:
 def load_profile(path: Path) -> Profile:
     path = Path(path)
     if not path.exists():
-        raise FileNotFoundError(f'no {path.name} yet: run "{command_hint("init")}" first')
+        raise FileNotFoundError(f'no {path.name} yet: run {command_hint("init")} first')
     d = tomllib.loads(path.read_text(encoding="utf-8"))
     region = d.get("region", "eu")
     faction = d.get("faction", "")
@@ -164,9 +164,9 @@ def load_house(path: Path) -> int:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(
-            f'no auction house yet: post a marker listing in game, then run "{command_hint("probe --item ID --buyout COPPER")}"')
+            f'no auction house yet: post a marker listing in game, then run {command_hint("probe --item ID --buyout COPPER")}')
     try:
         return int(json.loads(path.read_text(encoding="utf-8"))["house"])
     except (ValueError, KeyError, TypeError) as e:
         raise ValueError(f'{path} is damaged ({type(e).__name__}): post a marker listing in game, then run '
-                         f'"{command_hint("probe --item ID --buyout COPPER")}"') from None
+                         f'{command_hint("probe --item ID --buyout COPPER")}') from None

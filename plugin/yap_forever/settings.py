@@ -16,9 +16,16 @@ from yap_forever.config import Credentials
 HOME_ENV = "YAP_FOREVER_HOME"
 
 
-def command_hint(args: str, os_name: str = os.name) -> str:
-    """How the player runs a command on their system, for next-step messages."""
+LAUNCHER: str | None = None  # absolute path of plugin/yap-forever.py when the package was started through it
+
+
+def command_hint(args: str, os_name: str = os.name, launcher: str | None = None) -> str:
+    """How the player runs a command on their system, for next-step messages: through the launcher
+    they started this one with (the module-level LAUNCHER, set by yap-forever.py), else `-m yap_forever`."""
     python = "py -3" if os_name == "nt" else "python3"
+    launcher = launcher or LAUNCHER
+    if launcher:
+        return f'{python} "{launcher}" {args}'
     return f"{python} -m yap_forever {args}"
 
 

@@ -372,5 +372,40 @@ class CacheTests(unittest.TestCase):
         self.damaged("Thresholds.lua", "ns.Thresholds = {\n  [1] = {1, 2,")
 
 
+class MainTests(unittest.TestCase):
+    """`python3 -m yap_forever.gamedata`: --help and a wrong flag download nothing."""
+
+    def run_main(self, argv):
+        import contextlib
+        import io
+        from unittest import mock
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(gamedata, "fetch_all") as fetch, \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                gamedata.main(argv)
+                code = None
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), err.getvalue(), fetch
+
+    def test_help_prints_usage_and_downloads_nothing(self):
+        code, out, _err, fetch = self.run_main(["--help"])
+        self.assertEqual(code, 0)
+        self.assertIn("--fetch", out)
+        self.assertIn("--checks", out)
+        fetch.assert_not_called()
+
+    def test_usage_names_the_command_for_the_system(self):
+        self.assertEqual(gamedata.usage_prog("nt"), "py -3 -m yap_forever.gamedata")
+        self.assertEqual(gamedata.usage_prog("posix"), "python3 -m yap_forever.gamedata")
+
+    def test_unknown_flag_is_refused(self):
+        code, _out, err, fetch = self.run_main(["--bogus"])
+        self.assertEqual(code, 2)
+        self.assertIn("--bogus", err)
+        fetch.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
