@@ -247,7 +247,7 @@ class PublishableTests(unittest.TestCase):
         rules, layout, coverage = read("references/game-rules.md"), read("references/list-layout.md"), \
             read("references/coverage.md")
         self.assertEqual(RANK_CAPS, (75, 150, 225, 300))
-        self.assertEqual(MAX_TRIP_ALTS, 3)  # "only the costliest three trips"
+        self.assertEqual(MAX_TRIP_ALTS, 3)  # "keep their own three", "only the costliest three recipe trips"
         self.assertIn("Journeyman to 75, Expert to 150, Artisan to 225, Master to 300", rules)
         self.assertIn("one sighting", rules)
         self.assertEqual(gamedata.load_seen_requirements()[14380], 184)
@@ -260,8 +260,11 @@ class PublishableTests(unittest.TestCase):
                      "Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).",
                      "*At <skill>: start crafting <recipe> (learned at <trainer>)*", "(learned before you start)",
                      "(if <trainer> doesn't list <recipe>: <who>)", "Learn <recipes> at any <Rank> <Person> in a capital.",
-                     "only the costliest three trips", "a recipe needed at 240 and used then, and one at 245, make two rows",
-                     "The bring list ends at the next rank trip or trip back for recipes"):
+                     "which keep their own three, only the costliest three recipe trips",
+                     "a recipe needed at 240 and used then, and one at 245, make two rows",
+                     "The bring list ends at the next rank trip, trip back for recipes or capital stop for recipes",
+                     "(learned at <trainer>; listed from <skill> in the Forever data:",
+                     "(learned before you start; listed from ...)"):
             self.assertIn(line, layout)
         self.assertIn("trips back to them for recipes", coverage)
 

@@ -135,8 +135,9 @@ def trips(plan, gd, start_skills: dict[int, int]) -> list[Trip]:
 
 def trip_alternatives(base, inputs, mode, cache: dict | None = None) -> dict[int | tuple[int, ...], float | None]:
     """What the route costs more without a trip's recipes, in the route's own measure, by Trip.key; None when
-    the targets can't be reached without them. For the costliest MAX_TRIP_ALTS trips (vendor and Favor
-    patterns, and recipe trips by their fees); a recipe trip for the goal recipe is always None.
+    the targets can't be reached without them. For the costliest MAX_TRIP_ALTS vendor and Favor trips (by
+    pattern price), and apart from them the costliest MAX_TRIP_ALTS recipe trips (by their fees); a recipe
+    trip for the goal recipe is always None.
     inputs: the plan.PlanInputs the route was planned from. cache: routes planned without some recipes, kept
     by the caller across calls (by mode, targets and the recipes left out), so none is planned twice."""
     from yap_forever.plan import plan_route  # plan imports this module
@@ -145,8 +146,9 @@ def trip_alternatives(base, inputs, mode, cache: dict | None = None) -> dict[int
     goals = set(inputs.craft_once.values())  # the goal recipe can't be skipped
     found = trips(base, inputs.gd, inputs.stock.skills)
     out: dict[int | tuple[int, ...], float | None] = {t.key: None for t in found if goals & set(t.spells)}
-    picks = sorted((t for t in found if (t.spell is not None and t.spell not in goals)
-                    or (t.kind == "recipe" and t.key not in out)), key=lambda t: -t.cost)[:MAX_TRIP_ALTS]
+    patterns = sorted((t for t in found if t.spell is not None and t.spell not in goals), key=lambda t: -t.cost)
+    recipes = sorted((t for t in found if t.kind == "recipe" and t.key not in out), key=lambda t: -t.cost)
+    picks = patterns[:MAX_TRIP_ALTS] + recipes[:MAX_TRIP_ALTS]
     cache = {} if cache is None else cache
     for t in picks:
         excluded = frozenset(t.spells or {t.spell})

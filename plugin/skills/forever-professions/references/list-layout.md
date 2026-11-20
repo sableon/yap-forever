@@ -63,8 +63,8 @@ Write it for that.
   towns), trips back to them for recipes, vendor-sold patterns and the Merchant's Favor vendor. Say
   a trip is needed, how to avoid a second one (buy every vendor pattern on one visit; patterns can be
   bought before they can be learned), and what to bring to keep levelling at a remote trainer, with
-  the bag slots it takes. The bring list ends at the next rank trip or trip back for recipes: level
-  at home after that and come back then.
+  the bag slots it takes. The bring list ends at the next rank trip, trip back for recipes or
+  capital stop for recipes: level at home after that and come back then.
 - A trainer teaches recipes up to its rank's cap ([game-rules.md](game-rules.md), "Trainers and
   ranks"), so every trainer visit learns ahead: a rank row ends with `While there, learn: <recipe>
   (<fee>), ...` for the trainer recipes the route needs later whose required skill is reached and
@@ -88,9 +88,9 @@ Write it for that.
   their fees (`<recipe> (<fee>)`). An Artisan or Master recipe is a trip:
   `- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>`, then `; or skip it: +<gold>
   for the route without it` (the route planned again without those recipes) or `; there is no other
-  way to reach the target without it`, and a full stop. Like vendor and Favor trips, only the
-  costliest three trips (by pattern price or trainer fees) get the skip clause; a trip for the goal
-  recipe always says there is no other way. Below Artisan it is a stop in a capital:
+  way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
+  their own three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip
+  for the goal recipe always says there is no other way. Below Artisan it is a stop in a capital:
   `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`, with a
   recipe below the stop's rank noted after the place: `(if <trainer> doesn't list <recipe>: <who>)`.
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
@@ -135,9 +135,11 @@ Write it for that.
   When none of the rank's trainers is in a capital, the row names up to two of them with their zones
   and says `(no Expert Blacksmith in a capital in the data)`, never "in a capital".
 - The route uses the safe requirement for trainer recipes: the higher of the Forever listing and the
-  skill inferred from Classic (`TrainerInferred`). A trainer recipe learned above its Forever listing
-  gets a note inside the fee's parenthesis: `(trainer <fee>; listed from <skill> in the Forever data:
-  if the trainer offers it then, you can start it earlier)`.
+  skill inferred from Classic (`TrainerInferred`), unless the recipe was seen learnable lower in play
+  ([game-rules.md](game-rules.md), "Trainers and ranks"). A trainer recipe learned above its Forever
+  listing gets a note inside the parenthesis of its row: `*At <skill>: start crafting <recipe> (learned
+  at <trainer>; listed from <skill> in the Forever data: if the trainer offers it then, you can start it
+  earlier)*` (or `(learned before you start; listed from ...)`).
 - One header line, after the intro, the trainer note and the talent lines, when the route could be
   cheaper if trainers offer recipes at the Forever listing (the route planned again with the listed
   requirements, compared in the route's own measure): `A route planned at the Forever listing
