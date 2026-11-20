@@ -165,10 +165,11 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         same = routes["gold"] is routes["value"]
         per_mode = {m: dataclasses.replace(inputs, caps=c.planned_caps) for m, c in cuts.items()}
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
-    if cuts:
+    if cuts:  # once per set of caps the cuts landed on
         savings = {}
-        for m, route in routes.items():
-            savings.update(listed_savings(per_mode[m], {m: route}))
+        for k in {budget_cut.key(c.planned_caps) for c in cuts.values()}:
+            modes = [m for m, c in cuts.items() if budget_cut.key(c.planned_caps) == k]
+            savings.update(listed_savings(per_mode[modes[0]], {m: routes[m] for m in modes}))
     else:
         savings = listed_savings(inputs, routes)
     table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same)
@@ -182,9 +183,11 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
         said = budget_cut.lines(cuts[m], target) if m in cuts else []
+        empty = m in cuts and cuts[m].below_first_stop
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,
-                               notes=group.notes() if group else (), budget_lines=said, goal=target),
+                               notes=group.notes() if group else (), budget_lines=said, goal=target,
+                               nothing_in_budget=empty),
                         encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
@@ -192,7 +195,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                        trainer_info=trainer_info, trainer_note=trainer_note,
                                        saving_line=line, mode=m,
                                        study_hint_gold_per_point=study_hint_gold_per_point,
-                                       budget_lines=said, order=inputs.order,
+                                       budget_lines=said, order=inputs.order, nothing_in_budget=empty,
                                        extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else [])]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide

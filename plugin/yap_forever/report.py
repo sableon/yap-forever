@@ -44,9 +44,10 @@ def _q(item, gd):
 
 def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
            reading="relative", today=None, saving_line="", budget: Budget | None = None, notes=(),
-           budget_lines=(), goal=None) -> str:
+           budget_lines=(), goal=None, nothing_in_budget=False) -> str:
     """budget: the shared gold the Totals line compares with; goal: the config.Budget the route was cut to,
-    and budget_lines what it reaches (budget.lines), said in the verdict."""
+    and budget_lines what it reaches (budget.lines), said in the verdict; nothing_in_budget: it reaches no
+    stop (budget.BudgetCut.below_first_stop), so there is no verdict and the route says so."""
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
@@ -62,7 +63,7 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
     reached = reached_lines(plan)
     if len(reached) >= len(caps or (BS, ENCH)):  # every target already reached: no verdict to give
         out += reached
-    elif budget_lines and not plan.steps:  # the budget reaches no stop: nothing to judge
+    elif nothing_in_budget:  # the budget reaches no stop: nothing to judge
         out += [" ".join(budget_lines)]
     else:
         out.append(f"**{verdict_text}.**")
@@ -91,15 +92,15 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
         out += ["", f"Smelts into: {bars}."]
 
     _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, caps, stock),
-          saving_line, budget, notes, goal)
+          saving_line, budget, notes, goal, nothing_in_budget)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
 def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None, notes=(),
-          goal=None) -> None:
+          goal=None, nothing_in_budget=False) -> None:
     # Route
     section("Route")
-    if goal is not None and not plan.steps:
+    if nothing_in_budget:
         out += [NOTHING_IN_BUDGET, ""]
     out += ["| Profession | Skill | Craft | Crafts | Cash | Net cost |", "|---|---|---|---|---|---|"]
     for s in plan.steps:

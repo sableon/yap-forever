@@ -106,7 +106,7 @@ def _title(caps, route) -> str:
 def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=None,
                  character=None, reading="relative", today=None, trainer_info=None, trainer_note="",
                  saving_line="", mode="gold", study_hint_gold_per_point=100, extra_notes=(),
-                 budget_lines=(), order=None) -> str:
+                 budget_lines=(), order=None, nothing_in_budget=False) -> str:
     """caps: profession -> target skill (see planner.resolve_goals).
     alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
     character, reading: the profile.Character and Working Overtime reading, for the talent lines.
@@ -118,7 +118,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     study_hint_gold_per_point: a row of the lowest profession at this many gold a point gets a Dedicated Study hint.
     extra_notes: lines for the Notes section (a character's stock file that was left out of the plan).
     budget_lines: what a budget goal reaches (budget.lines), said under the comparison.
-    order: the professions raised one at a time, in this order (None: side by side)."""
+    order: the professions raised one at a time, in this order (None: side by side).
+    nothing_in_budget: the budget reaches no stop (budget.BudgetCut.below_first_stop): the route says so."""
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
     if prices_line:
@@ -146,7 +147,7 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     _keep(out, plan, gd, market, by_mail, stock)
     hint = _StudyHint(lowest_profession(caps, stock), mode, study_hint_gold_per_point, character)
     _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint)
-    if budget_lines and not plan.steps:
+    if nothing_in_budget:
         out += [NOTHING_IN_BUDGET, ""]
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]

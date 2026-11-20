@@ -231,6 +231,7 @@ class PublishableTests(unittest.TestCase):
                      "The next stop, <Profession> <stop>, costs about <gold> more.",
                      "<budget> doesn't reach the first stop: nothing is planned yet.",
                      "Nothing to craft within this budget.",
+                     "; the route stops there: <why>.",
                      "<Profession> gets none of it: <why>.",
                      "Level one profession at a time: <first> first, then <second>."):
             self.assertIn(line, layout)

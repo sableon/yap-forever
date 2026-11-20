@@ -147,6 +147,21 @@ class CutTests(unittest.TestCase):
         even = cut(inputs(both(), {BS: 150, ENCH: 150}), 2)  # side by side, the same gold stops both at 75
         self.assertEqual(even.caps, {BS: 75, ENCH: 75})
 
+    def test_budget_equal_to_a_stops_cost_reaches_it(self):
+        i = inputs(bs_only(), {BS: 225}, listings={toy.COPPER_BAR: [(101, 100000)]})
+        c = cut(i, 0.7474)  # exactly the 74 bars to 75; 0.7474 * 10000 is 7473.999... in floating point
+        self.assertEqual((c.caps, c.spent), ({BS: 75}, 7474))
+
+    def test_partway_stall_says_why_on_the_next_stop(self):
+        i = inputs(bs_only((1, 300, 300, 100)), {BS: 225})  # grey at 100: the route stops at 100
+        c = cut(i, 0.8)
+        self.assertEqual(c.caps, {BS: 75})
+        self.assertEqual(c.next_stop, {BS: (100, 450 + 2500)})
+        self.assertIn(f"The next stop, Blacksmithing 100, costs about {gold(2950)} more; the route stops there: "
+                      "no usable recipe at 100.", budget.lines(c, Budget(0.8)))
+        self.assertIn("The next stop, Blacksmithing 75, costs about", " ".join(budget.lines(cut(i, 0.5), Budget(0.5))))
+        self.assertNotIn("stops there", " ".join(budget.lines(cut(i, 0.5), Budget(0.5))))
+
 
 class RenderTests(unittest.TestCase):
     """The guide and the report of a cut route: what the budget reaches and why."""
@@ -154,9 +169,10 @@ class RenderTests(unittest.TestCase):
         from yap_forever.guide import render_guide
         from yap_forever.report import render, verdict
         lines = budget.lines(c, goal)
-        guide = render_guide(c.plan, i.gd, i.market, i.stock, c.planned_caps, budget_lines=lines)
+        guide = render_guide(c.plan, i.gd, i.market, i.stock, c.planned_caps, budget_lines=lines,
+                             nothing_in_budget=c.below_first_stop)
         report = render(c.plan, verdict(c.plan, i.stock), i.market, i.gd, i.stock, i.favor, c.planned_caps,
-                        budget_lines=lines, goal=goal)
+                        budget_lines=lines, goal=goal, nothing_in_budget=c.below_first_stop)
         return guide, report
 
     def test_budget_below_first_stop_says_what_it_costs(self):  # RF1
@@ -184,6 +200,28 @@ class RenderTests(unittest.TestCase):
             self.assertIn("Enchanting gets none of it: next rank needs character level 35.", text)
             self.assertIn("The next stop, Blacksmithing 225, costs about", text)
             self.assertNotIn("The next stop, Enchanting", text)
+
+    def test_reached_target_with_a_budget_blames_no_budget(self):
+        i = inputs(bs_only(), {BS: 150}, skills={BS: 200})
+        goal = Budget(5)
+        c = budget.cut(i, "gold", goal, gold_of(i))
+        self.assertFalse(c.below_first_stop)
+        guide, report = self.render(i, c, goal)
+        for text in (guide, report):
+            self.assertIn("Blacksmithing is already at 200: nothing to plan.", text)
+            self.assertNotIn("doesn't reach", text)
+            self.assertNotIn("Nothing to craft within this budget.", text)
+
+    def test_stalled_only_profession_with_a_budget(self):
+        i = inputs(both(), {ENCH: 300}, skills={ENCH: 225}, level=30, ranks={ENCH: [Rank(300, 10000, 200, 35)]})
+        goal = Budget(100)
+        c = budget.cut(i, "gold", goal, gold_of(i))
+        self.assertFalse(c.below_first_stop)
+        guide, report = self.render(i, c, goal)
+        for text in (guide, report):
+            self.assertIn("Enchanting gets none of it: next rank needs character level 35.", text)
+            self.assertNotIn("doesn't reach", text)
+            self.assertNotIn("Nothing to craft within this budget.", text)
 
 
 if __name__ == "__main__":

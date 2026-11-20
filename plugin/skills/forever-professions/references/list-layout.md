@@ -123,14 +123,17 @@ With a budget goal ([setup.md](setup.md), "A budget as a goal"), the guide says 
 and the report in its verdict, what the gold reaches, in one paragraph:
 
 - `<budget> takes <Profession> to <stop> (<gold>).`, the professions that advance joined with "and";
-  `<gold>` is the cut route's "Gold to bring". When the budget reaches no stop:
-  `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route (guide and report)
-  starts with `Nothing to craft within this budget.` and the report's verdict gives only the budget
-  paragraph, with no "Ready to level".
+  `<gold>` is the cut route's "Gold to bring". When no profession advances but one would with more
+  gold: `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route section
+  (guide and report) says `Nothing to craft within this budget.`, and the report's verdict gives only
+  the budget paragraph, with no "Ready to level". When nothing advances because every target is
+  reached or every profession is stalled, neither line is said: the "already at" and stall lines
+  explain it.
 - A profession that can't advance: `<Profession> gets none of it: <why>.` (the stall reason).
 - Each profession with a stop above the cut: `The next stop, <Profession> <stop>, costs about <gold> more.`
-  (the route planned to that stop, its "Gold to bring" minus the cut route's). No line when the budget
-  reaches the target.
+  (the route planned to that stop, its "Gold to bring" minus the cut route's). When that stop is where
+  the route stalls, below the target, the line ends `; the route stops there: <why>.` instead of the
+  full stop. No line when the budget reaches the target.
 - `<budget>` is the gold as given (`30g`, `12.5g`). The report's budget line ends with
   `; planned to your <budget> budget`.
 - Two professions one at a time: the intro says `Level one profession at a time: <first> first, then <second>.`
