@@ -28,6 +28,9 @@ says what is there.
   ([game-rules.md](game-rules.md), "Legacy talents").
 - Two price fallbacks when the API can't be reached: `prices --remote` and
   `prices --auctionator PATH` ([setup.md](setup.md), step 5).
+- A budget as a goal: the route ends at the last stop (rank cap or target) the gold reaches, two
+  professions shared evenly or one at a time, with what the next stop costs on top
+  ([setup.md](setup.md), "A budget as a goal"; [list-layout.md](list-layout.md), "Budget").
 
-Not yet: gathering while levelling, keep-or-sell advice, budget targets, gear. Say so when asked,
+Not yet: gathering while levelling, keep-or-sell advice, gear. Say so when asked,
 rather than guessing.

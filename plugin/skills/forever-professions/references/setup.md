@@ -105,6 +105,8 @@ keep_greens = false  # see "Green crafts" below
 [goals]              # one or two professions: a skill up to 300, or a recipe to craft once
 blacksmithing = 225
 enchanting = "Enchant Bracer - Minor Health"
+# budget = 20        # optional: plan only as far as 20 gold reaches (see "A budget as a goal")
+# budget_order = "even"  # with two professions: "even", or one at a time: ["blacksmithing", "enchanting"]
 [skills]             # current profession skills; the plan starts here (absent = 1)
 blacksmithing = 120
 enchanting = 95
@@ -113,6 +115,25 @@ enchanting = 95
 ```
 
 `plan --prof NAME:TARGET` overrides `[goals]` for one run.
+
+**A budget as a goal.** "How far does 20g get me?": `budget = 20` under `[goals]` (gold, a number, 0
+or more), or `plan --budget GOLD` for one run (the flag wins over the key). Each profession's target
+still bounds the route; the route ends at the last stop the gold reaches. Stops are the rank caps
+75, 150, 225 and 300 and the profession's own target. The gold a stop needs is the shopping list's
+"Gold to bring" (whole crafts with the buffer, patterns and trainer fees), so the list fits the budget.
+With two professions, `budget_order` (or `--order even|NAME,NAME`) says how to share it:
+
+- `"even"` (the default): both rise side by side, the lower one first. When its next stop doesn't
+  fit, the gold left goes to the other one's next stop if that fits.
+- a list of names, for example `["blacksmithing", "enchanting"]` (`--order blacksmithing,enchanting`):
+  one at a time. The first takes its stops while they fit; the second gets what is left. A name
+  that isn't planned is refused; with one profession the order is ignored.
+
+A profession that can't advance (rank cap, level gate, no recipe) gets none of the gold, and the
+guide says why. The guide and the report say what the budget reaches and what each next stop costs
+on top ([list-layout.md](list-layout.md), "Budget"); the report's budget line adds "planned to your
+20g budget". A budget with a recipe target (craft once) is not applied: the recipe target is planned
+in full. Both routes (least gold, least total value) are cut by their own gold.
 
 **Green crafts.** `keep_greens` (default `false`) matters only when the plan has no Enchanting.
 With `true`, green crafts that can be disenchanted are kept for another character's Enchanting

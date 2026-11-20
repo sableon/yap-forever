@@ -169,6 +169,42 @@ class GoalsTests(unittest.TestCase):
                 config.load_stock(write(d, "bad.toml", "skinning = -1\n" + STOCK))
         self.assertEqual((s.skinning, plain.skinning), (100, 0))
 
+    def test_budget_keys_load(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = config.load_stock(write(d, "stock.toml", STOCK + '\n[goals]\nbudget = 12.5\nblacksmithing = 225\n'))
+            even = config.load_stock(write(d, "even.toml", STOCK + '\n[goals]\nbudget = 7\nbudget_order = "even"\n'))
+            plain = config.load_stock(write(d, "plain.toml", STOCK + '\n[goals]\nblacksmithing = 225\n'))
+        self.assertEqual(s.budget, config.Budget(gold=12.5, order=None))
+        self.assertEqual(s.goals, {164: config.Goal(skill=225)})  # budget is not a profession
+        self.assertEqual(even.budget, config.Budget(gold=7, order=None))
+        self.assertEqual(even.goals, {})
+        self.assertIsNone(plain.budget)
+
+    def test_budget_order_names_are_professions(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = config.load_stock(write(d, "stock.toml", STOCK + '\n[goals]\nbudget = 7\n'
+                                        'budget_order = ["Enchanting", "blacksmithing"]\n'
+                                        'blacksmithing = 225\nenchanting = 225\n'))
+            self.assertEqual(s.budget, config.Budget(gold=7, order=(333, 164)))
+            for text in ('budget_order = ["basketweaving"]', 'budget_order = "one"', "budget_order = 3",
+                         'budget_order = ["enchanting", "enchanting"]'):
+                path = write(d, "bad.toml", STOCK + f"\n[goals]\nbudget = 7\n{text}\n")
+                with self.subTest(text=text), self.assertRaises(ValueError) as cm:
+                    config.load_stock(path)
+                self.assertIn(str(path), str(cm.exception))
+                self.assertIn("goals.budget_order", str(cm.exception))
+
+    def test_bad_budget_names_file_and_key(self):
+        with tempfile.TemporaryDirectory() as d:
+            for text in ("budget = -1", 'budget = "lots"', 'budget_order = "even"'):
+                path = write(d, "stock.toml", STOCK + f"\n[goals]\n{text}\n")
+                with self.subTest(text=text), self.assertRaises(ValueError) as cm:
+                    config.load_stock(path)
+                msg = str(cm.exception)
+                self.assertIn(str(path), msg)
+                self.assertIn("goals.budget", msg)
+                self.assertNotIn("unknown profession", msg)
+
 
 class CredentialTests(unittest.TestCase):
     def test_credentials_repr_masks(self):

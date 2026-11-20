@@ -24,8 +24,9 @@ player what changed, running the planner, and walking them through the result.
 - When the planner's output says to run `python3 -m yap_forever X` (or `py -3 -m ...`), run
   `<planner> X`.
 - Commands: `init`, `check [--offline]`, `probe --item ID --buyout COPPER`, `prices`,
-  `plan --character "FIRST LAST" --prof NAME:TARGET [--prof NAME:TARGET]` (Forever character
-  names are two words; quote them; `TARGET` is a skill 1-300 or a recipe name).
+  `plan --character "FIRST LAST" --prof NAME:TARGET [--prof NAME:TARGET] [--budget GOLD]
+  [--order even|NAME,NAME]` (Forever character names are two words; quote them; `TARGET` is a
+  skill 1-300 or a recipe name).
 - The player's files are in `~/.yap-forever/` (or `$YAP_FOREVER_HOME`).
 - **Never open, print or ask for `credentials.json`.** The player pastes their API client ID and
   secret into it themselves. If they paste them into the chat, tell them to create a new secret
@@ -51,7 +52,11 @@ when a question or answer needs it.
      the player ([setup.md](references/setup.md), "A bags file").
 3. **Ask the goal before every plan:** one profession or two, and for each a target: a milestone
    ([game-rules.md](references/game-rules.md), "Legacy talents"), another skill, or one recipe to
-   reach and craft once (often a Merchant's Favor craft). Save it under `[goals]` in `stock.toml`
+   reach and craft once (often a Merchant's Favor craft). Or a budget: "how far does this gold get
+   me?", suggesting the `[gold]` amount of the character's ruleset and faction (`--budget GOLD`).
+   With a budget and two crafting professions, ask: **raise both evenly or one at a time?** and, for
+   one at a time, which first (`--order NAME,NAME`)
+   ([setup.md](references/setup.md), "A budget as a goal"). Save it under `[goals]` in `stock.toml`
    if the player wants it kept. If Enchanting isn't in the plan, ask whether green crafts should be
    kept to disenchant on another character or sold, and set `keep_greens`
    ([setup.md](references/setup.md), step 2, "Green crafts").

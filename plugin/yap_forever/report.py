@@ -2,8 +2,10 @@
 import math
 from collections import defaultdict
 
+from yap_forever.budget import amount
 from yap_forever.costmodel import Valuer, money
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
+from yap_forever.guide import NOTHING_IN_BUDGET
 from yap_forever.planner import DISENCHANT, reached_lines, step_factor
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, Budget, mail_text
@@ -22,17 +24,18 @@ def verdict(plan, stock) -> str:
     return "Not yet"
 
 
-def _budget_text(cash: float, stock, budget: Budget | None) -> str:
+def _budget_text(cash: float, stock, budget: Budget | None, goal=None) -> str:
     """Whether the route's cash fits the gold: the group's shared gold, or this character's own `cash_gold`
-    when the caller names no group."""
+    when the caller names no group. goal: the config.Budget the route was planned to, said after it."""
+    planned = f"; planned to your {amount(goal)} budget" if goal is not None else ""
     if budget is None or not budget.shared:
         have = stock.cash if budget is None else budget.copper
         over = cash - have
         return (f"over your {money(have)} budget by {money(over)}" if over > 0
-                else f"within your {money(have)} budget")
+                else f"within your {money(have)} budget") + planned
     over = cash - budget.copper
     shared = f"{money(budget.copper)} shared by your {budget.label} characters"
-    return f"over the {shared} by {money(over)}" if over > 0 else f"within the {shared}"
+    return (f"over the {shared} by {money(over)}" if over > 0 else f"within the {shared}") + planned
 
 
 def _q(item, gd):
@@ -40,7 +43,11 @@ def _q(item, gd):
 
 
 def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
-           reading="relative", today=None, saving_line="", budget: Budget | None = None, notes=()) -> str:
+           reading="relative", today=None, saving_line="", budget: Budget | None = None, notes=(),
+           budget_lines=(), goal=None, nothing_in_budget=False) -> str:
+    """budget: the shared gold the Totals line compares with; goal: the config.Budget the route was cut to,
+    and budget_lines what it reaches (budget.lines), said in the verdict; nothing_in_budget: it reaches no
+    stop (budget.BudgetCut.below_first_stop), so there is no verdict and the route says so."""
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
@@ -56,6 +63,8 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
     reached = reached_lines(plan)
     if len(reached) >= len(caps or (BS, ENCH)):  # every target already reached: no verdict to give
         out += reached
+    elif nothing_in_budget:  # the budget reaches no stop: nothing to judge
+        out += [" ".join(budget_lines)]
     else:
         out.append(f"**{verdict_text}.**")
         if plan.farm:
@@ -66,6 +75,8 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
             out.append(f"- Stops early: {reason}.")
         final = ", ".join(f"{PROFESSIONS[p]} {s}" for p, s in plan.final_skill.items())
         out.append(f"Planned to: {final}.")
+        if budget_lines:
+            out += ["", " ".join(budget_lines)]
 
     held_total = sum(n for n in plan.de_materials.values())
     if held_total:
@@ -81,13 +92,16 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
         out += ["", f"Smelts into: {bars}."]
 
     _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, caps, stock),
-          saving_line, budget, notes)
+          saving_line, budget, notes, goal, nothing_in_budget)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
-def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None, notes=()) -> None:
+def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None, notes=(),
+          goal=None, nothing_in_budget=False) -> None:
     # Route
     section("Route")
+    if nothing_in_budget:
+        out += [NOTHING_IN_BUDGET, ""]
     out += ["| Profession | Skill | Craft | Crafts | Cash | Net cost |", "|---|---|---|---|---|---|"]
     for s in plan.steps:
         n = max(1, round(s.crafts)) if s.spell_id == DISENCHANT else math.ceil(s.crafts * step_factor(s) - 1e-6)
@@ -144,7 +158,7 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
 
     # Totals
     section("Totals")
-    out.append(f"- **Cash needed:** {money(plan.cash_total)} ({_budget_text(plan.cash_total, stock, budget)}), "
+    out.append(f"- **Cash needed:** {money(plan.cash_total)} ({_budget_text(plan.cash_total, stock, budget, goal)}), "
                "before any sales.")
     out.append(f"- Trainer fees included: {money(plan.fees)}.")
     out.append(f"- **Expected sales of crafted leftovers:** {money(plan.sale_proceeds)}.")

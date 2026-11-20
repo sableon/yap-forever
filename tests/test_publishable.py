@@ -212,6 +212,30 @@ class PublishableTests(unittest.TestCase):
             self.assertEqual(tomllib.load(f)["skill_ups"][-1], 60)
         self.assertIn("only up to 60", text.replace("\n", " ").replace("  ", " "))
 
+    def test_docs_promise_budget(self):
+        """#50: the skill offers a budget as a goal and asks how to share it; the references give the keys
+        and the lines the guide prints (tests/test_budget.py and test_guide.py check them)."""
+        def read(name):
+            return " ".join((SKILL / name).read_text(encoding="utf-8").split())
+        setup, skill = read("references/setup.md"), read("SKILL.md")
+        coverage, layout = read("references/coverage.md"), read("references/list-layout.md")
+        for key in ("budget = ", "budget_order = ", "--budget GOLD", "--order even|NAME,NAME"):
+            self.assertIn(key, setup)
+        step3 = skill[skill.index("3. **Ask the goal"):skill.index("4. **Refresh prices")]
+        self.assertIn("evenly or one at a time", step3)
+        self.assertIn("budget", step3)
+        self.assertIn("[gold]", step3)
+        self.assertNotIn("budget", coverage[coverage.index("Not yet"):])
+        self.assertIn("75, 150, 225 and 300", setup)
+        for line in ("<budget> takes <Profession> to <stop> (<gold>).",
+                     "The next stop, <Profession> <stop>, costs about <gold> more.",
+                     "<budget> doesn't reach the first stop: nothing is planned yet.",
+                     "Nothing to craft within this budget.",
+                     "; the route stops there: <why>.",
+                     "<Profession> gets none of it: <why>.",
+                     "Level one profession at a time: <first> first, then <second>."):
+            self.assertIn(line, layout)
+
 
 if __name__ == "__main__":
     unittest.main()

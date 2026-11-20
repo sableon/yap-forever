@@ -387,32 +387,43 @@ def _patterns(plan, gd, market) -> list[tuple[str, str, float]]:
     return out
 
 
-def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
-    """The '## Shopping list' section (and '## Mailbox trips' when the stock gives free bag slots);
-    returns the lines and the number of mailbox trips (None without a bag count)."""
-    rows = route_rows(plan, gd)
+def _bill(plan, gd, market, stock, rows) -> list[tuple[str, int | str, str, float]]:
+    """The shopping list's lines, (item, count, where, cost): what to buy for the route's rows, the
+    patterns and the trainer's ranks and recipes."""
     owned = {i: float(n) for i, n in stock.items.items()}  # the buffer comes from the bank while it lasts
     split = _split(rows, plan, gd, dict(owned), _mail(plan, whole_pool=True))
-    lines = ["## Shopping list", "",
-             "Counts are for whole crafts, buffer included: you never run short, and nothing is left over "
-             "that is too little for another craft.", "",
-             "| Item | Count | Where | Cost |", "|---|---:|---|---:|"]
-    total = 0.0
+    out = []
     for (i, src), n in sorted(split.items(), key=lambda x: (x[0][1], gd.name(x[0][0]))):
         if src == "bank" or from_character(src) is not None:  # nothing to buy
             continue
         cost = ((gd.vendor_prices.get(i) or (gd.items[i].buy_price if i in gd.items else 0)) * n if src == "vendor"
                 else market.buy_cost(i, n) or (market.min_price(i) or 0) * n)
-        total += cost
-        lines.append(f"| {gd.name(i)} | {n} | {'vendor' if src == 'vendor' else 'AH'} | {gold(cost)} |")
+        out.append((gd.name(i), n, "vendor" if src == "vendor" else "AH", cost))
     for name, where, cost in _patterns(plan, gd, market):
-        total += cost
-        lines.append(f"| {name} | 1 | {where} | {gold(cost)} |")
+        out.append((name, 1, where, cost))
     fees = plan.fees + sum(gd.recipes[s].fee for _p, _s, s, how in plan.learn_log if how == "trainer")
     if fees:
-        total += fees
-        lines.append(f"| Trainer: ranks and recipes | | trainer | {gold(fees)} |")
-    lines += ["", f"**Gold to bring: {gold(total)}**", ""]
+        out.append(("Trainer: ranks and recipes", "", "trainer", fees))
+    return out
+
+
+def gold_to_bring(plan, gd, market, stock) -> float:
+    """The shopping list's "Gold to bring", in copper: whole crafts with the buffer, patterns and fees."""
+    return sum(cost for *_line, cost in _bill(plan, gd, market, stock, route_rows(plan, gd)))
+
+
+def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
+    """The '## Shopping list' section (and '## Mailbox trips' when the stock gives free bag slots);
+    returns the lines and the number of mailbox trips (None without a bag count)."""
+    rows = route_rows(plan, gd)
+    owned = {i: float(n) for i, n in stock.items.items()}
+    lines = ["## Shopping list", "",
+             "Counts are for whole crafts, buffer included: you never run short, and nothing is left over "
+             "that is too little for another craft.", "",
+             "| Item | Count | Where | Cost |", "|---|---:|---|---:|"]
+    bill = _bill(plan, gd, market, stock, rows)
+    lines += [f"| {name} |{f' {n} ' if n != '' else ' '}| {where} | {gold(cost)} |" for name, n, where, cost in bill]
+    lines += ["", f"**Gold to bring: {gold(sum(cost for *_line, cost in bill))}**", ""]
     if not stock.bag_slots:
         return lines, None
     stack = stacks(gd, {i for r in rows for i in r["need"]})

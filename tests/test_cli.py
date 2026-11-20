@@ -416,6 +416,101 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Firstname Lastname", out)
 
+    def test_cli_budget_flag_wins(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Budget
+        stock = self.ready_home()
+        stock.write_text('level = 20\n[items]\n\n[goals]\nbudget = 9\nbudget_order = ["enchanting", "blacksmithing"]\n'
+                         'blacksmithing = 20\nenchanting = 20\n', encoding="utf-8")
+        me = ["plan", "--character", "Firstname Lastname"]
+        with mock.patch.object(plan_mod, "write_reports", return_value=("table", {})) as w:
+            for argv, want in (([], Budget(9, (333, 164))),
+                               (["--budget", "4.5"], Budget(4.5, (333, 164))),
+                               (["--budget", "4.5", "--order", "even"], Budget(4.5, None)),
+                               (["--order", "Blacksmithing,enchanting"], Budget(9, (164, 333))),
+                               (["--order", "enchanting"], Budget(9, (333, 164)))):
+                code, out = run(me + argv, self.paths)
+                self.assertEqual(code, 0, out)
+                self.assertEqual(w.call_args.kwargs["target"], want, argv)
+            # one profession: the order is ignored
+            code, out = run(me + ["--prof", "blacksmithing:20", "--budget", "3"], self.paths)
+            self.assertEqual((code, w.call_args.kwargs["target"]), (0, Budget(3, None)), out)
+            stock.write_text("level = 20\n[items]\n\n[goals]\nblacksmithing = 20\n", encoding="utf-8")
+            code, out = run(me, self.paths)
+            self.assertEqual((code, w.call_args.kwargs["target"]), (0, None), out)
+        for bad, said in ((["--budget", "-1"], "--budget"), (["--budget", "lots"], "--budget"),
+                          (["--order", "even"], "--order goes with a budget")):
+            code, out = run(me + bad, self.paths)
+            self.assertEqual(code, 1, bad)
+            self.assertIn(said, out)
+
+    def test_order_name_not_planned_is_refused(self):
+        stock = self.ready_home()
+        stock.write_text("level = 20\n[items]\n\n[goals]\nbudget = 9\nblacksmithing = 20\nenchanting = 20\n",
+                         encoding="utf-8")
+        for order, said in (("tailoring,blacksmithing", "Tailoring, which is not planned"), ("cooking", "unknown profession"),
+                            ("enchanting,enchanting", "twice")):
+            code, out = run(["plan", "--character", "Firstname Lastname", "--order", order], self.paths)
+            self.assertEqual(code, 1, order)
+            self.assertIn(said, out)
+        stock.write_text('level = 20\n[items]\n\n[goals]\nbudget = 9\nbudget_order = ["tailoring"]\n'
+                         "blacksmithing = 20\nenchanting = 20\n", encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertIn("Tailoring", out)
+        self.assertIn("not planned", out)
+
+    def test_plan_with_a_budget_cuts_both_routes(self):
+        self.ready_home()
+        me = ["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"]
+        code, out = run(me + ["--budget", "0"], self.paths)
+        self.assertEqual(code, 0, out)
+        for m in ("gold", "value"):
+            guide = next(self.paths.reports.glob(f"*-guide-{m}.md")).read_text(encoding="utf-8")
+            report = next(self.paths.reports.glob(f"*-plan-{m}.md")).read_text(encoding="utf-8")
+            for text in (guide, report):
+                self.assertIn("0g doesn't reach the first stop: nothing is planned yet.", text)
+                self.assertIn("The next stop, Blacksmithing 20, costs about", text)
+            self.assertIn("planned to your 0g budget", report)
+        code, out = run(me + ["--budget", "1000"], self.paths)
+        self.assertEqual(code, 0, out)
+        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
+        self.assertIn("1000g takes Blacksmithing to 20 (", guide)
+        self.assertNotIn("The next stop", guide)
+
+    def test_plan_with_a_budget_and_two_professions(self):
+        self.ready_home()  # the fixture has no Enchanting recipe usable at 1: it can't advance
+        me = ["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20", "--prof", "enchanting:20"]
+        code, out = run(me + ["--budget", "1000", "--order", "enchanting,blacksmithing"], self.paths)
+        self.assertEqual(code, 0, out)
+        for m in ("gold", "value"):
+            guide = next(self.paths.reports.glob(f"*-guide-{m}.md")).read_text(encoding="utf-8")
+            report = next(self.paths.reports.glob(f"*-plan-{m}.md")).read_text(encoding="utf-8")
+            for text in (guide, report):
+                self.assertIn("1000g takes Blacksmithing to 20 (", text)
+                self.assertIn("Enchanting gets none of it: no usable recipe at 1.", text)
+            self.assertIn("Level one profession at a time: Enchanting first, then Blacksmithing.", guide)
+        code, out = run(me + ["--budget", "0"], self.paths)
+        self.assertEqual(code, 0, out)
+        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
+        self.assertIn("0g doesn't reach the first stop: nothing is planned yet.", guide)
+        self.assertIn("The next stop, Blacksmithing 20, costs about", guide)
+        self.assertNotIn("The next stop, Enchanting", guide)
+        self.assertIn("Level both professions side by side", guide)
+
+    def test_plan_with_a_budget_and_a_recipe_target_plans_the_recipe_in_full(self):
+        self.ready_home()
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:2660",
+                         "--budget", "0"], self.paths)
+        self.assertEqual(code, 0, out)
+        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
+        report = next(self.paths.reports.glob("*-plan-gold.md")).read_text(encoding="utf-8")
+        self.assertNotIn("doesn't reach", guide + report)
+        self.assertNotIn("planned to your", report)
+        self.assertIn("once", guide)
+
 
 if __name__ == "__main__":
     unittest.main()

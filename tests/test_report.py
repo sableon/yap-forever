@@ -234,3 +234,25 @@ class TalentNoteTests(unittest.TestCase):
         self.assertIn("Working Overtime 5/5, read as +20 percentage points (unconfirmed in game).", notes)
         self.assertIn("Dedicated Study: one free point a day goes to your lowest profession;", notes)
         self.assertEqual(text[:text.index("## Data notes")], none[:none.index("## Data notes")])
+
+
+class BudgetLineTests(unittest.TestCase):
+    def test_budget_lines(self):
+        from yap_forever import budget
+        from yap_forever.config import Budget
+        from yap_forever.guide import gold
+        from yap_forever.shared import Budget as SharedGold
+        p, m, gd, st = sample()
+        caps = {164: 225, 333: 225}
+        cut = budget.BudgetCut(dict(caps), p, 341200, {164: (300, 1200000)}, {}, dict(caps), {164: 1, 333: 1})
+        goal = Budget(30)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps, budget=SharedGold(500000, "2/alliance"),
+                      budget_lines=budget.lines(cut, goal), goal=goal)
+        head = text[text.index("## Verdict"):text.index("## Route")]
+        self.assertIn(f"30g takes Blacksmithing to 225 and Enchanting to 225 ({gold(341200)}).", head)
+        self.assertIn(f"The next stop, Blacksmithing 300, costs about {gold(1200000)} more.", head)
+        self.assertIn("shared by your 2/alliance characters; planned to your 30g budget)", text)
+        cut.next_stop = {}
+        plain = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps, budget_lines=budget.lines(cut, goal))
+        self.assertNotIn("The next stop", plain)
+        self.assertNotIn("planned to your", render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps))
