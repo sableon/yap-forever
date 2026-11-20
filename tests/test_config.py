@@ -64,6 +64,39 @@ class StockTests(unittest.TestCase):
         self.assertFalse(hasattr(s, "marker"))
 
 
+    def test_a_bad_value_names_the_file_and_the_key(self):
+        cases = [("[items]\n2840 = \"many\"\n", "items.2840"),
+                 ("[items]\nbars = 3\n", "items.bars"),
+                 ("level = \"forty\"\n", "level"),
+                 ("cash_gold = \"lots\"\n", "cash_gold"),
+                 ("favor = 1.5\n", "favor"),
+                 ("bag_slots = \"x\"\n", "bag_slots"),
+                 ("[skills]\nblacksmithing = \"high\"\n", "skills.blacksmithing"),
+                 ("items = 3\n", "items"),
+                 ("[goals]\nbasketweaving = 10\n", "goals.basketweaving")]
+        with tempfile.TemporaryDirectory() as d:
+            for text, key in cases:
+                path = write(d, "stock.toml", text)
+                with self.subTest(key=key), self.assertRaises(ValueError) as cm:
+                    config.load_stock(path)
+                msg = str(cm.exception)
+                self.assertIn(str(path), msg)
+                self.assertIn(key, msg)
+                self.assertNotIn("invalid literal", msg)
+
+    def test_whole_numbers_written_other_ways_still_load(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = config.load_stock(write(d, "stock.toml", 'level = 47.0\n[items]\n2840 = "12"\n'))
+        self.assertEqual((s.level, s.items), (47, {2840: 12}))
+
+    def test_a_toml_syntax_error_names_the_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write(d, "stock.toml", "level = \n")
+            with self.assertRaises(ValueError) as cm:
+                config.load_stock(path)
+        self.assertIn(str(path), str(cm.exception))
+
+
 class SkillsTests(unittest.TestCase):
     def test_load_stock_skills_by_name(self):
         with tempfile.TemporaryDirectory() as d:
@@ -126,38 +159,6 @@ class CredentialTests(unittest.TestCase):
         self.assertNotIn("s3cr3tvalue", str(c))
 
     @unittest.skipIf(os.name == "nt", "file modes are POSIX only")
-    def test_a_bad_value_names_the_file_and_the_key(self):
-        cases = [("[items]\n2840 = \"many\"\n", "items.2840"),
-                 ("[items]\nbars = 3\n", "items.bars"),
-                 ("level = \"forty\"\n", "level"),
-                 ("cash_gold = \"lots\"\n", "cash_gold"),
-                 ("favor = 1.5\n", "favor"),
-                 ("bag_slots = \"x\"\n", "bag_slots"),
-                 ("[skills]\nblacksmithing = \"high\"\n", "skills.blacksmithing"),
-                 ("items = 3\n", "items"),
-                 ("[goals]\nbasketweaving = 10\n", "goals.basketweaving")]
-        with tempfile.TemporaryDirectory() as d:
-            for text, key in cases:
-                path = write(d, "stock.toml", text)
-                with self.subTest(key=key), self.assertRaises(ValueError) as cm:
-                    config.load_stock(path)
-                msg = str(cm.exception)
-                self.assertIn(str(path), msg)
-                self.assertIn(key, msg)
-                self.assertNotIn("invalid literal", msg)
-
-    def test_whole_numbers_written_other_ways_still_load(self):
-        with tempfile.TemporaryDirectory() as d:
-            s = config.load_stock(write(d, "stock.toml", 'level = 47.0\n[items]\n2840 = "12"\n'))
-        self.assertEqual((s.level, s.items), (47, {2840: 12}))
-
-    def test_a_toml_syntax_error_names_the_file(self):
-        with tempfile.TemporaryDirectory() as d:
-            path = write(d, "stock.toml", "level = \n")
-            with self.assertRaises(ValueError) as cm:
-                config.load_stock(path)
-        self.assertIn(str(path), str(cm.exception))
-
     def test_credentials_refuses_open_permissions(self):
         with tempfile.TemporaryDirectory() as d:
             p = write(d, "config.json",
