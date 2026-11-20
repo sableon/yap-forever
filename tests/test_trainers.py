@@ -996,5 +996,13 @@ class ListedNoteTests(unittest.TestCase):
                          " (listed from 180 in the Forever data: if the trainer offers it then, you can start it earlier)")
 
 
+class RecipeRankTests(unittest.TestCase):
+    def test_recipe_rank_caps(self):
+        from yap_forever.trips import recipe_rank_cap
+        for required, cap in ((1, 75), (75, 75), (76, 150), (150, 150), (175, 225), (225, 225), (240, 300)):
+            with self.subTest(required=required):
+                self.assertEqual(recipe_rank_cap(required), cap)
+
+
 if __name__ == "__main__":
     unittest.main()

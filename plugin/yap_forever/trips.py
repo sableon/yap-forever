@@ -7,9 +7,19 @@ patterns (they come by mail).
 from dataclasses import dataclass
 
 from yap_forever.gamedata import PROFESSIONS
+from yap_forever.trainers import RANK_BY_CAP
 
 REMOTE_RANK = 225  # ranks to 225 (Artisan) and 300 (Master) are trained in set towns
 MAX_TRIP_ALTS = 3
+RANK_CAPS = tuple(sorted(RANK_BY_CAP))  # 75, 150, 225, 300: Journeyman, Expert, Artisan, Master
+
+
+def recipe_rank_cap(required_skill: int) -> int:
+    """The cap of the lowest trainer rank that teaches a recipe: the lowest rank cap at or above its required
+    skill (75, 150, 225 or 300). A trainer teaches the recipes up to its own cap, lower ranks' included
+    (one sighting: an Expert trainer lacks a 175 recipe that an Artisan teaches); this is the one place
+    that says so."""
+    return next((c for c in RANK_CAPS if c >= required_skill), RANK_CAPS[-1])
 
 
 @dataclass(frozen=True)
