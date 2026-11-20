@@ -43,7 +43,7 @@ follow are in [AGENTS.md](AGENTS.md); they apply to people too.
    file for private details.
 5. **New data from another project:** add it to [plugin/CREDITS.md](plugin/CREDITS.md) with its source, version
    and licence. A test checks that every source is credited.
-6. Commit messages start with `feat:`, `fix:`, `docs:`, `test:` or `chore:`.
+6. Commit messages start with `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `ci:` or `chore:`.
 7. Don't edit `docs/progress.md`; the maintainer adds a line for your change when it is merged.
 
 CI runs the suite on Windows, macOS and Linux with Python 3.11 and 3.13. A first pull request from

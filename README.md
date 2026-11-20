@@ -14,7 +14,9 @@ skill-ups.
 - [Claude Code](https://claude.com/claude-code)
 - Python 3.11 or newer (Windows: from python.org, then `py -3 --version`; macOS and Linux:
   `python3 --version`)
-- A free Blizzard API client from [develop.battle.net](https://develop.battle.net/access/clients)
+- For prices, one of: a free Blizzard API client from [develop.battle.net](https://develop.battle.net/access/clients)
+  (the usual way), Auctionator's saved data from your game folder, or another machine that can reach the API
+  (over ssh); the setup guide covers all three
 
 ## Install
 
