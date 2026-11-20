@@ -177,27 +177,10 @@ class _Route:
         gd, valuer, stock = self.gd, self.valuer, self.stock
         one_time_in_full, overtime, reading = self.one_time_in_full, self.overtime, self.reading
         quests, reuse, caps, craft_once = self.quests, self.reuse, self.caps, self.craft_once
-        profs, has_ench, ench_cap, recipes = self.profs, self.has_ench, self.ench_cap, self.recipes
+        profs, has_ench, recipes = self.profs, self.has_ench, self.recipes
         pools, p, skill, rank_cap = self.pools, self.p, self.skill, self.rank_cap
         learned, produced, held, skipped = self.learned, self.produced, self.held, self.skipped
-        soft_stalls, ench_reagents = self.soft_stalls, self.ench_reagents
-
-        def de_within_target(item):
-            """Enchanting is planned and reaches the skill this item needs to be disenchanted."""
-            info = gd.items.get(item)
-            return has_ench and info is not None and de_skill_needed(info.item_level) <= ench_cap
-
-        def should_hold(item, opts):
-            if not de_within_target(item):
-                return False
-            if max(opts, key=opts.get) == "de":
-                return True
-            info = gd.items.get(item)
-            # While disenchanting still gives Enchanting skill, that beats selling the green.
-            if de_yield(info) and de_skill_needed(info.item_level) <= skill[ENCH] < min(ench_cap, DE_THRESHOLDS[3]):
-                return True
-            # Disenchanting is the only source of an Enchanting reagent missing from the AH.
-            return any(m in ench_reagents and valuer.market.depth(m) == 0 for m in de_yield(info))
+        soft_stalls = self.soft_stalls
 
         def learn_now(r, lo, s, name):
             learn_cost, favor_cost, scroll_kind, _reqs = lo
@@ -379,7 +362,7 @@ class _Route:
                 out_val = reuse_val = 0
                 if r.output:
                     de = (valuer.output_options(r.output[0], produced.get(r.output[0], 0)).get("de", 0)
-                          if de_within_target(r.output[0]) else 0)
+                          if self._de_within_target(r.output[0]) else 0)
                     out_val = de * r.output[1] * crafts
                     # A reagent later steps consume is worth what it would cost, up to the count they need.
                     if r.output[0] in reuse:
@@ -429,7 +412,7 @@ class _Route:
                 n = per * crafts
                 opts = valuer.output_options(item, produced.get(item, 0))
                 produced[item] = produced.get(item, 0) + n
-                if should_hold(item, opts):
+                if self._should_hold(item, opts):
                     held[item] = held.get(item, 0) + n
                 else:
                     pools.made[item] = pools.made.get(item, 0) + n
@@ -634,6 +617,24 @@ class _Route:
             self.p.steps[first].materials = {**greens, **mailed}
             self.p.steps[first].from_stock = dict(greens)
             self.p.steps[first].from_mail = dict(mailed)
+
+    def _de_within_target(self, item):
+        """Enchanting is planned and reaches the skill this item needs to be disenchanted."""
+        info = self.gd.items.get(item)
+        return self.has_ench and info is not None and de_skill_needed(info.item_level) <= self.ench_cap
+
+    def _should_hold(self, item, opts):
+        if not self._de_within_target(item):
+            return False
+        if max(opts, key=opts.get) == "de":
+            return True
+        info = self.gd.items.get(item)
+        # While disenchanting still gives Enchanting skill, that beats selling the green.
+        if de_yield(info) and (de_skill_needed(info.item_level) <= self.skill[ENCH]
+                               < min(self.ench_cap, DE_THRESHOLDS[3])):
+            return True
+        # Disenchanting is the only source of an Enchanting reagent missing from the AH.
+        return any(m in self.ench_reagents and self.valuer.market.depth(m) == 0 for m in de_yield(info))
 
 
 def _snapshot(pools) -> dict:
