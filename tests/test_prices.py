@@ -51,6 +51,16 @@ class MarketTests(unittest.TestCase):
         self.assertEqual(m2.snapshot_time, "T")
 
 
+    def test_a_save_stopped_midway_leaves_the_old_file_and_no_temporary_one(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "prices.json"
+            p.write_text('{"snapshot_time": "OLD", "listings": {}}', encoding="utf-8")
+            with mock.patch("os.replace", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
+                market().save(p)
+            self.assertEqual(Market.load(p).snapshot_time, "OLD")
+            self.assertEqual([f.name for f in Path(d).iterdir()], ["prices.json"])
+
 class SourceLineTests(unittest.TestCase):
     TODAY = datetime.date(2026, 11, 20)
 
