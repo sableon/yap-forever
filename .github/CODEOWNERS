@@ -3,6 +3,7 @@
 /plugin/skills/                    @sableon
 /plugin/yap_forever/data_static/   @sableon
 /plugin/.claude-plugin/            @sableon
+/plugin/yap-forever.py             @sableon
 /plugin/CREDITS.md                 @sableon
 /plugin/LICENSE                    @sableon
 /AGENTS.md                         @sableon

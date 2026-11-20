@@ -4,6 +4,13 @@ CI checks the manifests and the skill's frontmatter on every push (`claude plugi
 --strict`, the `plugin` job). It can't check what Claude does with the skill. These four cases
 do; they make real model calls, so they are run by hand before a tag, not in CI.
 
+## Before the tag: bump the version
+
+The pull request before a tag sets the new `X.Y.Z` in both `plugin/.claude-plugin/plugin.json`
+(`version`) and `plugin/yap_forever/__init__.py` (`__version__`). Without it, players who installed
+an earlier version never get the new one, and a `v*` tag can't be moved or deleted afterwards.
+`tests/test_publishable.py` checks that the two match and are not behind the newest tag.
+
 ## Set up a clean install
 
 Use a separate Claude Code folder and a separate player home, so your own setup and files stay as

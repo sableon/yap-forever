@@ -316,6 +316,58 @@ class CacheTests(unittest.TestCase):
         text = (FIX / "ItemSparse.csv").read_text(encoding="utf-8") + "99999,Broken,x,1,1,1,0,,0\n"
         self.damaged("ItemSparse.csv", text)
 
+    def test_a_download_cut_off_midway_is_a_network_error(self):
+        import http.client
+        import urllib.error
+        from unittest import mock
+
+        serve = _serve({})
+
+        def urlopen(req, timeout=None):
+            if req.full_url == gamedata.SOURCES["Item.csv"]:
+                class Cut(_Response):
+                    def read(self):
+                        raise http.client.IncompleteRead(b"partial")
+                return Cut(b"")
+            return serve(req, timeout)
+        for err in (None, ConnectionResetError("reset")):
+            with self.subTest(err=err), mock.patch("builtins.print"), self.assertRaises(urllib.error.URLError) as cm:
+                if err is None:
+                    with mock.patch("urllib.request.urlopen", side_effect=urlopen):
+                        gamedata.fetch_all(dest=self.paths.gamedata, only=["Item.csv"])
+                else:
+                    with mock.patch("urllib.request.urlopen", side_effect=err):
+                        gamedata.fetch_all(dest=self.paths.gamedata, only=["Item.csv"])
+            self.assertIn("Item.csv", str(cm.exception.reason))
+            self.assertFalse((self.paths.gamedata / "Item.csv").exists())
+            self.assertFalse((self.paths.gamedata / "Item.csv.part").exists())
+
+    def test_a_folder_that_cannot_be_removed_does_not_stop_pruning(self):
+        from unittest import mock
+        root = self.paths.cache / "gamedata"
+        older = root / "skillup-000000000000_questie-000000000000_wago-1.59.0"
+        older.mkdir(parents=True)
+        (root / "Recipes.lua").write_text("old", encoding="utf-8")
+        self.paths.gamedata.mkdir(parents=True)
+        with mock.patch("shutil.rmtree", side_effect=PermissionError("in use")):
+            gamedata.prune_stale(self.paths.gamedata)  # no exception: pruning is housekeeping
+        self.assertFalse((root / "Recipes.lua").exists())  # the rest still went
+
+    def test_a_csv_with_only_its_header_is_not_kept(self):
+        header = (FIX / "ItemSparse.csv").read_text(encoding="utf-8").splitlines()[0] + "\n"
+        self.assert_refused("ItemSparse.csv", header)
+
+    def test_wrong_shaped_ranks_or_vendor_prices_are_named(self):
+        trainer = (FIX / "Trainer.lua").read_text(encoding="utf-8")
+        cases = [("Vendor.lua", "ns.VendorPrices = {1, 2}\n"),
+                 ("Vendor.lua", 'ns.VendorPrices = {[2880] = "cheap"}\n'),
+                 ("Trainer.lua", trainer.replace("ns.TrainerRanks = {", "ns.TrainerRanks = {[999] = {{150, 450}},", 1))]
+        for name, body in cases:
+            with self.subTest(name=name, body=body[:40]):
+                import shutil
+                shutil.rmtree(self.paths.gamedata, ignore_errors=True)
+                self.damaged(name, body)
+
     def test_a_lua_table_cut_short_is_named(self):
         self.damaged("Thresholds.lua", "ns.Thresholds = {\n  [1] = {1, 2,")
 

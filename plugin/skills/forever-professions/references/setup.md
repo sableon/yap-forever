@@ -139,7 +139,7 @@ with the player, then plan.
 
 **Moving an old planner folder.** `<planner> migrate --from-data DIR --character
 "NAME=FILE" [--character "NAME=FILE" ...]` (at least one `--character`; `--region`, `--ruleset` and
-`--faction` set the profile) copies the old data folder's house, prices and game data and gives every
+`--faction` set the profile) copies the old data folder's house and prices (game data is downloaded by the next `plan`) and gives every
 character `characters/<NAME>/stock.toml`. An existing `stock.toml` is kept, never overwritten. `FILE`
 is a stock file (copied; one without `[goals]` gets Blacksmithing and Enchanting at its `target`) or a bags file (a file with a `profs` key; converted as
 above). Every character is listed in the profile. Credentials are never copied: the player pastes

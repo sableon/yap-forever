@@ -34,7 +34,9 @@ follow are in [AGENTS.md](AGENTS.md); they apply to people too.
    python3 -m unittest discover -s tests -t .
    ```
 
-   (`py -3` instead of `python3` on Windows.) It takes a couple of seconds.
+   (`py -3` instead of `python3` on Windows.) It takes a couple of seconds. CI also runs the linter;
+   to run it yourself, install ruff (a developer tool, version 0.17.6 as in CI) and run
+   `ruff check plugin tests`.
 3. **Planner changes:** run `plan` before and after your change on a real character (in a copy of
    your home folder: set `YAP_FOREVER_HOME`) and say in the pull request what changed in the guide.
    If nothing changed on real data, say so.

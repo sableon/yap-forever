@@ -1,4 +1,6 @@
 """Credentials type, static data folder and the stock file."""
+import math
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -115,7 +117,7 @@ def _whole(value, key: str) -> int:
     if isinstance(value, float) and value.is_integer():
         return int(value)
     if isinstance(value, bool) or not isinstance(value, (int, str)) or (
-            isinstance(value, str) and not value.strip().lstrip("-").isdigit()):
+            isinstance(value, str) and not re.fullmatch(r"-?\d+", value.strip())):
         raise ValueError(f"{key} = {value!r}: use a whole number")
     return int(value)
 
@@ -124,9 +126,12 @@ def _number(value, key: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         raise ValueError(f"{key} = {value!r}: use a number")
     try:
-        return float(value)
+        n = float(value)
     except ValueError:
         raise ValueError(f"{key} = {value!r}: use a number") from None
+    if not math.isfinite(n):
+        raise ValueError(f"{key} = {value!r}: use a number")
+    return n
 
 
 def _slots(d: dict, key: str, default):

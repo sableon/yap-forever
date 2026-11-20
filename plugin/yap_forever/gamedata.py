@@ -8,10 +8,12 @@ Usage: python3 -m yap_forever.gamedata [--fetch] [--checks]
 """
 import csv
 import dataclasses
+import http.client
 import os
 import re
 import shutil
 import sys
+import urllib.error
 import urllib.request
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -179,8 +181,11 @@ def check_file(path: Path, name: str) -> None:
     try:
         with open(path, encoding="utf-8", newline="") as f:
             if kind == "csv":
-                header = next(csv.reader(f), [])
+                rows = csv.reader(f)
+                header = next(rows, [])
                 missing = [c for c in wanted if c not in header]
+                if not missing and next(rows, None) is None:
+                    raise ValueError("a header and no rows")
             else:
                 text = f.read()
                 missing = [t for t in wanted
@@ -207,8 +212,14 @@ def fetch_all(force: bool = False, dest: Path | None = None, only: Iterable[str]
         req = urllib.request.Request(url, headers={"User-Agent": f"yap-forever/{__version__}"})
         part = p.with_name(p.name + ".part")
         try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                part.write_bytes(r.read())
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    body = r.read()
+            except urllib.error.URLError:
+                raise
+            except (OSError, http.client.HTTPException) as e:  # cut off midway: a network problem
+                raise urllib.error.URLError(f"the download of {name} was cut off ({type(e).__name__})") from None
+            part.write_bytes(body)
             try:
                 check_file(part, name)
             except ValueError as e:
@@ -227,11 +238,18 @@ def prune_stale(dest: Path) -> None:
     root = dest.parent
     if root.name != "gamedata" or not _PIN_DIR.fullmatch(dest.name):
         return
-    for f in root.iterdir():
-        if f.is_file() and (f.name in SOURCES or f.name.removesuffix(".part") in SOURCES):
-            f.unlink()
-        elif f.is_dir() and f != dest and _PIN_DIR.fullmatch(f.name):
-            shutil.rmtree(f)
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        return
+    for f in entries:
+        try:
+            if f.is_file() and (f.name in SOURCES or f.name.removesuffix(".part") in SOURCES):
+                f.unlink()
+            elif f.is_dir() and f != dest and _PIN_DIR.fullmatch(f.name):
+                shutil.rmtree(f)
+        except OSError:  # housekeeping only: a copy that can't be removed now is tried again next time
+            continue
 
 
 @contextmanager
@@ -241,7 +259,7 @@ def _reading(path: Path) -> Iterator[None]:
         yield
     except GameDataError:
         raise
-    except (KeyError, ValueError, IndexError, TypeError, UnicodeDecodeError) as e:
+    except (KeyError, ValueError, IndexError, TypeError, AttributeError, UnicodeDecodeError) as e:
         raise GameDataError(f"the game data file {path} is damaged ({type(e).__name__}: {e}): "
                             "delete it and run the plan again to download it fresh") from None
 
@@ -304,8 +322,10 @@ def load_gamedata(d: Path | None = None, professions: Iterable[int] = (BS, ENCH)
             inferred = parse(extract_table(trainer_src, "TrainerInferred"))
         except KeyError:  # a Trainer.lua from before the table existed
             inferred = {}
+        trainer_ranks = fill_rank_levels({int(k): [Rank(*map(int, x)) for x in v] for k, v in ranks.items()})
     with _reading(d / "Vendor.lua"):
         vendor = _lua(d / "Vendor.lua", "VendorPrices")
+        vendor_prices = {int(k): int(v) for k, v in vendor.items()}
     with _reading(d / "SkillLineAbility.csv"):
         starters = {int(r["Spell"]) for r in _rows(d / "SkillLineAbility.csv")
                     if int(r["SkillLine"]) in professions and r["AcquireMethod"] == "1"}
@@ -367,8 +387,8 @@ def load_gamedata(d: Path | None = None, professions: Iterable[int] = (BS, ENCH)
 
     return GameData(
         recipes=recipes, items=items,
-        trainer_ranks=fill_rank_levels({int(k): [Rank(*map(int, x)) for x in v] for k, v in ranks.items()}),
-        vendor_prices={int(k): int(v) for k, v in vendor.items()},
+        trainer_ranks=trainer_ranks,
+        vendor_prices=vendor_prices,
         quest_items=quest_items,
         tool_items=tool_items, tool_masks=masks, item_tool_category=item_cat)
 
