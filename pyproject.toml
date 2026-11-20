@@ -18,5 +18,5 @@ ignore = [
 "tests/*" = [
     "S",  # tests run subprocesses, write temporary files and use fake secrets
     "RUF005", "RUF059", "SIM117", "E731", "E741", "RUF007", "RUF012",  # style in test set-up, not bugs
-    "B023", "B905",  # helpers called inside the same loop pass; zips over lists of one length
+    "B023", "B905", "RUF048",  # helpers called inside one loop pass; zips over lists of one length; versions checked by regex first
 ]
