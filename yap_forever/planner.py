@@ -180,38 +180,7 @@ class _Route:
         profs, has_ench, ench_cap, recipes = self.profs, self.has_ench, self.ench_cap, self.recipes
         pools, p, skill, rank_cap = self.pools, self.p, self.skill, self.rank_cap
         learned, produced, held, skipped = self.learned, self.produced, self.held, self.skipped
-        soft_stalls, ench_reagents, held_mail = self.soft_stalls, self.ench_reagents, self.held_mail
-
-        def disenchant_bank():
-            """Greens in the bank are disenchanted first, all at once: a green you can disenchant is not a
-            lost sale, and each one is a chance at an Enchanting skill-up below 60. Then the greens another of
-            your characters can mail you, after your own (their source is named)."""
-            if not has_ench or skill[ENCH] >= ench_cap:
-                return
-
-            def greens_of(pool):
-                return {i: n for i, n in pool.items() if n >= 1 and (info := gd.items.get(i))
-                        and de_yield(info) and de_skill_needed(info.item_level) <= ench_cap}
-
-            greens, mailed = greens_of(pools.stock), greens_of(pools.mail)
-            if not greens and not mailed:
-                return
-            for i, n in greens.items():
-                del pools.stock[i]
-                held[i] = held.get(i, 0) + n
-            first = len(p.steps)
-            if greens:
-                self._release_held(" from your bank")
-            for i, n in mailed.items():  # each one says whose it is
-                del pools.mail[i]
-                held[i] = held.get(i, 0) + n
-                who = ", ".join(name for name, _n in allocate(getattr(stock, "shared", {}), i, math.ceil(n - 1e-9)))
-                held_mail[i] = (n, who)
-                self._release_held()
-            if len(p.steps) > first:  # show the greens on the first disenchant step and in the keep table
-                p.steps[first].materials = {**greens, **mailed}
-                p.steps[first].from_stock = dict(greens)
-                p.steps[first].from_mail = dict(mailed)
+        soft_stalls, ench_reagents = self.soft_stalls, self.ench_reagents
 
         def de_within_target(item):
             """Enchanting is planned and reaches the skill this item needs to be disenchanted."""
@@ -342,7 +311,7 @@ class _Route:
                                 mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
             p.events.append(f"{name} {s}: craft {r.name} once")
 
-        disenchant_bank()
+        self._disenchant_bank()
         while True:
             active = [x for x in profs if x not in p.stalled and skill[x] < caps[x]]
             if not active:
@@ -634,6 +603,37 @@ class _Route:
             else:  # no buffer: the count is limited by the greens you have
                 self.p.steps.append(Step(ENCH, s, s + 1, DISENCHANT, "Disenchant greens", need, 0, 0, buffered=need))
             self.skill[ENCH] = s + 1
+
+    def _disenchant_bank(self):
+        """Greens in the bank are disenchanted first, all at once: a green you can disenchant is not a
+        lost sale, and each one is a chance at an Enchanting skill-up below 60. Then the greens another of
+        your characters can mail you, after your own (their source is named)."""
+        if not self.has_ench or self.skill[ENCH] >= self.ench_cap:
+            return
+
+        def greens_of(pool):
+            return {i: n for i, n in pool.items() if n >= 1 and (info := self.gd.items.get(i))
+                    and de_yield(info) and de_skill_needed(info.item_level) <= self.ench_cap}
+
+        greens, mailed = greens_of(self.pools.stock), greens_of(self.pools.mail)
+        if not greens and not mailed:
+            return
+        for i, n in greens.items():
+            del self.pools.stock[i]
+            self.held[i] = self.held.get(i, 0) + n
+        first = len(self.p.steps)
+        if greens:
+            self._release_held(" from your bank")
+        for i, n in mailed.items():  # each one says whose it is
+            del self.pools.mail[i]
+            self.held[i] = self.held.get(i, 0) + n
+            who = ", ".join(name for name, _n in allocate(getattr(self.stock, "shared", {}), i, math.ceil(n - 1e-9)))
+            self.held_mail[i] = (n, who)
+            self._release_held()
+        if len(self.p.steps) > first:  # show the greens on the first disenchant step and in the keep table
+            self.p.steps[first].materials = {**greens, **mailed}
+            self.p.steps[first].from_stock = dict(greens)
+            self.p.steps[first].from_mail = dict(mailed)
 
 
 def _snapshot(pools) -> dict:
