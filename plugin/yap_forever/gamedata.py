@@ -6,6 +6,7 @@ zone files are downloaded here too; `trainers.py` reads them.
 
 Usage: python3 -m yap_forever.gamedata [--fetch] [--checks]
 """
+import argparse
 import csv
 import dataclasses
 import http.client
@@ -423,8 +424,15 @@ def checks_report(gd: GameData, cap: int = 225) -> str:
 
 
 def main(argv: list[str]) -> int:
-    fetch_all(force="--fetch" in argv)
-    if "--checks" in argv:
+    parser = argparse.ArgumentParser(
+        prog="python3 -m yap_forever.gamedata",
+        description="Download the pinned game data into your cache (what is already there is kept).")
+    parser.add_argument("--fetch", action="store_true", help="download again even when the files are cached")
+    parser.add_argument("--checks", action="store_true",
+                        help="also write reports/data-checks.md, a list of what the data says about the recipes")
+    args = parser.parse_args(argv)
+    fetch_all(force=args.fetch)
+    if args.checks:
         out = settings.paths().reports / "data-checks.md"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(checks_report(load_gamedata()), encoding="utf-8")
