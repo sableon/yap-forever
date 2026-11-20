@@ -236,6 +236,30 @@ class PublishableTests(unittest.TestCase):
                      "Level one profession at a time: <first> first, then <second>."):
             self.assertIn(line, layout)
 
+    def test_docs_promise_trainer_ranks(self):
+        """#82: game-rules.md gives the rank caps trips.recipe_rank_cap uses and the Truesilver Rod sighting of
+        seen_requirements.toml; list-layout.md gives the rows the guide prints (tests/test_guide.py VisitRowTests)."""
+        from yap_forever import gamedata
+        from yap_forever.trips import RANK_CAPS
+
+        def read(name):
+            return " ".join((SKILL / name).read_text(encoding="utf-8").split())
+        rules, layout, coverage = read("references/game-rules.md"), read("references/list-layout.md"), \
+            read("references/coverage.md")
+        self.assertEqual(RANK_CAPS, (75, 150, 225, 300))
+        self.assertIn("Journeyman to 75, Expert to 150, Artisan to 225, Master to 300", rules)
+        self.assertIn("one sighting", rules)
+        self.assertEqual(gamedata.load_seen_requirements()[14380], 184)
+        self.assertIn("Truesilver Rod was learned at Blacksmithing 184, so it needs 175, not the inferred 200", rules)
+        for line in ("While there, learn: <recipe> (<fee>), ...", "If you don't have them yet: <recipe>, ...",
+                     "- **Before you start**, make sure you know: <recipes> (any <Rank> <Person> teaches them).",
+                     "(if <trainer> doesn't list it: <who>)", "any <Rank> <Person>",
+                     "- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>",
+                     "; or skip it: +<gold> for the route without it", "; there is no other way to reach the target without it",
+                     "Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>)."):
+            self.assertIn(line, layout)
+        self.assertIn("trips back to them for recipes", coverage)
+
 
 if __name__ == "__main__":
     unittest.main()

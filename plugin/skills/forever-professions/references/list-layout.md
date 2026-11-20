@@ -59,11 +59,33 @@ Write it for that.
 - A route is laid out in stages that end where each rank is trained. A rank can be trained
   anywhere from its required skill to the cap (50–75, 125–150, 200–225, 275–300): train it on the
   trip that learns a trainer recipe, as written guides do.
-- Trainer recipes are the same at every trainer. Trips away from home are rank training to 225
-  and 300 (Artisan and Master trainers sit in set towns), vendor-sold patterns and the Merchant's
-  Favor vendor. Say a trip is needed, how to avoid a second one (buy every vendor pattern on one
-  visit; patterns can be bought before they can be learned), and what to bring to keep levelling
-  at a remote trainer, with the bag slots it takes.
+- Trips away from home are rank training to 225 and 300 (Artisan and Master trainers sit in set
+  towns), trips back to them for recipes, vendor-sold patterns and the Merchant's Favor vendor. Say
+  a trip is needed, how to avoid a second one (buy every vendor pattern on one visit; patterns can be
+  bought before they can be learned), and what to bring to keep levelling at a remote trainer, with
+  the bag slots it takes.
+- A trainer teaches recipes up to its rank's cap ([game-rules.md](game-rules.md), "Trainers and
+  ranks"), so every trainer visit learns ahead: a rank row ends with `While there, learn: <recipe>
+  (<fee>), ...` for the trainer recipes the route needs later whose required skill is reached and
+  whose rank the trainer teaches; nothing to learn, no sentence. The stock doesn't say which recipes
+  a character knows, so recipes already reachable at the start skill never make a visit of their
+  own: they are listed once, at the first visit that teaches them, as `If you don't have them yet:
+  <recipe>, ...` (`it` for one). When the route uses one before any such visit, the route starts with
+  `- **Before you start**, make sure you know: <recipes> (any <Rank> <Person> teaches them).`
+- A recipe below the visit trainer's rank says where else to learn it, since the lower ranks are
+  unconfirmed: `(if <trainer> doesn't list it: <who>)` after the recipes it is for (`them` for
+  several), where `<trainer>` is the one trainer the row names or `the <Rank> <Person>`, and `<who>`
+  names the Artisan or Master trainers of the recipe's rank (`<name> (<Rank>, <zone>)`) or reads
+  `any <Rank> <Person>` below them.
+- A trainer recipe that no earlier visit of its rank can teach gets a visit of its own at the skill
+  the route needs it, and later recipes of that rank with a required skill at or below that skill
+  join it (two needs at 240 and 245 make two rows). An Artisan or Master recipe is a trip:
+  `- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>`, then `; or skip it: +<gold>
+  for the route without it` (the route planned again without those recipes) or `; there is no other
+  way to reach the target without it`, and a full stop. Below Artisan it is a stop in a capital:
+  `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).` Without
+  the faction or the trainer in the data the row says so (`back to the Master Enchanter in a set
+  town (the planner doesn't say where yet)`) and still lists the recipes.
 - Name the trainer from the data, for the character's faction (the profile's `faction`; without it
   the row says "a set town"). A remote rank row reads `**Trip:** Blacksmithing rank to 300: <name>,
   <zone> (x, y). Nearby: bank, mailbox; no auction house.` (map coordinates; "Nearby" is a bank, an

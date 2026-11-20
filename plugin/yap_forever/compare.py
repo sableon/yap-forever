@@ -59,7 +59,8 @@ def compare(routes: dict, gd, market, stock, mailbox_trips: dict | None = None, 
         return ", ".join(f"{PROFESSIONS.get(x, x)} {s}" for x, s in p.final_skill.items()) or "—"
 
     def away(p, _m):
-        return str(len(trips(p, gd))) if trips(p, gd) else "none"
+        found = trips(p, gd, stock.skills)
+        return str(len(found)) if found else "none"
 
     def mail(_p, m):
         return str(mailbox_trips[m]) if mailbox_trips and m in mailbox_trips else "—"

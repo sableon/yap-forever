@@ -370,7 +370,7 @@ class WriteReportsTests(unittest.TestCase):
     def test_the_belt_is_learned_at_its_inferred_skill_with_a_note(self):
         texts = self.reports()
         learn = [l for t in (texts["guide-gold"], texts["guide-value"]) for l in t.splitlines()
-                 if "Learn Copper Chain Belt" in l]
+                 if "Learn Copper Chain Belt" in l and l.startswith("- *At")]
         self.assertEqual(len(learn), 2)  # one learn row in each guide
         for row in learn:
             self.assertRegex(row, r"At (3[5-9]|[4-9]\d):")  # never before the inferred 35

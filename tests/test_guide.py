@@ -401,7 +401,7 @@ class TrainerRowTests(unittest.TestCase):
         self.assertTrue(row.startswith("- **Trip:** Blacksmithing rank to 300: Brakka Ironfold, Stranglethorn Vale "
                                        "(30.0, 70.0). Nearby: bank, neutral AH (its own prices and a higher deposit), "
                                        "mailbox. "), row)
-        self.assertIn("While there, learn the trainer recipes your skill allows.", row)
+        self.assertNotIn("While there", row)  # nothing to learn at this visit
         self.assertNotIn("set town", row)
 
     def test_booty_bay_style_master_row_says_neutral_auction_house(self):
@@ -414,10 +414,9 @@ class TrainerRowTests(unittest.TestCase):
         notes = Notes({90001: TrainerNote(reach_level=35, flight_path=True, note="A tip.")}, {})
         ranks = [(60, 150), (200, 225), (275, 300)]
         (row,) = [l for l in self.lines(self.route(ranks, notes=notes, level=40), "- **Trip:**") if "rank to 300" in l]
-        self.assertIn("mailbox. Easy to reach from about level 35, with a flight path for repeat visits. A tip. "
-                      "While there, learn the trainer recipes your skill allows.", row)
+        self.assertIn("mailbox. Easy to reach from about level 35, with a flight path for repeat visits. A tip.", row)
         (row,) = [l for l in self.lines(self.route(ranks, notes=notes, level=30), "- **Trip:**") if "rank to 300" in l]
-        self.assertIn("for repeat visits (you're level 30: the first trip is harder). A tip. While there", row)
+        self.assertIn("for repeat visits (you're level 30: the first trip is harder). A tip. Bring:", row)
 
     def test_trainer_without_notes_row_is_unchanged(self):
         from yap_forever.trainer_notes import Notes, TrainerNote
@@ -510,7 +509,7 @@ class TrainerRowTests(unittest.TestCase):
         text = self.route([(60, 150), (200, 225)])
         (row,) = [l for l in self.lines(text, "- **Trip:**") if "rank to 225" in l]
         self.assertIn("Thessa Hammerlow, Stormwind City (60.5, 40.2). Or Wandering Smith, Ironforge (20.0, 20.0). "
-                      "While there", row)  # both are in Alliance capitals: no Nearby line
+                      "Bring:", row)  # both are in Alliance capitals: no Nearby line
         self.assertNotIn("Nearby", row)
 
     def test_instance_trainer_row(self):
@@ -732,3 +731,106 @@ class BudgetLineTests(unittest.TestCase):
         self.assertIn("Level one profession at a time: Enchanting first, then Blacksmithing.",
                       self.render({}, order=(ENCH, BS)))
         self.assertIn("Level both professions side by side", self.render({}))
+
+
+class VisitRowTests(unittest.TestCase):
+    """Trainer visits: the recipes learned at each, recipe trips and the recipes to know before starting."""
+
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        from yap_forever import trainers
+        cls.data = trainers.load_trainer_data(Path(__file__).parent / "fixtures" / "gamedata")
+
+    def render(self, start, ranks, recipes, learns, faction="alliance", data=None, alts=None, final=300):
+        """A Blacksmithing guide from `start`: ranks (skill, cap); recipes (spell, required skill, fee in copper);
+        learns (spell, skill the route learns it at)."""
+        from yap_forever.planner import Plan, Step
+        from yap_forever.trainer_text import TrainerInfo
+        rs = base_recipes() + [toy.recipe(spell, f"Recipe {spell}", BS, {toy.COPPER_BAR: 1}, req=req, fee=fee)
+                               for spell, req, fee in recipes]
+        p = Plan(steps=[Step(BS, start, final, 1, "BS basic", final - start, 0, 0, {toy.COPPER_BAR: final - start})],
+                 bought={toy.COPPER_BAR: final - start}, ranks=[(BS, s, cap, 450) for s, cap in ranks],
+                 learn_log=[(BS, s, spell, "trainer") for spell, s in learns],
+                 events=[f"Blacksmithing {s}: train rank up to {cap} (4s 50c)" for s, cap in ranks],
+                 final_skill={BS: final})
+        info = TrainerInfo(faction, data or self.data) if faction else None
+        return render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: start}),
+                            caps={BS: final}, alts=alts, trainer_info=info)
+
+    def row(self, text, start, has):
+        (row,) = [line for line in text.splitlines() if line.startswith(start) and has in line]
+        return row
+
+    def test_visit_row_lists_recipes(self):
+        text = self.render(160, [(200, 225)], [(11, 170, 1000), (12, 180, 2500)], [(11, 205), (12, 215)], final=225)
+        row = self.row(text, "- **Trip:**", "rank to 225")
+        self.assertIn("Or Wandering Smith, Ironforge (20.0, 20.0). While there, learn: Recipe 11 (10s), "
+                      "Recipe 12 (25s).", row)
+        self.assertNotIn("your skill allows", text)
+
+    def test_if_missing_line(self):
+        text = self.render(190, [(225, 300)], [(13, 180, 1000), (14, 185, 1000)], [(13, 230), (14, 240)])
+        row = self.row(text, "- **Trip:**", "rank to 300")
+        self.assertIn(" If you don't have them yet: Recipe 13, Recipe 14 (if Brakka Ironfold doesn't list them: ", row)
+        self.assertNotIn("While there", row)
+        self.assertNotIn("Before you start", text)
+
+    def test_fallback_names_lower_trainer(self):
+        text = self.render(200, [(225, 300)], [(13, 210, 1000)], [(13, 230)])
+        row = self.row(text, "- **Trip:**", "rank to 300")
+        self.assertIn("While there, learn: Recipe 13 (10s) (if Brakka Ironfold doesn't list it: Thessa Hammerlow "
+                      "(Artisan, Stormwind City) or Wandering Smith (Artisan, Ironforge)).", row)
+        # below the remote ranks the fallback is any trainer of the recipe's rank
+        text = self.render(140, [(150, 225)], [(15, 145, 500), (16, 120, 500)], [(15, 160), (16, 170)], final=225)
+        row = self.row(text, "- **Trip:**", "rank to 225")
+        self.assertIn("While there, learn: Recipe 15 (5s) (if the Artisan Blacksmith doesn't list it: any Expert "
+                      "Blacksmith). If you don't have it yet: Recipe 16 (if the Artisan Blacksmith doesn't list it: "
+                      "any Expert Blacksmith).", row)
+
+    def test_before_start_line(self):  # RF3
+        text = self.render(184, [(225, 300)], [(17, 160, 1000)], [(17, 184)])
+        self.assertIn("- **Before you start**, make sure you know: Recipe 17 (any Artisan Blacksmith teaches it).",
+                      text)
+        route = text[text.index("## Route"):]
+        self.assertLess(route.index("Before you start"), route.index("- **184–"))
+        self.assertNotIn("Recipe 17", self.row(text, "- **Trip:**", "rank to 300"))
+
+    def test_recipe_trip_has_skip_alternative(self):
+        text = self.render(225, [(225, 300)], [(18, 240, 3000), (19, 245, 3000)], [(18, 240), (19, 251)],
+                           alts={(18,): 30000, (19,): None})
+        self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 240 for Recipe 18; "
+                      "or skip it: +3.0g for the route without it.", text)
+        self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 251 for Recipe 19; "
+                      "there is no other way to reach the target without it.", text)
+        route = text[text.index("## Route"):]
+        self.assertLess(route.index("at 240 for"), route.index("at 251 for"))
+
+    def test_visit_without_trainer_data(self):  # RF5
+        from yap_forever import trainers
+        data = trainers.TrainerData([trainers.Trainer(1, "Grom Anvilhand", BS, "Expert", "H", 1637, (80, 20), True)],
+                                    {}, [], {1637: "Orgrimmar"})
+        text = self.render(200, [(225, 300)], [(13, 210, 1000), (18, 240, 1000)], [(13, 230), (18, 240)],
+                           faction="horde", data=data)
+        row = self.row(text, "- **Trip:**", "rank to 300")
+        self.assertIn("the planner has no Master Blacksmith trainer for your faction in its data. While there, learn: "
+                      "Recipe 13 (10s) (if the Master Blacksmith doesn't list it: any Artisan Blacksmith).", row)
+        self.assertIn("- **Trip:** back to the Master Blacksmith (the planner has no Master Blacksmith trainer for "
+                      "your faction in its data), at 240 for Recipe 18.", text)
+        text = self.render(200, [(225, 300)], [(13, 210, 1000), (18, 240, 1000)], [(13, 230), (18, 240)], faction="")
+        row = self.row(text, "- **Trip:**", "rank to 300")
+        self.assertIn("(the planner doesn't say where yet). While there, learn: Recipe 13 (10s)", row)
+        self.assertIn("- **Trip:** back to the Master Blacksmith in a set town (the planner doesn't say where yet), "
+                      "at 240 for Recipe 18.", text)
+
+    def test_city_visit_rows(self):
+        from yap_forever import trainers
+        data = trainers.TrainerData([trainers.Trainer(1, "Grom Anvilhand", BS, "Expert", "H", 1637, (80, 20), True)],
+                                    {}, [], {1637: "Orgrimmar"})
+        text = self.render(100, [(130, 150)], [(20, 120, 500), (21, 140, 500)], [(20, 135), (21, 142)],
+                           faction="horde", data=data, final=150)
+        self.assertIn("- Train Blacksmithing to 150 at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
+                      "Orgrimmar). While there, learn: Recipe 20 (5s).", text)
+        self.assertIn("- Learn Recipe 21 at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
+                      "Orgrimmar).", text)
+

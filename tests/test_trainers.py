@@ -981,13 +981,14 @@ class TripKindTests(unittest.TestCase):
     def test_expert_rank_is_not_a_trip(self):
         from yap_forever.trips import trips
         from tests import toy
-        got = trips(self.plan(), toy.gamedata([]))
+        got = trips(self.plan(), toy.gamedata([]), {BS: 1})
         self.assertEqual([(t.kind, t.skill, t.cap) for t in got], [("rank", 200, 225), ("rank", 275, 300)])
 
     def test_city_ranks_are_the_ranks_below_the_remote_ones(self):
-        from yap_forever.trips import city_ranks
-        got = city_ranks(self.plan())
-        self.assertEqual([(t.kind, t.skill, t.cap, t.profession) for t in got], [("city", 60, 150, BS)])
+        from yap_forever.trips import visits
+        from tests import toy
+        got = [v for v in visits(self.plan(), toy.gamedata([]), {BS: 1}) if not v.remote]
+        self.assertEqual([(v.kind, v.skill, v.rank_cap, v.profession) for v in got], [("rank", 60, 150, BS)])
 
 
 class ListedNoteTests(unittest.TestCase):

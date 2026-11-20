@@ -74,5 +74,47 @@ class VisitTests(unittest.TestCase):
         self.assertEqual(before_start(p, gd, {BS: 100}), {})
 
 
+class RecipeTripTests(unittest.TestCase):
+    """Recipe trips on planned routes: the skip alternative and a budget cut."""
+
+    def inputs(self, caps, craft_once=None):
+        import dataclasses
+        from tests.test_budget import inputs
+        from yap_forever.gamedata import Rank
+        late = toy.recipe(3, "BS late", BS, {toy.IRON_BAR: 1}, t=(240, 300, 300, 300), req=240, fee=100)
+        i = inputs([toy.recipe(1, "BS bar", BS, {toy.COPPER_BAR: 1}), late], caps,
+                   listings={toy.COPPER_BAR: [(100, 100000)], toy.IRON_BAR: [(50, 100000)]},
+                   ranks={BS: [Rank(300, 50000, 200, 35)]})
+        return dataclasses.replace(i, craft_once=craft_once or {})
+
+    def test_recipe_trip_skip_alternative(self):
+        from yap_forever.plan import plan_route
+        from yap_forever.trips import trip_alternatives, trips
+        i = self.inputs({BS: 300})
+        base = plan_route(i, "gold")
+        found = [(t.kind, t.skill, t.spells) for t in trips(base, i.gd, i.stock.skills) if t.kind == "recipe"]
+        self.assertEqual(found, [("recipe", 240, (3,))])
+        alts = trip_alternatives(base, i, "gold")
+        self.assertGreater(alts[(3,)], 0)  # without the iron recipe the route crafts copper to 300
+
+    def test_recipe_trip_for_the_goal_recipe_has_no_skip(self):
+        from yap_forever.plan import plan_route
+        from yap_forever.trips import trip_alternatives
+        i = self.inputs({BS: 240}, craft_once={BS: 3})
+        self.assertEqual(trip_alternatives(plan_route(i, "gold"), i, "gold"), {(3,): None})
+
+    def test_budget_cut_route_visits(self):
+        from tests.test_budget import cut
+        from yap_forever.plan import plan_route
+        i = self.inputs({BS: 300})
+        full = visits(plan_route(i, "gold"), i.gd, i.stock.skills)
+        self.assertTrue(any(v.skill > 225 for v in full))  # the uncut route goes back for the 240 recipe
+        c = cut(i, 3)
+        self.assertEqual(c.caps, {BS: 225})
+        got = visits(c.plan, i.gd, i.stock.skills)
+        self.assertTrue(got)
+        self.assertEqual([v for v in got if v.skill > 225 or v.rank_cap > 225], [])
+
+
 if __name__ == "__main__":
     unittest.main()

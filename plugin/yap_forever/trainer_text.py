@@ -100,13 +100,20 @@ def _place(t: Trainer, flag: str, info: TrainerInfo, level: int | None = None) -
     return (f"{text} {said}" if said else text), known
 
 
-def _where(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
-    data = info.data
+def _spot(t: Trainer, flag: str, data: TrainerData) -> str:
+    """'<name>, <zone> (x, y)', or '<name>, inside <instance> (<zone>)' for a trainer without coordinates."""
     zone = data.zone_name(t.zone)
     if t.coords is None:
         parent = data.parent_zone(t.zone)
-        return f"{t.name}{flag}, inside {zone}" + (f" ({data.zone_name(parent)})" if parent else "") + ".", False
-    place = f"{t.name}{flag}, {zone} ({t.coords[0]:.1f}, {t.coords[1]:.1f})."
+        return f"{t.name}{flag}, inside {zone}" + (f" ({data.zone_name(parent)})" if parent else "")
+    return f"{t.name}{flag}, {zone} ({t.coords[0]:.1f}, {t.coords[1]:.1f})"
+
+
+def _where(t: Trainer, flag: str, info: TrainerInfo) -> tuple[str, bool]:
+    data = info.data
+    if t.coords is None:
+        return _spot(t, flag, data) + ".", False
+    place = _spot(t, flag, data) + "."
     if t.zone in CAPITALS[info.faction]:  # a capital has a bank, an auction house and a mailbox
         return place, True
     near = trainers.nearby(t, data.npc_rows, data.mailboxes, trainers.NEARBY_RADIUS)
@@ -150,24 +157,26 @@ def _apart(info: TrainerInfo, zone: int, planned: tuple[int, ...]) -> str:
 
 
 def city_row(info: TrainerInfo | None, profession: int, cap: int, planned: tuple[int, ...] = (),
-             said: set[int] | None = None) -> str | None:
+             said: set[int] | None = None, lead: str = "") -> str | None:
     """The row (without its dash) for a rank trained at any trainer of that rank in a capital.
     planned: the professions the guide plans, in order; a capital whose notes put two of them in
     different groups says so. said: the zones that already said it (a set the caller keeps, so a
-    city says it once in the guide); a zone is added when its row says it."""
+    city says it once in the guide); a zone is added when its row says it.
+    lead: what the row is for ("Learn X"); default "Train <profession> to <cap>"."""
     if not _usable(info, cap):
         return None
     rank, name = RANK_BY_CAP[cap], PROFESSIONS.get(profession, str(profession))
+    lead = lead or f"Train {name} to {cap}"
     found = trainers.trainers_for(info.data.trainers, profession, rank, info.faction)
     if not found:
-        return f"Train {name} to {cap}: {_no_trainer(rank, profession)}"
+        return f"{lead}: {_no_trainer(rank, profession)}"
     capital = [t for t in found if t.zone in CAPITALS[info.faction]]
     examples = _confirmed_first(capital)[:MAX_EXAMPLES]
     if not examples:  # no trainer of the rank in a capital: say where they are, never "in a capital"
         where = " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}"
                             for t, flag in _confirmed_first(found)[:MAX_EXAMPLES])
-        return f"Train {name} to {cap} at {where} (no {rank} {PERSON.get(profession, name)} in a capital in the data)."
-    text = f"Train {name} to {cap} at any {rank} {PERSON.get(profession, name)} in a capital"
+        return f"{lead} at {where} (no {rank} {PERSON.get(profession, name)} in a capital in the data)."
+    text = f"{lead} at any {rank} {PERSON.get(profession, name)} in a capital"
     text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")."
     notes = info.notes
     said = set() if said is None else said
@@ -180,6 +189,48 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int, planned: tuple
             parts.append(apart)
             said.add(z)
     return " ".join(parts)
+
+
+def person(profession: int) -> str:
+    """How a trainer's title names the profession: "Blacksmith"."""
+    return PERSON.get(profession, PROFESSIONS.get(profession, str(profession)))
+
+
+def _named(info: TrainerInfo | None, profession: int, cap: int, limit: int) -> list[tuple[Trainer, str]]:
+    """The trainers a row names for a rank (confirmed titles first, each with its flag); [] without data."""
+    if not _usable(info, cap):
+        return []
+    found = trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap], info.faction)
+    return _confirmed_first(found)[:limit]
+
+
+def visit_trainer(info: TrainerInfo | None, profession: int, cap: int, remote: bool) -> str:
+    """The trainer of a visit, for "if <it> doesn't list it": the name when the row names one trainer,
+    else "the <Rank> <Person>"."""
+    named = _named(info, profession, cap, MAX_REMOTE) if remote else []
+    return named[0][0].name if len(named) == 1 else f"the {RANK_BY_CAP[cap]} {person(profession)}"
+
+
+def fallback_trainer(info: TrainerInfo | None, profession: int, cap: int, remote: bool) -> str:
+    """Who else teaches a recipe of rank `cap`: the trainers of that rank when it is a remote one
+    ("Kitta Firewind (Artisan, Elwynn Forest)"), else (or without data) "any <Rank> <Person>"."""
+    rank = RANK_BY_CAP[cap]
+    named = _named(info, profession, cap, MAX_EXAMPLES) if remote else []
+    if not named:
+        return f"any {rank} {person(profession)}"
+    return " or ".join(f"{t.name}{flag} ({rank}, {info.data.zone_name(t.zone)})" for t, flag in named)
+
+
+def trip_trainer(info: TrainerInfo | None, profession: int, cap: int) -> str:
+    """The trainer a recipe trip goes back to, for "**Trip:** back to <this>, at ...": names and places
+    ("Annora, inside Uldaman (Badlands)"), or the rank with why the planner names none."""
+    who = f"the {RANK_BY_CAP[cap]} {person(profession)}"
+    if not _usable(info, cap):
+        return f"{who} in a set town (the planner doesn't say where yet)"
+    named = _named(info, profession, cap, MAX_REMOTE)
+    if not named:
+        return f"{who} ({_no_trainer(RANK_BY_CAP[cap], profession).removesuffix('.')})"
+    return " or ".join(_spot(t, flag, info.data) for t, flag in named)
 
 
 def add_note(text: str, note: str) -> str:

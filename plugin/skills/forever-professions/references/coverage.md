@@ -7,11 +7,13 @@ says what is there.
   recipe crafted once), from the character's `stock.toml`; two routes side by side (least gold and
   least total value).
 - The route in trainer stages, with trips away from home marked (Artisan and Master trainers,
-  vendor patterns, the Favor vendor) and the cost of skipping a recipe trip. Trainers are named for
-  the character's faction, with zone, map coordinates and what is nearby
-  ([list-layout.md](list-layout.md), "Trainer stages and trips").
+  trips back to them for recipes, vendor patterns, the Favor vendor) and the cost of skipping a
+  recipe trip. Each trainer visit lists the trainer recipes to learn there, as far as the trainer's
+  rank teaches them. Trainers are named for the character's faction, with zone, map coordinates and
+  what is nearby ([list-layout.md](list-layout.md), "Trainer stages and trips").
 - The safe route for trainer recipes whose skill requirement is only inferred from Classic, with a
-  header line on what the route could save ([game-rules.md](game-rules.md), "Trainers and ranks";
+  header line on what the route could save, and recipes seen learnable earlier in play kept at the
+  Forever requirement ([game-rules.md](game-rules.md), "Trainers and ranks";
   [list-layout.md](list-layout.md), "Trainer stages and trips").
 - Merchant's Favor recipes for the character's standing (Alliance, Blacksmithing and Enchanting),
   as far as their vendor, standing and price are known: up to the Honored Wristguards and Brilliant

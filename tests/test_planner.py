@@ -189,7 +189,7 @@ class PlannerTests(unittest.TestCase):
         text = "\n".join(render_shopping(p, gd, toy.market(BARS), st)[0])
         self.assertNotIn("Plans: Something", text)
         from yap_forever.trips import trips
-        self.assertEqual([t for t in trips(p, gd) if t.spell == 3], [])  # no vendor or AH pattern trip
+        self.assertEqual([t for t in trips(p, gd, st.skills) if t.spell == 3], [])  # no vendor or AH pattern trip
 
     def test_owned_pattern_beats_a_listed_one(self):
         rs = self.scroll_recipes()

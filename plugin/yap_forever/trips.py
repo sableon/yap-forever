@@ -1,8 +1,10 @@
-"""Trips away from home: rank trainers in set towns, vendor patterns, the Favor vendor.
+"""Trips away from home: rank trainers in set towns, recipe trips back to them, vendor patterns, the Favor vendor.
 
-Trainer recipes are not trips (every trainer teaches the same list), nor are the ranks below 225
-(Expert and Journeyman trainers are in the main cities: `city_ranks` lists those stops), nor AH
-patterns (they come by mail).
+A trainer teaches the recipes up to its rank's cap (`recipe_rank_cap`), so every trainer visit learns the
+recipes the route needs later that its rank teaches and the skill allows (`visits`); a recipe that no visit
+can teach makes a visit of its own: a trip for an Artisan or Master recipe, a capital stop below. Ranks
+below 225 are not trips (Expert and Journeyman trainers are in the main cities), nor AH patterns (they come
+by mail).
 """
 from dataclasses import dataclass, field
 
@@ -20,35 +22,6 @@ def recipe_rank_cap(required_skill: int) -> int:
     (one sighting: an Expert trainer lacks a 175 recipe that an Artisan teaches); this is the one place
     that says so."""
     return next((c for c in RANK_CAPS if c >= required_skill), RANK_CAPS[-1])
-
-
-@dataclass(frozen=True)
-class Trip:
-    skill: int
-    profession: int
-    kind: str  # "rank", "vendor" or "favor" (and "city" from city_ranks: a rank trained in a capital)
-    what: str
-    spell: int | None = None
-    cost: float = 0
-    cap: int = 0  # the skill cap a rank stop trains to
-
-
-def trips(plan, gd) -> list["Trip"]:
-    out = [Trip(s, prof, "rank", f"{PROFESSIONS.get(prof, prof)} rank to {cap}", None, fee, cap)
-           for prof, s, cap, fee in plan.ranks if cap >= REMOTE_RANK]
-    for prof, s, spell, how in plan.learn_log:
-        if how in ("vendor", "favor"):
-            r = gd.recipes.get(spell)
-            name = r.name if r else str(spell)
-            cost = gd.vendor_prices.get(r.scroll_item, 0) if r and how == "vendor" and r.scroll_item else 0
-            out.append(Trip(s, prof, how, name, spell, cost))
-    return sorted(out, key=lambda t: (t.skill, t.kind != "vendor" and t.kind != "favor", t.profession))
-
-
-def city_ranks(plan) -> list["Trip"]:
-    """The ranks below REMOTE_RANK, trained at any trainer of that rank in a capital: stops, not trips."""
-    return [Trip(s, prof, "city", f"{PROFESSIONS.get(prof, prof)} rank to {cap}", None, fee, cap)
-            for prof, s, cap, fee in plan.ranks if cap < REMOTE_RANK]
 
 
 @dataclass
@@ -120,19 +93,63 @@ def before_start(plan, gd, start_skills: dict[int, int]) -> dict[int, list[int]]
     return _visits(plan, gd, start_skills)[1]
 
 
-def trip_alternatives(base, inputs, mode) -> dict[int, float | None]:
-    """For vendor and Favor trips (the costliest few): what the route costs more without that recipe,
-    in the route's own measure; None when the targets can't be reached without it.
-    inputs: the plan.PlanInputs the route was planned from."""
+@dataclass(frozen=True)
+class Trip:
+    skill: int
+    profession: int
+    kind: str  # "rank", "recipe" (back to a remote trainer for recipes), "vendor" or "favor"
+    what: str
+    spell: int | None = None
+    cost: float = 0
+    cap: int = 0  # the skill cap a rank stop trains to; a recipe trip's trainer rank
+    spells: tuple[int, ...] = ()  # a recipe trip's recipes
+    visit: Visit | None = None  # a rank or recipe trip's trainer visit
+
+    @property
+    def key(self) -> int | tuple[int, ...] | None:
+        """What trip_alternatives keys the trip by: its recipe, or a recipe trip's recipes."""
+        return self.spells or self.spell
+
+
+def trips(plan, gd, start_skills: dict[int, int]) -> list[Trip]:
+    """The trips away from home, in skill order. start_skills: profession -> the route's start skill."""
+    out = []
+    for v in visits(plan, gd, start_skills):
+        name = PROFESSIONS.get(v.profession, v.profession)
+        if v.kind == "rank" and v.remote:
+            fee = next(f for prof, s, cap, f in plan.ranks if (prof, s, cap) == (v.profession, v.skill, v.rank_cap))
+            out.append(Trip(v.skill, v.profession, "rank", f"{name} rank to {v.rank_cap}", None, fee, v.rank_cap,
+                            visit=v))
+        elif v.kind == "recipe":
+            names = ", ".join(gd.recipes[s].name for s in v.learn)
+            out.append(Trip(v.skill, v.profession, "recipe", names, None, sum(gd.recipes[s].fee for s in v.learn),
+                            v.rank_cap, tuple(v.learn), v))
+    for prof, s, spell, how in plan.learn_log:
+        if how in ("vendor", "favor"):
+            r = gd.recipes.get(spell)
+            name = r.name if r else str(spell)
+            cost = gd.vendor_prices.get(r.scroll_item, 0) if r and how == "vendor" and r.scroll_item else 0
+            out.append(Trip(s, prof, how, name, spell, cost))
+    return sorted(out, key=lambda t: (t.skill, t.kind != "vendor" and t.kind != "favor", t.profession))
+
+
+def trip_alternatives(base, inputs, mode) -> dict[int | tuple[int, ...], float | None]:
+    """What the route costs more without a trip's recipes, in the route's own measure, by Trip.key; None when
+    the targets can't be reached without them. For every recipe trip, and the costliest few vendor and
+    Favor trips. inputs: the plan.PlanInputs the route was planned from."""
     from yap_forever.plan import plan_route  # plan imports this module
 
     measure = (lambda p: p.cash_total) if mode == "gold" else (lambda p: p.economic_total)
     goals = set(inputs.craft_once.values())  # the goal recipe can't be skipped
-    picks = sorted((t for t in trips(base, inputs.gd) if t.spell is not None and t.spell not in goals),
+    found = trips(base, inputs.gd, inputs.stock.skills)
+    picks = sorted((t for t in found if t.spell is not None and t.spell not in goals),
                    key=lambda t: -t.cost)[:MAX_TRIP_ALTS]
-    out: dict[int, float | None] = {}
-    for t in picks:
-        alt = plan_route(inputs, mode, exclude=frozenset({t.spell}))
+    out: dict[int | tuple[int, ...], float | None] = {}
+    for t in [t for t in found if t.kind == "recipe"] + picks:
+        if goals & set(t.spells):  # a recipe trip for the goal recipe can't be skipped either
+            out[t.key] = None
+            continue
+        alt = plan_route(inputs, mode, exclude=frozenset(t.spells or {t.spell}))
         reached = all(alt.final_skill.get(p, 0) >= base.final_skill.get(p, 0) for p in inputs.caps)
-        out[t.spell] = measure(alt) - measure(base) if reached else None
+        out[t.key] = measure(alt) - measure(base) if reached else None
     return out
