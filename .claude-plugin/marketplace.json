@@ -9,7 +9,7 @@
     {
       "name": "yap-forever",
       "description": "Cheapest profession levelling routes and shopping lists for WoW: Forever, from your own auction house prices.",
-      "source": "./",
+      "source": "./plugin",
       "category": "gaming"
     }
   ]

@@ -145,7 +145,7 @@ and who has another machine that can fetch prices:
 ```toml
 host = "me@my-vps"                  # required: an ssh host
 key = "~/.ssh/id_example"           # optional: ssh key file, an absolute path or one starting with ~
-command = "cd yap-forever && git pull -q && python3 -m yap_forever prices"  # default, run there
+command = "cd yap-forever && git pull -q && cd plugin && python3 -m yap_forever prices"  # default, run there
 remote_file = ".yap-forever/cache/prices.json"  # default: where that machine leaves its prices
 ```
 

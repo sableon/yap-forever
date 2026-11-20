@@ -37,4 +37,4 @@ jobs:
       - name: Ruff (a developer tool; the planner needs only the standard library)
         run: |
           python -m pip install --disable-pip-version-check ruff==0.17.6
-          ruff check --output-format github yap_forever tests
+          ruff check --output-format github plugin/yap_forever tests

@@ -4,11 +4,11 @@ State on 2026-11-18, end of phase 1 work (first public planner, tag `v0.1.0-plan
 
 ## What works
 
-- The planner from the owner's personal project, moved into `yap_forever/` unchanged in
+- The planner from the owner's personal project, moved into `plugin/yap_forever/` unchanged in
   behaviour: the owner's main route and an alt shopping list reproduce line for line.
 - Per-player home folder `~/.yap-forever/` (`YAP_FOREVER_HOME` overrides), one command line,
   setup checks with next steps, any region and ruleset in principle (only EU tried).
-- Claude Code plugin with the `forever-professions` skill; loads with `--plugin-dir`.
+- Claude Code plugin with the `forever-professions` skill; loads with `--plugin-dir plugin`.
 - An independent review (2026-11-18) found ten issues; all are fixed (PRs 15–22): bank metal and
   current skills are used, a 15% buffer on yellow and green steps, prices tied to their house,
   Forever disenchanting, quest levels, realistic sales, damaged files, `migrate` flags.

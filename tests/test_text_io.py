@@ -2,7 +2,7 @@ import ast
 import unittest
 from pathlib import Path
 
-PACKAGE = Path(__file__).resolve().parent.parent / "yap_forever"
+PACKAGE = Path(__file__).resolve().parent.parent / "plugin" / "yap_forever"
 
 
 def _mode(call: ast.Call) -> str:

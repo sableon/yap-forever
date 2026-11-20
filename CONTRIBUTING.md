@@ -9,8 +9,8 @@ follow are in [AGENTS.md](AGENTS.md); they apply to people too.
 - **Bugs and wrong game data:** open an issue with the matching template. For game data (Favor
   recipes, disenchanting, trainers, talents), say what you saw in game: item or recipe IDs, your
   skill, and a screenshot if you have one.
-- **Changes to how the skill works** (`skills/forever-professions/`), to the game rules it
-  states, or to the data in `yap_forever/data_static/`: open an issue first and agree the change
+- **Changes to how the skill works** (`plugin/skills/forever-professions/`), to the game rules it
+  states, or to the data in `plugin/yap_forever/data_static/`: open an issue first and agree the change
   with the maintainer. These parts need the maintainer's review (see `.github/CODEOWNERS`).
 - **Never paste your Battle.net client ID or secret**, your `credentials.json`, or anything from
   your `~/.yap-forever/` folder that you don't want public.
@@ -18,7 +18,7 @@ follow are in [AGENTS.md](AGENTS.md); they apply to people too.
 ## How the project is built
 
 - The skill (`SKILL.md` and its references) tells Claude what to ask and which command to run;
-  the planner (`yap_forever/`) does the maths. Keep that split: game knowledge the planner uses
+  the planner (`plugin/yap_forever/`) does the maths. Keep that split: game knowledge the planner uses
   lives in data files or code with tests, and the skill explains it in words.
 - Python 3.11 or newer, standard library only, tests with `unittest`. No new dependencies.
 - Windows, macOS and Linux: open text files with `encoding="utf-8"` (a test checks this), and use
@@ -41,7 +41,7 @@ follow are in [AGENTS.md](AGENTS.md); they apply to people too.
 4. **Test data uses made-up values:** invented character names, invented auction house IDs. Never
    your own characters, realm, house or email. `tests/test_publishable.py` scans every tracked
    file for private details.
-5. **New data from another project:** add it to [CREDITS.md](CREDITS.md) with its source, version
+5. **New data from another project:** add it to [plugin/CREDITS.md](plugin/CREDITS.md) with its source, version
    and licence. A test checks that every source is credited.
 6. Commit messages start with `feat:`, `fix:`, `docs:`, `test:` or `chore:`.
 7. Don't edit `docs/progress.md`; the maintainer adds a line for your change when it is merged.

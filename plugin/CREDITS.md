@@ -13,7 +13,7 @@ when it first plans; none of that data is stored in this repository.
 | Auction house prices | Blizzard Battle.net API, with **your own** API client | Blizzard API terms; prices stay on your machine | live |
 | Auction house prices (alternative) | [Auctionator](https://github.com/Auctionator/Auctionator) addon's saved-variables file (`Auctionator.lua`): a saved-data format this project reads, with its own small decoder. No Auctionator code or data is included | the file is the player's own data | the addon's price database version 8 |
 
-## Kept in this repository (`yap_forever/data_static/`)
+## Kept in this plugin (`yap_forever/data_static/`)
 
 | File | What | Source |
 |---|---|---|

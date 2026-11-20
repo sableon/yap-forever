@@ -8,8 +8,9 @@ from pathlib import Path
 
 from yap_forever import gamedata
 
-ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / "skills" / "forever-professions"
+ROOT = Path(__file__).resolve().parent.parent  # the repository: the marketplace and the project files
+PLUGIN = ROOT / "plugin"  # what players install (the marketplace's source)
+SKILL = PLUGIN / "skills" / "forever-professions"
 
 
 def frontmatter(text: str) -> dict[str, str]:
@@ -46,17 +47,17 @@ PRIVATE = [
 
 class PublishableTests(unittest.TestCase):
     def test_manifests_valid(self):
-        plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
         self.assertEqual(plugin["name"], "yap-forever")
         self.assertEqual(market["plugins"][0]["name"], plugin["name"])
-        self.assertEqual(market["plugins"][0]["source"], "./")
+        self.assertEqual(market["plugins"][0]["source"], "./plugin")
         self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
         self.assertEqual(plugin["license"], "GPL-3.0-or-later")
 
     def test_one_version_in_the_package_and_the_manifest(self):
         import yap_forever
-        plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(plugin["version"], yap_forever.__version__)
 
     def test_the_manifest_version_is_not_behind_the_newest_tag(self):
@@ -86,14 +87,35 @@ class PublishableTests(unittest.TestCase):
         for ref in refs:
             self.assertTrue((SKILL / ref).exists(), ref)
 
+    def test_setup_shows_the_default_remote_command(self):
+        from yap_forever import settings
+        text = (SKILL / "references" / "setup.md").read_text(encoding="utf-8")
+        self.assertIn(f'command = "{settings.REMOTE_COMMAND}"  # default, run there', text)
+
     def test_credits_cover_sources(self):
-        credits = (ROOT / "CREDITS.md").read_text(encoding="utf-8")
+        credits = (PLUGIN / "CREDITS.md").read_text(encoding="utf-8")
         for url in gamedata.SOURCES.values():
             m = re.match(r"https://raw\.githubusercontent\.com/([^/]+/[^/]+)/", url)
             origin = m.group(1) if m else re.match(r"https://([^/]+)/", url).group(1)
             self.assertIn(origin, credits)
         for pin in (gamedata.SKILLUP_SHA, gamedata.QUESTIE_SHA, str(gamedata.WAGO_BUILD)):
             self.assertIn(pin, credits)
+
+    def test_installs_ship_the_licence_and_credits(self):
+        """An install copies only plugin/: the GPL text and the credits must be in it. The root
+        LICENSE stays for GitHub's licence detection and must be the same file."""
+        self.assertEqual((PLUGIN / "LICENSE").read_bytes(), (ROOT / "LICENSE").read_bytes())
+        self.assertTrue((PLUGIN / "CREDITS.md").is_file())
+        self.assertFalse((ROOT / "CREDITS.md").exists(), "one credits file, in plugin/")
+
+    def test_tests_import_the_installed_package(self):
+        import yap_forever
+        self.assertEqual(Path(yap_forever.__file__).resolve().parent, PLUGIN / "yap_forever")
+
+    def test_the_private_details_scan_covers_the_plugin(self):
+        files = tracked_text_files()
+        for path in (SKILL / "SKILL.md", PLUGIN / "yap_forever" / "cli.py", ROOT / "README.md"):
+            self.assertIn(path, files)
 
     def test_no_private_details(self):
         deny_file = ROOT / ".private-denylist"

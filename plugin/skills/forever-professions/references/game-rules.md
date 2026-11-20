@@ -29,7 +29,7 @@ say so.
 - From what character level each Artisan and Master trip is comfortable, which trainers have a
   flight path for repeat visits, small tips, and which capital trainers are close together
   (Stormwind City: Tailoring, Alchemy and Enchanting; Blacksmithing and Engineering; Leatherworking
-  alone) were noted in play (2026-11-19) and live in `data_static/trainer_notes.toml`; the guide's
+  alone) were noted in play (2026-11-19) and live in `yap_forever/data_static/trainer_notes.toml`; the guide's
   trainer rows say them. They are tips only and never change the route.
 
 ## Bags, bank and mail
