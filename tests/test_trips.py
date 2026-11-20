@@ -158,5 +158,55 @@ class AlternativeCapTests(unittest.TestCase):
         self.assertEqual(replan.call_count, 10)  # 5 for gold once, 5 for value
 
 
+class OneGoTests(unittest.TestCase):
+    """trainer_trips = "one_go": the player levels at a remote rank trainer to the end of its stretch and learns the
+    recipes there as the skill reaches them (no visits back in between)."""
+
+    def test_one_go_has_no_return_trips(self):
+        from yap_forever.trips import trips
+        p, gd = setup(ENCH, [(1, 240), (2, 245)], ranks=[(225, 300)], learns=[(1, 240), (2, 251)])
+        p.final_skill = {ENCH: 300}
+        start = {ENCH: 225}
+        self.assertEqual([t.kind for t in trips(p, gd, start)], ["rank", "recipe", "recipe"])
+        self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["rank"])
+        (v,) = visits(p, gd, start, "one_go")
+        self.assertEqual((v.kind, v.skill, v.learn, v.as_reached), ("rank", 225, [], [(1, 240), (2, 251)]))
+
+    def test_one_go_stretch_ends_at_the_next_rank(self):
+        # Artisan at 140 (stretch to the Master training at 200), Master at 200 (stretch to the end, 260); an Expert
+        # recipe's capital stop inside the Artisan stretch is folded too, with its fallback
+        p, gd = setup(BS, [(1, 160), (2, 230), (3, 145)], ranks=[(140, 225), (200, 300)],
+                      learns=[(1, 170), (2, 240), (3, 146)])
+        p.final_skill = {BS: 260}
+        start = {BS: 130}
+        self.assertEqual([v.kind for v in visits(p, gd, start)], ["rank", "city", "recipe", "rank", "recipe"])
+        got = visits(p, gd, start, "one_go")
+        self.assertEqual([(v.skill, v.kind, v.as_reached, v.fallback) for v in got],
+                         [(140, "rank", [(3, 146), (1, 170)], {3: 150}), (200, "rank", [(2, 240)], {})])
+
+    def test_one_go_keeps_visits_outside_a_remote_stretch(self):
+        # no remote rank visit on the route (the start is past it): the trip back stays; the other profession's
+        # rank trip doesn't fold Blacksmithing's visits
+        from yap_forever.planner import Plan
+        gd = toy.gamedata([toy.recipe(1, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=100),
+                           toy.recipe(2, "Ench late", ENCH, {toy.IRON_BAR: 1}, req=250, fee=100)])
+        p = Plan(ranks=[(ENCH, 225, 300, 500)], learn_log=[(BS, 240, 1, "trainer"), (ENCH, 252, 2, "trainer")],
+                 final_skill={BS: 300, ENCH: 300})
+        got = visits(p, gd, {BS: 230, ENCH: 225}, "one_go")
+        self.assertEqual([(v.profession, v.skill, v.kind, v.as_reached) for v in got],
+                         [(ENCH, 225, "rank", [(2, 252)]), (BS, 240, "recipe", [])])
+
+    def test_one_go_alternatives_skip_folded_trips(self):
+        from unittest import mock
+        from types import SimpleNamespace
+        from yap_forever.trips import trip_alternatives
+        p, gd = setup(ENCH, [(1, 240), (2, 245)], ranks=[(225, 300)], learns=[(1, 240), (2, 251)])
+        p.final_skill = {ENCH: 300}
+        inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills={ENCH: 225}), craft_once={}, caps={ENCH: 300})
+        with mock.patch("yap_forever.plan.plan_route", return_value=p) as replan:
+            self.assertEqual(trip_alternatives(p, inputs, "gold", trainer_trips="one_go"), {})
+        self.assertEqual(replan.call_count, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

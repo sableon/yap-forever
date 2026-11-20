@@ -742,7 +742,8 @@ class VisitRowTests(unittest.TestCase):
         from yap_forever import trainers
         cls.data = trainers.load_trainer_data(Path(__file__).parent / "fixtures" / "gamedata")
 
-    def render(self, start, ranks, recipes, learns, faction="alliance", data=None, alts=None, final=300):
+    def render(self, start, ranks, recipes, learns, faction="alliance", data=None, alts=None, final=300,
+               trainer_trips="as_needed"):
         """A Blacksmithing guide from `start`: ranks (skill, cap); recipes (spell, required skill, fee in copper);
         learns (spell, skill the route learns it at)."""
         from yap_forever.planner import Plan, Step
@@ -757,7 +758,7 @@ class VisitRowTests(unittest.TestCase):
                  final_skill={BS: final})
         info = TrainerInfo(faction, data or self.data) if faction else None
         return render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: start}),
-                            caps={BS: final}, alts=alts, trainer_info=info)
+                            caps={BS: final}, alts=alts, trainer_info=info, trainer_trips=trainer_trips)
 
     def row(self, text, start, has):
         (row,) = [line for line in text.splitlines() if line.startswith(start) and has in line]
@@ -897,3 +898,21 @@ class VisitRowTests(unittest.TestCase):
         line = _trip_line(Trip(240, BS, "recipe", "Recipe 18", cap=300, spells=(18,)), {(18,): None})
         self.assertEqual(line, "- **Trip:** back to the Master Blacksmith in a set town (the planner doesn't say where "
                                "yet), at 240 for Recipe 18; there is no other way to reach the target without it.")
+
+    def test_one_go_lists_learn_skills(self):
+        args = (225, [(225, 300)], [(18, 240, 3000), (19, 245, 3000)], [(18, 240), (19, 251)])
+        text = self.render(*args, alts={(18,): 30000, (19,): None}, trainer_trips="one_go")
+        row = self.row(text, "- **Trip:**", "rank to 300")
+        self.assertIn(" Learn at the trainer as you reach them: Recipe 18 at 240, Recipe 19 at 251.", row)
+        self.assertNotIn("back to", text)
+        self.assertIn("- *At 240: Learn Recipe 18 (trainer 1s)*", text)  # the fee, once
+        self.assertIn("- *At 251: Learn Recipe 19 (trainer 1s)*", text)
+        self.assertIn("back to Brakka Ironfold", self.render(*args))  # as needed: the trips back
+
+    def test_one_go_learn_list_names_the_fallback(self):
+        text = self.render(130, [(140, 225)], [(21, 145, 500), (22, 160, 500)], [(21, 146), (22, 170)], final=225,
+                           trainer_trips="one_go")
+        row = self.row(text, "- **Trip:**", "rank to 225")
+        self.assertIn(" Learn at the trainer as you reach them: Recipe 21 at 146 (if the Artisan Blacksmith doesn't "
+                      "list it: any Expert Blacksmith), Recipe 22 at 170.", row)
+        self.assertNotIn("in a capital", text[text.index("## Route"):].replace(row, ""))

@@ -176,6 +176,53 @@ class BringListTests(unittest.TestCase):
         self.assertEqual(reach, 235)  # level at home after that, and come back at 235
         self.assertEqual({i for i, _n, _src in items}, {S})
 
+    def recipe_visit_plan(self):
+        import dataclasses
+        p, gd = rank_trip_plan()
+        gd.recipes[2] = dataclasses.replace(gd.recipes[2], required_skill=232)  # a trip back at 235 as needed
+        p.learn_log = [(BS, 235, 2, "trainer")]
+        return p, gd
+
+    def test_one_go_bring_list_covers_stretch(self):
+        from yap_forever.shopping import bring_list
+        p, gd = self.recipe_visit_plan()
+        for bags in (None, 16, 200):  # neither cut to the bags nor to 25 points: the bag warning says if it fits
+            reach, items = bring_list(p, gd, self.trip(), bag_slots=bags, start_skills={BS: 225},
+                                      trainer_trips="one_go")
+            self.assertEqual(reach, 300, bags)
+            self.assertEqual({i for i, _n, _src in items}, {S, T, toy.ROD}, bags)
+
+    def test_one_go_bring_list_takes_items_made_earlier(self):
+        # Enchanting levels at its trainer from 225 with an item Blacksmithing made before: bring it along
+        from yap_forever.shopping import bring_list, bring_text
+        from yap_forever.trips import Trip
+        gd = toy.gamedata([toy.recipe(40, "Make L", BS, {S: 3}, (L, 1)),
+                           toy.recipe(50, "Ench L", ENCH, {L: 1, T: 1})])
+        p = orange(Plan(steps=[Step(BS, 200, 210, 40, "Make L", 10, 0, 0, {S: 30}),
+                               Step(ENCH, 225, 235, 50, "Ench L", 10, 0, 0, {T: 10}, used_made={L: 10})],
+                        ranks=[(ENCH, 225, 300, 0)], crafted={L: 10}, bought={S: 30, T: 10},
+                        final_skill={BS: 210, ENCH: 235}))
+        trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
+        self.assertEqual(bring_list(p, gd, trip, None, trainer_trips="one_go"), (235, [(T, 10, "mail"), (L, 10, "yours")]))
+        self.assertEqual(bring_list(p, gd, trip, None), (235, [(T, 10, "mail")]))  # as needed: as before
+        self.assertIn(f"10 {gd.name(L)} (yours)", bring_text(p, gd, trip, None, trainer_trips="one_go"))
+
+    def test_as_needed_unchanged(self):
+        from yap_forever.guide import render_guide
+        from yap_forever.shopping import bring_list, bring_text
+        from yap_forever.trips import trips
+        p, gd = self.recipe_visit_plan()
+        start = {BS: 225}
+        for bags in (None, 16):
+            self.assertEqual(bring_list(p, gd, self.trip(), bags, start_skills=start, trainer_trips="as_needed"),
+                             bring_list(p, gd, self.trip(), bags, start_skills=start))
+            self.assertEqual(bring_text(p, gd, self.trip(), bags, start_skills=start, trainer_trips="as_needed"),
+                             bring_text(p, gd, self.trip(), bags, start_skills=start))
+        self.assertEqual(trips(p, gd, start, "as_needed"), trips(p, gd, start))
+        args = (p, gd, toy.market({S: [(10, 1000)]}), toy.stock(skills=start), {BS: 300})
+        self.assertEqual(render_guide(*args, trainer_trips="as_needed"), render_guide(*args))
+        self.assertIn("enough to craft to 235 at the trainer", render_guide(*args))
+
 
 if __name__ == "__main__":
     unittest.main()

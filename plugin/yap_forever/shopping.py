@@ -11,7 +11,7 @@ from yap_forever.disenchant import ESSENCE_PAIRS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.shared import allocate
-from yap_forever.trips import visits
+from yap_forever.trips import AS_NEEDED, ONE_GO, stretch_end, visits
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
 BRING_POINTS = 25  # without a bag count, bring enough for this many points (or to the stage end)
@@ -328,23 +328,32 @@ def mailed(plan, gd, stock) -> dict[int, list[tuple[str, int]]]:
     return out
 
 
-def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0,
-              reagents=None, start_skills: dict[int, int] | None = None) -> tuple[int, list[tuple[int, int, str]]]:
-    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
-    owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
-    the trip use the bank first, as on the shopping list. reagent_slots: a reagent bag holds mats
-    first (`reagents`: the set from reagent_items, built here when not given); CRAFT_ROOM stays on
-    normal slots. start_skills: profession -> the route's start skill; with it, the stretch also ends at the
-    profession's next visit for trainer recipes (trips.visits): the player levels at home and comes back."""
+YOURS = "yours"  # a bring-list source: your own crafts and disenchants from earlier on the route
+
+
+def _made_earlier(rows, gd) -> dict[int, int]:
+    """item -> how many of your own crafts and disenchants these rows use that they don't make themselves: made
+    earlier on the route, by either profession."""
+    used = _sum(r["earlier"] for r in rows)
+    made = _sum([r["here"] for r in rows] + [{out[0]: (r["n"] + r["more"]) * out[1]} for r in rows
+                                             if (out := gd.recipes[r["st"].spell_id].output)])
+    return {i: math.ceil(q - made.get(i, 0) - 1e-6) for i, q in sorted(used.items()) if q - made.get(i, 0) > 1e-6}
+
+
+def _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills, trainer_trips):
+    """(rows the trip's bring list covers, what the bank and the mail hold when it starts): see bring_list."""
     every = route_rows(plan, gd)
     at = next((k for k, r in enumerate(every)
                if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
     rows = [r for r in every[at:] if r["st"].profession == trip.profession]
-    if not rows:
-        return trip.skill, []
     left = {i: float(n) for i, n in owned.items()} if owned is not None else _bank(plan)
     mail = _mail(plan, whole_pool=owned is not None)
+    if not rows:
+        return rows, left, mail
     _split(every[:at], plan, gd, left, mail)  # the bank and the mail the rows before the trip use
+    if trainer_trips == ONE_GO:  # the whole stretch, whatever the bags hold (the bag warning says if it fits)
+        end = stretch_end(plan, trip.profession, trip.skill)
+        return [r for r in rows if r["st"].skill_to <= end] or rows[:1], left, mail
     later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
     if start_skills is not None:
         later += [v.skill for v in visits(plan, gd, start_skills)
@@ -358,19 +367,45 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
                            reagent_slots)[0]
     else:
         rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
+    return rows, left, mail
+
+
+def _bring_items(plan, gd, rows, left, mail, trainer_trips) -> list[tuple[int, int, str]]:
     split = _split(rows, plan, gd, left, mail)
-    return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
+    out = [(i, n, src) for (i, src), n in sorted(split.items())]
+    if trainer_trips == ONE_GO:  # nothing to fetch on the way back: your own crafts come along
+        out += [(i, n, YOURS) for i, n in _made_earlier(rows, gd).items()]
+    return out
+
+
+def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0,
+              reagents=None, start_skills: dict[int, int] | None = None,
+              trainer_trips: str = AS_NEEDED) -> tuple[int, list[tuple[int, int, str]]]:
+    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
+    owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
+    the trip use the bank first, as on the shopping list. reagent_slots: a reagent bag holds mats
+    first (`reagents`: the set from reagent_items, built here when not given); CRAFT_ROOM stays on
+    normal slots. start_skills: profession -> the route's start skill; with it, the stretch also ends at the
+    profession's next visit for trainer recipes (trips.visits): the player levels at home and comes back.
+    trainer_trips "one_go": the list covers the whole stretch (trips.stretch_end), however many bag slots it takes,
+    and your own crafts and disenchants from earlier on the route that it uses (source "yours")."""
+    rows, left, mail = _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills,
+                                   trainer_trips)
+    if not rows:
+        return trip.skill, []
+    return rows[-1]["st"].skill_to, _bring_items(plan, gd, rows, left, mail, trainer_trips)
 
 
 def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
-               services_known: bool = False, start_skills: dict[int, int] | None = None) -> str:
+               services_known: bool = False, start_skills: dict[int, int] | None = None,
+               trainer_trips: str = AS_NEEDED) -> str:
     """services_known: the row already says what is near the trainer (or that it is a capital).
-    start_skills: see bring_list."""
+    start_skills, trainer_trips: see bring_list."""
     reagents = reagent_items(gd) if reagent_slots else None
-    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills)
+    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills, trainer_trips)
     if not items:
         return ""
-    where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
+    where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor", YOURS: "yours"}
     parts = [f"{n} {gd.name(i)} ({where[src] if src in where else 'mail from ' + from_character(src)})"
              for i, n, src in items]
     total = _sum({i: n} for i, n, _src in items)

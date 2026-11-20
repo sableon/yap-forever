@@ -125,7 +125,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                   profile_names=(), study_hint_gold_per_point: float = 100,
                   group=None, target=None) -> tuple[str, dict[str, Path]]:
     """Plan both routes from the player's prices and stock; return (comparison, written files).
-    character: the profile.Character, for its talents; reading: how Working Overtime applies.
+    character: the profile.Character, for its talents and trainer_trips; reading: how Working Overtime applies.
     faction ("alliance" or "horde"): name rank trainers for it in the guide; "" names none. Horde gets no
     Merchant's Favor recipes or crate turn-ins (see favor.no_favor).
     study_hint_gold_per_point: a route row of the lowest profession that costs this much gold a point
@@ -178,13 +178,14 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     files: dict[str, Path] = {}
     who = f"{report_name(character.name, profile_names)}-" if character else ""
     alt_cache: dict = {}
+    trainer_trips = character.trainer_trips if character else "as_needed"
     alts_of: dict[str, dict] = {}
     for m, route in routes.items():
         caps = per_mode[m].caps
         if m == "value" and route is routes.get("gold") and caps == per_mode["gold"].caps:
             alts = alts_of["gold"]  # the same route: its trips are skipped at the same cost
         else:
-            alts = trip_alternatives(route, per_mode[m], m, alt_cache)
+            alts = trip_alternatives(route, per_mode[m], m, alt_cache, trainer_trips=trainer_trips)
         alts_of[m] = alts
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
@@ -202,6 +203,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                        saving_line=line, mode=m,
                                        study_hint_gold_per_point=study_hint_gold_per_point,
                                        budget_lines=said, order=inputs.order, nothing_in_budget=empty,
+                                       trainer_trips=trainer_trips,
                                        extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else [])]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
