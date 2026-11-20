@@ -16,7 +16,7 @@
 | Manual tests | Suggested after each slice, with test cases and data prepared as part of the slice, including the owner's in-game checks | default | |
 | Commit identity | Repo-local `user.email` is the owner's GitHub noreply address (since 2026-11-18; earlier history keeps the personal address, owner's choice). GitHub's "keep email private" and "block pushes that expose my email" are the owner's to turn on. A test fails on a non-noreply commit after the baseline | asked | |
 | Agent merge permission | Agents may merge (row above); the owner confirms in chat until a matching Claude Code permission rule exists | derived | a permission rule is added |
-| Commit conventions | Conventional prefixes (`feat:`, `fix:`, `chore:`), enforced by a hook or message template, not by choosing a model | default | |
+| Commit conventions | Conventional prefixes (`feat:`, `fix:`, `chore:`), by convention (no hook) | default; corrected 2026-11-20 | |
 | Progress tracking | Ledger `docs/progress.md`, one line per finished task | default | another tracker is adopted |
 | Lessons | A lessons pass at the end of each phase with `/recording-lessons-learned`, kept outside this repo, saved on the owner's OK | derived | |
 | Diagrams | Text | default | team work or production |

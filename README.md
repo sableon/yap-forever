@@ -1,7 +1,8 @@
 # yap-forever
 
-> **Work in progress.** Phase 1 of 5: the planner works for one or two crafting professions on
-> the Alliance side; setup for other regions and factions is in, but only EU has been tried.
+> **Work in progress.** Phase 2 of 5: the planner works for any one or two crafting professions,
+> with trainer stops, legacy talents, bag space and price fallbacks. Setup covers every region
+> and both factions, but only EU has been tried.
 
 **Yet another planner** for WoW: Forever. A Claude Code plugin that finds the cheapest way to
 level your professions from **your own auction house prices**, and writes the route the way you

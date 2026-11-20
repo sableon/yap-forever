@@ -1,4 +1,8 @@
-"""Game data for Blacksmithing and Enchanting: recipes, items, tools, quest items.
+"""Game data from pinned sources (skillup-forever, QuestieDB, wago.tools), cached per pinned version.
+
+Loads the recipes and starter recipes of the professions asked for (any of the six crafts), with
+items, tools, quest items, trainer ranks and fees, and vendor prices. The trainer NPC, object and
+zone files are downloaded here too; `trainers.py` reads them.
 
 Usage: python3 -m yap_forever.gamedata [--fetch] [--checks]
 """
