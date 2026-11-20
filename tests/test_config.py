@@ -89,6 +89,16 @@ class StockTests(unittest.TestCase):
             s = config.load_stock(write(d, "stock.toml", 'level = 47.0\n[items]\n2840 = "12"\n'))
         self.assertEqual((s.level, s.items), (47, {2840: 12}))
 
+    def test_odd_numbers_name_the_key(self):
+        with tempfile.TemporaryDirectory() as d:
+            for text, key in (("cash_gold = inf\n", "cash_gold"), ("cash_gold = nan\n", "cash_gold"),
+                              ('level = "--5"\n', "level"), ('level = "5-"\n', "level")):
+                path = write(d, "stock.toml", text)
+                with self.subTest(text=text), self.assertRaises(ValueError) as cm:
+                    config.load_stock(path)
+                self.assertIn(key, str(cm.exception))
+                self.assertIn(str(path), str(cm.exception))
+
     def test_a_toml_syntax_error_names_the_file(self):
         with tempfile.TemporaryDirectory() as d:
             path = write(d, "stock.toml", "level = \n")

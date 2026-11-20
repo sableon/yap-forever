@@ -120,7 +120,8 @@ class PublishableTests(unittest.TestCase):
             for m in link.finditer(page.read_text(encoding="utf-8")):
                 target = (SKILL / "references" / m.group(1)).read_text(encoding="utf-8")
                 for name in re.findall(r'"([^"]+)"', m.group(2)):
-                    self.assertIn(name, target, f"{page.name} -> {m.group(1)}")
+                    self.assertRegex(target, rf"(?m)^(?:## |\*\*){re.escape(name)}",
+                                     f"{page.name} -> {m.group(1)}: no heading {name!r}")
                     checked += 1
                 for step in re.findall(r"step (\d)", m.group(2)):
                     self.assertIn(f"\n## {step}. ", target, f"{page.name} -> {m.group(1)}")
