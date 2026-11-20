@@ -72,10 +72,13 @@ Write it for that.
   the rank row as `Learn at the trainer as you reach them: <recipe> at <skill>, ...` (in skill order,
   `<skill>` where the route learns it; a recipe below the trainer's rank adds `(if <trainer> doesn't
   list it: <who>)`), and each keeps its `*At <skill>: Learn <recipe> (trainer <fee>)*` row. The bring list
-  covers the whole stretch, whatever the bags hold, and adds what the stretch uses of your own crafts
-  and disenchants from earlier on the route (either profession) as `<count> <item> (yours)`. The other
-  profession's rows stay where they are. A recipe trip with no remote rank training before it on the
-  route stays a trip.
+  covers the whole stretch, whatever the bags hold. What the stretch uses of your own crafts and
+  disenchants made before the trip (in route order, either profession) is listed as `<count> <item>
+  (yours)`. What your other profession makes later on the route is listed apart, after the bring list:
+  `Made later by your <Profession> on this route: <count> <item>, ...: craft those rows before you go, or
+  buy them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
+  of the items has no AH price. These items count in the bag slots too. The other profession's rows stay
+  where they are. A recipe trip with no remote rank training before it on the route stays a trip.
 - With bag slots in the stock (`bag_slots`, and `reagent_slots` for reagents), a trip's bring list that
   doesn't fit them (10 slots kept free for crafting, as for mailbox trips) ends with `This needs <N>
   free slots and you have <M>: get bigger bags, bank what this stretch doesn't need, or set a lower goal

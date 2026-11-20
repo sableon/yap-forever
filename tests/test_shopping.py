@@ -207,6 +207,73 @@ class BringListTests(unittest.TestCase):
         self.assertEqual(bring_list(p, gd, trip, None), (235, [(T, 10, "mail")]))  # as needed: as before
         self.assertIn(f"10 {gd.name(L)} (yours)", bring_text(p, gd, trip, None, trainer_trips="one_go"))
 
+    def test_one_go_lists_what_the_other_profession_makes_later(self):
+        # Enchanting levels from 225 at its trainer; Blacksmithing makes L after that in route order, and Enchanting
+        # uses it at 235: not yours yet, listed apart with what it costs on the AH
+        from yap_forever.shopping import bring_list, bring_text
+        from yap_forever.trips import Trip
+        gd = toy.gamedata([toy.recipe(40, "Make L", BS, {S: 3}, (L, 1)), toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(50, "Ench L", ENCH, {L: 1, T: 1})])
+        p = orange(Plan(steps=[Step(ENCH, 225, 235, 51, "Ench T", 10, 0, 0, {T: 10}),
+                               Step(BS, 200, 210, 40, "Make L", 10, 0, 0, {S: 30}),
+                               Step(ENCH, 235, 245, 50, "Ench L", 10, 0, 0, {T: 10}, used_made={L: 10})],
+                        ranks=[(ENCH, 225, 300, 0)], crafted={L: 10}, bought={S: 30, T: 20},
+                        final_skill={BS: 210, ENCH: 245}))
+        for i in (T, L):
+            gd.items[i].stack = 20
+        trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
+        self.assertEqual(bring_list(p, gd, trip, None, trainer_trips="one_go"),
+                         (245, [(T, 20, "mail"), (L, 10, f"later:{BS}")]))
+        priced = bring_text(p, gd, trip, None, trainer_trips="one_go", market=toy.market({L: [(250, 100)]}))
+        self.assertIn("so buy and collect before you go. Made later by your Blacksmithing on this route: 10 Copper Rod: "
+                      "craft those rows before you go, or buy them on the AH (about 25s).", priced)
+        self.assertNotIn("(yours)", priced)
+        self.assertIn("(2 bag slots)", priced)  # 20 Iron Bar and 10 rods, stacks of 20
+        unpriced = bring_text(p, gd, trip, None, trainer_trips="one_go", market=toy.market({}))
+        self.assertTrue(unpriced.endswith("Made later by your Blacksmithing on this route: 10 Copper Rod: craft those "
+                                          "rows before you go, or buy them on the AH."), unpriced)
+        from yap_forever.guide import render_guide
+        text = render_guide(p, gd, toy.market({L: [(250, 100)]}), toy.stock(skills={ENCH: 225, BS: 200}),
+                            {ENCH: 245, BS: 210}, trainer_trips="one_go")
+        self.assertIn("or buy them on the AH (about 25s).", text)  # the guide passes today's prices
+
+    def test_one_go_extra_crafts_for_the_other_profession_are_not_made_here(self):
+        # Blacksmithing made 2 L before the trip; at the trainer Enchanting uses them (225-230), then makes L at
+        # 230-235, its extra crafts for Blacksmithing's later row: the 2 L are still yours to bring
+        from yap_forever.shopping import bring_list, route_rows
+        from yap_forever.trips import Trip
+        gd = toy.gamedata([toy.recipe(40, "Make 2 L", BS, {S: 3}, (L, 2)), toy.recipe(53, "BS L", BS, {L: 1}),
+                           toy.recipe(50, "Ench L", ENCH, {L: 1, T: 1}), toy.recipe(52, "Ench make L", ENCH, {T: 1}, (L, 1))])
+        p = orange(Plan(steps=[Step(BS, 200, 201, 40, "Make 2 L", 1, 0, 0, {S: 3}),
+                               Step(ENCH, 225, 230, 50, "Ench L", 2, 0, 0, {T: 2}, used_made={L: 2}),
+                               Step(ENCH, 230, 235, 52, "Ench make L", 1, 0, 0, {T: 1}),
+                               Step(BS, 201, 204, 53, "BS L", 3, 0, 0, used_made={L: 3})],
+                        ranks=[(ENCH, 225, 300, 0)], crafted={L: 3}, bought={S: 3, T: 3},
+                        final_skill={BS: 204, ENCH: 235}))
+        self.assertEqual([r["more"] for r in route_rows(p, gd)], [0, 0, 2, 0])  # the extra crafts feed BS
+        trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
+        self.assertIn((L, 2, "yours"), bring_list(p, gd, trip, None, trainer_trips="one_go")[1])
+
+    def test_one_go_lists_disenchants_of_greens_made_later(self):
+        # the dust Enchanting uses at 230-240 comes from belts Blacksmithing makes after the trip, disenchanted at 231
+        from yap_forever.disenchant import de_yield
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import Trip
+        belt = toy.BELT
+        gd = toy.gamedata([toy.recipe(41, "Make belt", BS, {S: 2}, (belt, 1)), toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(54, "Ench dust", ENCH, {toy.DUST: 1})])
+        dust = de_yield(gd.items[belt])[toy.DUST] * 20
+        use = int(dust)
+        p = orange(Plan(steps=[Step(ENCH, 225, 230, 51, "Ench T", 5, 0, 0, {T: 5}),
+                               Step(BS, 210, 230, 41, "Make belt", 20, 0, 0, {S: 40}),
+                               Step(ENCH, 230, 240, 54, "Ench dust", use, 0, 0, used_made={toy.DUST: use})],
+                        ranks=[(ENCH, 225, 300, 0)], bought={S: 40, T: 5}, final_skill={BS: 230, ENCH: 240},
+                        events=[f"Enchanting 231: disenchant 20 {gd.name(belt)}"]))
+        trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
+        self.assertIn((toy.DUST, use, f"later:{BS}"), bring_list(p, gd, trip, None, trainer_trips="one_go")[1])
+        p.events = [f"Enchanting 225: disenchant 20 {gd.name(belt)} from your bank"]  # disenchanted before you go
+        self.assertIn((toy.DUST, use, "yours"), bring_list(p, gd, trip, None, trainer_trips="one_go")[1])
+
     def test_as_needed_unchanged(self):
         # the outputs main (e94cb24) gives for this fixture, before trainer_trips existed
         from yap_forever.guide import render_guide

@@ -149,7 +149,7 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     by_mail = mailed(plan, gd, stock) if plan.used_mail else {}  # the shopping list's counts
     _keep(out, plan, gd, market, by_mail, stock)
     hint = _StudyHint(lowest_profession(caps, stock), mode, study_hint_gold_per_point, character)
-    _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint, trainer_trips)
+    _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint, trainer_trips, market)
     if nothing_in_budget:
         out += [NOTHING_IN_BUDGET, ""]
     from yap_forever.shopping import render_shopping  # shopping imports this module
@@ -377,10 +377,10 @@ def _reached_text(v, gd, trainer_info) -> str:
 
 
 def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_slots=0,
-               trainer_info=None, level=None, start_skills=None, trainer_trips="as_needed") -> str:
+               trainer_info=None, level=None, start_skills=None, trainer_trips="as_needed", market=None) -> str:
     """start_skills: profession -> the route's start skill, so a rank trip's bring list ends at the next trip
     back for recipes (shopping.bring_list). trainer_trips: "one_go" lists the recipes to learn there as the skill
-    reaches them, and brings everything to the end of the stretch."""
+    reaches them, and brings everything to the end of the stretch. market: today's prices (shopping.bring_text)."""
     known = t.visit is not None and gd is not None
     learn = " ".join(x for x in (_visit_text(t.visit, gd, trainer_info), _reached_text(t.visit, gd, trainer_info))
                      if x) if known else ""
@@ -390,7 +390,7 @@ def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_
         where = "the trainer is in a set town (the planner doesn't say where yet)." if stop is None else stop.text
         return (f"- **Trip:** {t.what}: {where}" + (f" {learn}" if learn else "")
                 + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots, bool(stop and stop.services_known),
-                              start_skills, trainer_trips) if plan is not None else ""))
+                              start_skills, trainer_trips, market) if plan is not None else ""))
     if t.kind == "recipe":
         names = _recipes_text(t.visit.learn, t.visit, gd, trainer_info, True) if known else t.what
         missing = _visit_text(t.visit, gd, trainer_info, learn=False) if known else ""
@@ -428,7 +428,8 @@ class _StudyHint:
         return text
 
 
-def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, trainer_trips="as_needed") -> None:
+def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, trainer_trips="as_needed",
+           market=None) -> None:
     quest_limit = stock.quest_item_sales
     used_by: dict[int, list[str]] = {}
     for s in plan.steps:
@@ -500,7 +501,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
         if t.profession in caps:
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append(
                 (t.skill, 0.5, _trip_line(t, alts, plan, gd, stock.bag_slots, stock.items, stock.reagent_slots,
-                                          trainer_info, stock.level, stock.skills, trainer_trips)))
+                                          trainer_info, stock.level, stock.skills, trainer_trips, market)))
     planned, said, named = tuple(caps), set(), set()
     # in the order the guide shows them, so a city's "different parts" sentence is on its first row
     for v in sorted((v for v in visits(plan, gd, stock.skills, trainer_trips) if not v.remote and v.profession in caps),
