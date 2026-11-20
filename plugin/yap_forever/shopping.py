@@ -129,14 +129,21 @@ def _sum(dicts) -> dict:
     return out
 
 
-def merged_steps(plan, gd, split: tuple[int, tuple[int, ...]] | None = None) -> list[tuple]:
+def _counted(st, gd) -> bool:
+    """A step that makes a route row (not a disenchant, a known recipe, a skill-up or a craft)."""
+    return st.spell_id != DISENCHANT and st.spell_id in gd.recipes and (st.skill_from < st.skill_to or st.crafts > 0)
+
+
+def merged_steps(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None = None) -> list[tuple]:
     """(step, parts): runs of one recipe over consecutive skill points as one step, so the buffer is
-    rounded up once per run, not once per skill point. split: (profession, skills): no run of that profession
-    crosses those skills (where a trip's bring list starts and ends)."""
+    rounded up once per run, not once per skill point. split: (profession, skills, position): no run of that
+    profession crosses those skills, and no run of any profession crosses that index of plan.steps (where a trip's
+    bring list starts and ends, and where the trip comes in route order)."""
     out: list[tuple] = []
     latest: dict[int, int] = {}  # profession -> index of its latest entry (professions interleave)
-    for st in plan.steps:
-        if st.spell_id == DISENCHANT or st.spell_id not in gd.recipes or not (st.skill_from < st.skill_to or st.crafts > 0):
+    begun: list[int] = []  # index in plan.steps of each entry's first step
+    for j, st in enumerate(plan.steps):
+        if not _counted(st, gd):
             continue
         at = latest.get(st.profession)
         last = out[at] if at is not None else None
@@ -144,7 +151,8 @@ def merged_steps(plan, gd, split: tuple[int, tuple[int, ...]] | None = None) -> 
                 and last[0].spell_id == st.spell_id and last[0].profession == st.profession
                 and last[0].skill_to == st.skill_from
                 and not (split and split[0] == st.profession
-                         and any(last[0].skill_from < s <= st.skill_from for s in split[1]))):
+                         and any(last[0].skill_from < s <= st.skill_from for s in split[1]))
+                and not (split and split[2] is not None and begun[at] < split[2] <= j)):
             parts = last[1] + [st]
             out[at] = (dataclasses.replace(
                 last[0], skill_to=st.skill_to, crafts=sum(p.crafts for p in parts),
@@ -157,10 +165,11 @@ def merged_steps(plan, gd, split: tuple[int, tuple[int, ...]] | None = None) -> 
         else:
             latest[st.profession] = len(out)
             out.append((st, [st]))
+            begun.append(j)
     return out
 
 
-def route_rows(plan, gd, split: tuple[int, tuple[int, ...]] | None = None) -> list[dict]:
+def route_rows(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None = None) -> list[dict]:
     """Rows in whole crafts: n crafts (buffer included) take n times what one craft takes, so no count
     leaves a remainder too small for another craft. Your own crafts from earlier rows are used first;
     intermediates still missing are crafted in whole batches at the first row that needs or makes them.
@@ -347,13 +356,17 @@ def made_later_by(src: str) -> int | None:
 
 def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int, float]]]:
     """row index -> (origin, material, count) of the disenchants done just before that row (see _own_sources): an
-    event at Enchanting skill s comes before the first Enchanting row that reaches past s."""
+    event at Enchanting skill s comes before the first Enchanting row that reaches past s. Its greens are the oldest
+    ones made by then (before the trip, the trip's profession or the other one); greens no row made (from the bank
+    or the mail), and every green of an Enchanting trip disenchanted at or below the trip's skill, count as before
+    the trip."""
     names = {it.name: i for i, it in gd.items.items()}
-    makers = {}  # green -> (index, profession) of the last row that makes it
+    made: dict[int, list[list]] = {}  # green -> [[row index, origin, count left]] in route order
     for k, r in enumerate(every):
         out = gd.recipes[r["st"].spell_id].output
         if out:
-            makers[out[0]] = (k, r["st"].profession)
+            origin = "pre" if k < at else "own" if r["st"].profession == trip.profession else r["st"].profession
+            made.setdefault(out[0], []).append([k, origin, (r["n"] + r["more"]) * out[1]])
     out: dict[int, list] = {}
     for e in plan.events:
         m = _DE_EVENT.match(e)
@@ -367,12 +380,20 @@ def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int
         if green is None:
             continue
         k = next((k for k, r in enumerate(every) if r["st"].profession == ENCH and r["st"].skill_to > s), len(every))
-        maker = makers.get(green)
-        if k < at or (trip.profession == ENCH and s <= trip.skill) or maker is None or maker[0] < at:
-            origin = "pre"
-        else:
-            origin = "own" if maker[1] == trip.profession else maker[1]
-        out.setdefault(k, []).extend((origin, mat, n * per) for mat, per in de_yield(gd.items[green]).items())
+        parts: list[tuple[str | int, float]] = []
+        if not (trip.profession == ENCH and s <= trip.skill):
+            for lot in made.get(green, ()):
+                if lot[0] >= k or n <= 1e-9:
+                    break
+                used = min(n, lot[2])
+                if used > 1e-9:
+                    lot[2] -= used
+                    n -= used
+                    parts.append((lot[1], used))
+        if n > 1e-9:
+            parts.append(("pre", n))
+        for origin, count in parts:
+            out.setdefault(k, []).extend((origin, mat, count * per) for mat, per in de_yield(gd.items[green]).items())
     return out
 
 
@@ -411,8 +432,9 @@ def _own_sources(plan, gd, every, at, rows, trip) -> tuple[dict[int, int], dict[
                     q -= n
                     if id(r) in mine:
                         taken.setdefault(o, {})[i] = taken.setdefault(o, {}).get(i, 0) + n
-            if id(r) in mine and q > 1e-6:  # more than the walk found (the buffer): from where it last came
-                o = last.get(i, "pre")
+            if id(r) in mine and q > 1e-6:  # more than the walk found (the buffer): from where it last came, or,
+                o = last.get(i, "pre")  # when that is this stretch's own crafts, yours from before the trip
+                o = "pre" if o == "own" else o
                 taken.setdefault(o, {})[i] = taken.setdefault(o, {}).get(i, 0) + q
         out = gd.recipes[r["st"].spell_id].output
         if out:
@@ -426,9 +448,12 @@ def _own_sources(plan, gd, every, at, rows, trip) -> tuple[dict[int, int], dict[
 def _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills, trainer_trips):
     """(rows the trip's bring list covers, what the bank and the mail hold when it starts): see bring_list. With
     one go, a run of one recipe that crosses the trip's skill or the stretch's end is split there, so the part
-    inside the stretch is brought."""
+    inside the stretch is brought, and no profession's run crosses the trip's place in route order, so what is
+    made before the trip and after it are rows of their own."""
     end = stretch_end(plan, trip.profession, trip.skill)
-    every = route_rows(plan, gd, (trip.profession, (trip.skill, end)) if trainer_trips == ONE_GO else None)
+    where = next((j for j, st in enumerate(plan.steps)  # the trip in route order: no run crosses it either
+                  if st.profession == trip.profession and st.skill_from >= trip.skill and _counted(st, gd)), None)
+    every = route_rows(plan, gd, (trip.profession, (trip.skill, end), where) if trainer_trips == ONE_GO else None)
     at = next((k for k, r in enumerate(every)
                if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
     rows = [r for r in every[at:] if r["st"].profession == trip.profession]
@@ -546,7 +571,7 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
         lower = _lower_goal(plan, gd, rows, *start, trainer_trips, ctx, trip, bag_slots, reagents, reagent_slots)
         warn = (f" This needs {split[0] + CRAFT_ROOM} free slots and you have {bag_slots}: get bigger bags, bank what "
                 f"this stretch doesn't need, or set a lower goal{f' (for example {lower})' if lower else ''} so it fits.")
-    lead = f" Bring: {', '.join(parts)}: enough" if parts else " Enough"
+    lead = f" Bring: {', '.join(parts)}: enough" if parts else " Bring enough"
     return (f"{lead} to craft to {reach} at the trainer "
             f"({slots_text(split)}{'; ' + note if note else ''}); "
             f"{town}buy and collect before you go.{_made_later_text(gd, items, market)}{warn}")
