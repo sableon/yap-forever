@@ -207,6 +207,16 @@ class OneGoTests(unittest.TestCase):
             self.assertEqual(trip_alternatives(p, inputs, "gold", trainer_trips="one_go"), {})
         self.assertEqual(replan.call_count, 0)
 
+    def test_one_go_lists_the_skill_the_route_learns_at(self):
+        # as needed, the 251 trip also learns recipe 3 ahead (required 250, learned at 270): one go says "at 270",
+        # where the route learns it and its "Learn" row stays
+        p, gd = setup(ENCH, [(1, 240), (2, 245), (3, 250)], ranks=[(225, 300)], learns=[(1, 240), (2, 251), (3, 270)])
+        p.final_skill = {ENCH: 300}
+        start = {ENCH: 225}
+        self.assertEqual([(v.skill, v.learn) for v in visits(p, gd, start)], [(225, []), (240, [1]), (251, [2, 3])])
+        (v,) = visits(p, gd, start, "one_go")
+        self.assertEqual(v.as_reached, [(1, 240), (2, 251), (3, 270)])
+
 
 if __name__ == "__main__":
     unittest.main()

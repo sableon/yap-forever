@@ -36,7 +36,7 @@ class Visit:
     start skill (the stock doesn't say which are known), listed at the first visit that teaches them.
     fallback: spell -> the cap of the lowest rank that teaches it, for recipes below this trainer's rank.
     as_reached: (spell, skill) for a remote rank visit with trainer_trips "one_go": the recipes of the visits it
-    replaces in its stretch, learned at this trainer when the route reaches that skill."""
+    replaces in its stretch, learned at this trainer at the skill the route learns them (plan.learn_log)."""
     profession: int
     skill: int
     rank_cap: int
@@ -57,7 +57,9 @@ def stretch_end(plan, profession: int, skill: int) -> int:
 
 def _one_go(out: list[Visit], plan, gd) -> list[Visit]:
     """The visits with every visit back for recipes (a trip, or a capital stop) inside a remote rank visit's stretch
-    folded into that rank visit: its recipes go to `as_reached`, and those it was to check go to `if_missing`."""
+    folded into that rank visit: its recipes go to `as_reached` with the skill the route learns them at (learn_log),
+    and those it was to check go to `if_missing`."""
+    learned_at = {spell: s for _prof, s, spell, how in plan.learn_log if how == "trainer"}
     kept = []
     homes: dict[int, Visit] = {}  # profession -> its latest remote rank visit
     for v in out:
@@ -74,7 +76,7 @@ def _one_go(out: list[Visit], plan, gd) -> list[Visit]:
                 rank = recipe_rank_cap(gd.recipes[spell].required_skill)
                 if rank < home.rank_cap:
                     home.fallback[spell] = rank
-            home.as_reached += [(spell, v.skill) for spell in v.learn]
+            home.as_reached += [(spell, learned_at.get(spell, v.skill)) for spell in v.learn]
             home.if_missing += v.if_missing
             continue
         kept.append(v)

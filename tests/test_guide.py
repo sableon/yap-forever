@@ -922,3 +922,10 @@ class VisitRowTests(unittest.TestCase):
         row = self.row(text, "- **Trip:**", "rank to 225")
         self.assertIn("(the planner doesn't say where yet). Learn at the trainer as you reach them: Recipe 21 at 146 "
                       "(if the Artisan Blacksmith doesn't list it: any Expert Blacksmith), Recipe 22 at 170.", row)
+
+    def test_one_go_skill_agrees_with_the_learn_row(self):
+        text = self.render(225, [(225, 300)], [(18, 240, 1000), (19, 245, 1000), (20, 250, 1000)],
+                           [(18, 240), (19, 251), (20, 270)], trainer_trips="one_go")
+        row = self.row(text, "- **Trip:**", "rank to 300")
+        self.assertIn("Learn at the trainer as you reach them: Recipe 18 at 240, Recipe 19 at 251, Recipe 20 at 270.", row)
+        self.assertIn("- *At 270: Learn Recipe 20 (trainer 1s)*", text)
