@@ -208,32 +208,9 @@ class _Route:
             if done is None:
                 continue
             step_cost, parts, made_something = done
-            r, crafts = best[1], best[2]
-            mats, from_stock, used_made, extra, bought, from_mail, tools_mailed = parts
-
-            last = p.steps[-1] if p.steps else None
-            if last and last.profession == prof and last.spell_id == r.spell_id and last.skill_to == s:
-                last.skill_to = s + 1
-                last.crafts += crafts
-                last.buffered += crafts * buffer_factor(crafts)
-                last.cash += step_cost.cash
-                last.economic += step_cost.economic
-                for mine, new in ((last.materials, mats), (last.from_stock, from_stock), (last.used_made, used_made),
-                                  (last.extra, extra), (last.tools_bought, bought),
-                                  (last.from_mail, from_mail), (last.tools_mailed, tools_mailed)):
-                    for i, q in new.items():
-                        mine[i] = mine.get(i, 0) + q
-            else:
-                p.steps.append(Step(prof, s, s + 1, r.spell_id, r.name, crafts, step_cost.cash, step_cost.economic,
-                                    mats, from_stock, used_made, crafts * buffer_factor(crafts), extra, bought,
-                                    from_mail, tools_mailed))
+            self._merge_step(prof, s, best[1], best[2], step_cost, parts)
             skill[prof] = s + 1
-            made_something = self._release_held() or made_something
-            for other in profs:
-                if made_something and other != prof and other in soft_stalls:
-                    soft_stalls.discard(other)
-                    p.stalled.pop(other, None)
-                    p.stall_reasons.pop(other, None)
+            self._after_step(prof, made_something)
 
         for prof, spell in craft_once.items():
             self._craft_once_step(prof, spell)
@@ -659,6 +636,37 @@ class _Route:
             made_something = True
         self.spent += step_cost
         return step_cost, (mats, from_stock, used_made, extra, bought, from_mail, tools_mailed), made_something
+
+    def _merge_step(self, prof, s, r, crafts, step_cost, parts):
+        """The skill point from s to s + 1 joins the last step when that crafts the same recipe up to s,
+        or starts a new step."""
+        mats, from_stock, used_made, extra, bought, from_mail, tools_mailed = parts
+        last = self.p.steps[-1] if self.p.steps else None
+        if last and last.profession == prof and last.spell_id == r.spell_id and last.skill_to == s:
+            last.skill_to = s + 1
+            last.crafts += crafts
+            last.buffered += crafts * buffer_factor(crafts)
+            last.cash += step_cost.cash
+            last.economic += step_cost.economic
+            for mine, new in ((last.materials, mats), (last.from_stock, from_stock), (last.used_made, used_made),
+                              (last.extra, extra), (last.tools_bought, bought),
+                              (last.from_mail, from_mail), (last.tools_mailed, tools_mailed)):
+                for i, q in new.items():
+                    mine[i] = mine.get(i, 0) + q
+        else:
+            self.p.steps.append(Step(prof, s, s + 1, r.spell_id, r.name, crafts, step_cost.cash, step_cost.economic,
+                                     mats, from_stock, used_made, crafts * buffer_factor(crafts), extra, bought,
+                                     from_mail, tools_mailed))
+
+    def _after_step(self, prof, made_something):
+        """Greens held for disenchanting are disenchanted once Enchanting can; new materials wake the
+        professions stalled for lack of them."""
+        made_something = self._release_held() or made_something
+        for other in self.profs:
+            if made_something and other != prof and other in self.soft_stalls:
+                self.soft_stalls.discard(other)
+                self.p.stalled.pop(other, None)
+                self.p.stall_reasons.pop(other, None)
 
 
 def _snapshot(pools) -> dict:
