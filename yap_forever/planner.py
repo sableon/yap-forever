@@ -186,75 +186,6 @@ class _Route:
             if skill[x] >= caps[x]:
                 p.events.append(f"{PROFESSIONS[x]} already at {skill[x]}")
 
-        def get_tools(tools, s, name):
-            """Craft or buy the tools a step needs; their materials are taken with the step's.
-            Returns (cost, the crafted tools' materials, the tools bought, the tools mailed by your other
-            characters)."""
-            cost, extra, bought, mailed = Cost(), {}, {}, {}
-            for t in tools:
-                item = t["item"]
-                if t["how"] == "mail":
-                    if item not in pools.tools and pools.mail.get(item, 0) >= 1:
-                        who = ", ".join(name for name, _n in allocate(getattr(stock, "shared", {}), item, 1))
-                        pools.mail[item] -= 1  # it is yours now: held for the rest of the route
-                        mailed[item] = mailed.get(item, 0) + 1
-                        p.events.append(f"{name} {s}: Use tool {gd.name(item)} (mailed by {who})")
-                elif t["how"] == "craft":
-                    tr = t["recipe"]
-                    if tr.spell_id not in learned:
-                        cost += self._learn_now(tr, self._learn_option(tr), s, PROFESSIONS[tr.skill_line])
-                    p.events.append(f"{name} {s}: Craft tool {gd.name(item)}")
-                    for i, q in t["requests"]:
-                        extra[i] = extra.get(i, 0) + q
-                else:
-                    pool = pools.bought if t["how"] == "ah" else pools.vendor
-                    pool[item] = pool.get(item, 0) + 1
-                    cost += t["cost"]
-                    bought[item] = bought.get(item, 0) + 1
-                    p.events.append(f"{name} {s}: Buy tool {gd.name(item)} ({t['how']} {money(t['cost'].cash)})")
-                pools.tools.add(item)
-            return cost, extra, bought, mailed
-
-        def craft_once_step(prof, spell):
-            """The goal recipe, learned and crafted once at the end of its profession's route."""
-            name, s, r = PROFESSIONS[prof], skill[prof], recipes.get(spell)
-            if r is None or s < r.required_skill:
-                p.stall_reasons.setdefault(prof, f"{name}: did not reach {r.name if r else spell}")
-                return
-            lo = self._learn_option(r)
-            if isinstance(lo, str):
-                p.stall_reasons[prof] = f"{name}: can't learn {r.name}: {lo}"
-                return
-            tools = []
-            for cat in r.tools:
-                if self._tool_held(cat):
-                    continue
-                t = self._tool_option(cat)
-                if t is None:
-                    p.stall_reasons[prof] = f"{name}: {r.name} needs a tool that can't be bought or made"
-                    return
-                tools.append(t)
-            requests = [rq for t in tools for rq in t["requests"]] + lo[3] + list(r.reagents.items())
-            if valuer.take_many(requests, pools, skill, commit=False, learned=learned) is None:
-                p.stall_reasons[prof] = f"{name}: materials for {r.name} not available"
-                return
-            step_cost = Cost()
-            if spell not in learned:
-                step_cost += self._learn_now(r, lo, s, name)
-            tool_cost, extra, bought, tools_mailed = get_tools(tools, s, name)
-            step_cost += tool_cost
-            for i, q in lo[3]:
-                extra[i] = extra.get(i, 0) + q
-            before = _snapshot(pools)
-            step_cost += valuer.take_many(requests, pools, skill, commit=True, learned=learned)
-            mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(pools))
-            if r.output:
-                pools.made[r.output[0]] = pools.made.get(r.output[0], 0) + r.output[1]
-            self.spent += step_cost
-            p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
-                                mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
-            p.events.append(f"{name} {s}: craft {r.name} once")
-
         self._disenchant_bank()
         while True:
             active = [x for x in profs if x not in p.stalled and skill[x] < caps[x]]
@@ -356,7 +287,7 @@ class _Route:
                 for i, q in lo[3]:
                     extra[i] = extra.get(i, 0) + q
                 step_cost += self._learn_now(r, lo, s, name)
-            tool_cost, tool_extra, bought, tools_mailed = get_tools(tools, s, name)
+            tool_cost, tool_extra, bought, tools_mailed = self._get_tools(tools, s, name)
             step_cost += tool_cost
             for i, q in tool_extra.items():
                 extra[i] = extra.get(i, 0) + q
@@ -405,7 +336,7 @@ class _Route:
                     p.stall_reasons.pop(other, None)
 
         for prof, spell in craft_once.items():
-            craft_once_step(prof, spell)
+            self._craft_once_step(prof, spell)
 
         # --- wrap up -------------------------------------------------------------
         p.final_skill = dict(skill)
@@ -637,6 +568,75 @@ class _Route:
         self.rank_cap[prof] = nxt.cap
         self.p.ranks.append((prof, s, nxt.cap, nxt.fee))
         self.p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
+
+    def _get_tools(self, tools, s, name):
+        """Craft or buy the tools a step needs; their materials are taken with the step's.
+        Returns (cost, the crafted tools' materials, the tools bought, the tools mailed by your other
+        characters)."""
+        cost, extra, bought, mailed = Cost(), {}, {}, {}
+        for t in tools:
+            item = t["item"]
+            if t["how"] == "mail":
+                if item not in self.pools.tools and self.pools.mail.get(item, 0) >= 1:
+                    who = ", ".join(name for name, _n in allocate(getattr(self.stock, "shared", {}), item, 1))
+                    self.pools.mail[item] -= 1  # it is yours now: held for the rest of the route
+                    mailed[item] = mailed.get(item, 0) + 1
+                    self.p.events.append(f"{name} {s}: Use tool {self.gd.name(item)} (mailed by {who})")
+            elif t["how"] == "craft":
+                tr = t["recipe"]
+                if tr.spell_id not in self.learned:
+                    cost += self._learn_now(tr, self._learn_option(tr), s, PROFESSIONS[tr.skill_line])
+                self.p.events.append(f"{name} {s}: Craft tool {self.gd.name(item)}")
+                for i, q in t["requests"]:
+                    extra[i] = extra.get(i, 0) + q
+            else:
+                pool = self.pools.bought if t["how"] == "ah" else self.pools.vendor
+                pool[item] = pool.get(item, 0) + 1
+                cost += t["cost"]
+                bought[item] = bought.get(item, 0) + 1
+                self.p.events.append(f"{name} {s}: Buy tool {self.gd.name(item)} ({t['how']} {money(t['cost'].cash)})")
+            self.pools.tools.add(item)
+        return cost, extra, bought, mailed
+
+    def _craft_once_step(self, prof, spell):
+        """The goal recipe, learned and crafted once at the end of its profession's route."""
+        name, s, r = PROFESSIONS[prof], self.skill[prof], self.recipes.get(spell)
+        if r is None or s < r.required_skill:
+            self.p.stall_reasons.setdefault(prof, f"{name}: did not reach {r.name if r else spell}")
+            return
+        lo = self._learn_option(r)
+        if isinstance(lo, str):
+            self.p.stall_reasons[prof] = f"{name}: can't learn {r.name}: {lo}"
+            return
+        tools = []
+        for cat in r.tools:
+            if self._tool_held(cat):
+                continue
+            t = self._tool_option(cat)
+            if t is None:
+                self.p.stall_reasons[prof] = f"{name}: {r.name} needs a tool that can't be bought or made"
+                return
+            tools.append(t)
+        requests = [rq for t in tools for rq in t["requests"]] + lo[3] + list(r.reagents.items())
+        if self.valuer.take_many(requests, self.pools, self.skill, commit=False, learned=self.learned) is None:
+            self.p.stall_reasons[prof] = f"{name}: materials for {r.name} not available"
+            return
+        step_cost = Cost()
+        if spell not in self.learned:
+            step_cost += self._learn_now(r, lo, s, name)
+        tool_cost, extra, bought, tools_mailed = self._get_tools(tools, s, name)
+        step_cost += tool_cost
+        for i, q in lo[3]:
+            extra[i] = extra.get(i, 0) + q
+        before = _snapshot(self.pools)
+        step_cost += self.valuer.take_many(requests, self.pools, self.skill, commit=True, learned=self.learned)
+        mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(self.pools))
+        if r.output:
+            self.pools.made[r.output[0]] = self.pools.made.get(r.output[0], 0) + r.output[1]
+        self.spent += step_cost
+        self.p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
+                                 mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
+        self.p.events.append(f"{name} {s}: craft {r.name} once")
 
 
 def _snapshot(pools) -> dict:
