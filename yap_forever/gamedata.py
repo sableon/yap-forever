@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from yap_forever import settings
+from yap_forever import __version__, settings
 from yap_forever.lualit import extract_table, parse
 
 BS, ENCH = 164, 333
@@ -200,7 +200,7 @@ def fetch_all(force: bool = False, dest: Path | None = None, only: Iterable[str]
         p = dest / name
         if p.exists() and not force:
             continue
-        req = urllib.request.Request(url, headers={"User-Agent": "yap-forever/0.1"})
+        req = urllib.request.Request(url, headers={"User-Agent": f"yap-forever/{__version__}"})
         part = p.with_name(p.name + ".part")
         try:
             with urllib.request.urlopen(req, timeout=120) as r:

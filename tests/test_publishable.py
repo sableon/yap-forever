@@ -54,6 +54,26 @@ class PublishableTests(unittest.TestCase):
         self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
         self.assertEqual(plugin["license"], "GPL-3.0-or-later")
 
+    def test_one_version_in_the_package_and_the_manifest(self):
+        import yap_forever
+        plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(plugin["version"], yap_forever.__version__)
+
+    def test_the_manifest_version_is_not_behind_the_newest_tag(self):
+        """The version is bumped with every tag (docs/project-setup.md, row "Tags"): a tag made
+        without the bump would pin players to the version before it."""
+        try:
+            out = subprocess.run(["git", "tag", "-l", "v*"], cwd=ROOT, capture_output=True, text=True,
+                                 timeout=30, check=True).stdout
+        except (OSError, subprocess.SubprocessError):
+            self.skipTest("git not available")
+        tags = [tuple(map(int, m.groups())) for t in out.split()
+                if (m := re.match(r"v(\d+)\.(\d+)\.(\d+)", t))]
+        if not tags:
+            self.skipTest("no v* tags in this checkout")
+        import yap_forever
+        self.assertGreaterEqual(tuple(map(int, yap_forever.__version__.split("."))), max(tags))
+
     def test_skill_frontmatter(self):
         fm = frontmatter((SKILL / "SKILL.md").read_text(encoding="utf-8"))
         self.assertEqual(fm.get("name"), SKILL.name)
