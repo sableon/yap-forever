@@ -207,6 +207,20 @@ class CacheTests(unittest.TestCase):
                 mock.patch("builtins.print"):
             gamedata.fetch_all(dest=self.paths.gamedata, **kw)
 
+    def test_downloads_name_the_package_version(self):
+        from unittest import mock
+
+        import yap_forever
+        seen = []
+        serve = _serve({})
+
+        def urlopen(req, timeout=None):
+            seen.append(req.get_header("User-agent"))
+            return serve(req, timeout)
+        with mock.patch("urllib.request.urlopen", side_effect=urlopen), mock.patch("builtins.print"):
+            gamedata.fetch_all(dest=self.paths.gamedata, only=["Vendor.lua"])
+        self.assertEqual(seen, [f"yap-forever/{yap_forever.__version__}"])
+
     def test_the_cache_folder_is_named_after_the_pins(self):
         self.assertEqual(self.paths.gamedata.parent, self.paths.cache / "gamedata")
         name = self.paths.gamedata.name
