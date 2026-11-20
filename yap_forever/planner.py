@@ -401,15 +401,11 @@ class _Route:
     def _train_in_window(self, prof, s, name):
         """A trainer visit to learn a recipe also trains the next rank when the skill is in its window
         and the target needs that rank."""
-        nxt = next((r for r in self.gd.trainer_ranks.get(prof, []) if r.cap > self.rank_cap[prof]), None)
+        nxt = self._next_rank(prof)
         if (nxt is None or self.caps[prof] <= self.rank_cap[prof] or s < nxt.required_skill
                 or self.stock.level < nxt.level):
             return
-        self.p.fees += nxt.fee
-        self.spent += Cost(nxt.fee, nxt.fee)
-        self.rank_cap[prof] = nxt.cap
-        self.p.ranks.append((prof, s, nxt.cap, nxt.fee))
-        self.p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
+        self._train_rank(prof, s, name, nxt)
 
     def _get_tools(self, tools, s, name):
         """Craft or buy the tools a step needs; their materials are taken with the step's.
@@ -480,20 +476,28 @@ class _Route:
                                  mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
         self.p.events.append(f"{name} {s}: craft {r.name} once")
 
+    def _next_rank(self, prof):
+        """The trainer rank above the current one, or None."""
+        return next((r for r in self.gd.trainer_ranks.get(prof, []) if r.cap > self.rank_cap[prof]), None)
+
+    def _train_rank(self, prof, s, name, nxt):
+        """Train rank nxt at skill s: its fee is paid and the cap rises."""
+        self.p.fees += nxt.fee
+        self.spent += Cost(nxt.fee, nxt.fee)
+        self.rank_cap[prof] = nxt.cap
+        self.p.ranks.append((prof, s, nxt.cap, nxt.fee))
+        self.p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
+
     def _rank_step(self, prof, s, name):
         """At the current rank's cap: train the next rank, or stall the profession when it can't be."""
-        nxt = next((r for r in self.gd.trainer_ranks.get(prof, []) if r.cap > self.rank_cap[prof]), None)
+        nxt = self._next_rank(prof)
         if nxt is None or nxt.required_skill > s:
             self.p.stalled[prof], self.p.stall_reasons[prof] = s, f"{name}: no next rank to train at {s}"
         elif self.stock.level < nxt.level:
             self.p.stalled[prof] = s
             self.p.stall_reasons[prof] = f"{name}: next rank needs character level {nxt.level}"
         else:
-            self.p.fees += nxt.fee
-            self.spent += Cost(nxt.fee, nxt.fee)
-            self.rank_cap[prof] = nxt.cap
-            self.p.ranks.append((prof, s, nxt.cap, nxt.fee))
-            self.p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
+            self._train_rank(prof, s, name, nxt)
 
     def _best_recipe(self, prof, s):
         """The recipe to craft at skill s: (sort key, recipe, crafts per point, learn option, tools to get,
