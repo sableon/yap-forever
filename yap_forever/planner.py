@@ -178,7 +178,7 @@ class _Route:
         caps, craft_once = self.caps, self.craft_once
         profs, has_ench = self.profs, self.has_ench
         pools, p, skill, rank_cap = self.pools, self.p, self.skill, self.rank_cap
-        learned, produced, held, skipped = self.learned, self.produced, self.held, self.skipped
+        learned, held, skipped = self.learned, self.held, self.skipped
         soft_stalls = self.soft_stalls
 
         for x in profs:
@@ -199,44 +199,17 @@ class _Route:
                 continue
 
             best = self._best_recipe(prof, s)
-
             if best is None:
                 p.stalled[prof], p.stall_reasons[prof] = s, f"{name}: no usable recipe at {s}"
                 soft_stalls.add(prof)
                 continue
 
-            _key, r, crafts, lo, tools, requests = best
-            step_cost, extra = Cost(), {}
-            if r.spell_id not in learned and r.source == "trainer":
-                self._train_in_window(prof, s, name)
-            if r.spell_id not in learned:
-                requests = lo[3] + requests  # quest hand-ins, taken with the crafts
-                for i, q in lo[3]:
-                    extra[i] = extra.get(i, 0) + q
-                step_cost += self._learn_now(r, lo, s, name)
-            tool_cost, tool_extra, bought, tools_mailed = self._get_tools(tools, s, name)
-            step_cost += tool_cost
-            for i, q in tool_extra.items():
-                extra[i] = extra.get(i, 0) + q
-            before = _snapshot(pools)
-            c = valuer.take_many(requests, pools, skill, commit=True, learned=learned)
-            if c is None:  # cannot happen: same requests, same order as the check above
-                p.stalled[prof], p.stall_reasons[prof] = s, f"{name}: materials ran out at {s}"
+            done = self._commit(prof, s, name, best)
+            if done is None:
                 continue
-            step_cost += c
-            mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(pools))
-            made_something = False
-            if r.output:
-                item, per = r.output
-                n = per * crafts
-                opts = valuer.output_options(item, produced.get(item, 0))
-                produced[item] = produced.get(item, 0) + n
-                if self._should_hold(item, opts):
-                    held[item] = held.get(item, 0) + n
-                else:
-                    pools.made[item] = pools.made.get(item, 0) + n
-                made_something = True
-            self.spent += step_cost
+            step_cost, parts, made_something = done
+            r, crafts = best[1], best[2]
+            mats, from_stock, used_made, extra, bought, from_mail, tools_mailed = parts
 
             last = p.steps[-1] if p.steps else None
             if last and last.profession == prof and last.spell_id == r.spell_id and last.skill_to == s:
@@ -647,6 +620,45 @@ class _Route:
             if best is None or key < best[0]:
                 best = (key, r, crafts, lo, tools, requests)
         return best
+
+    def _commit(self, prof, s, name, best):
+        """Learn, get the tools and take the materials for the best recipe's crafts at skill s.
+        Returns (cost, the step's (materials, from stock, own crafts used, extra, tools bought, from mail,
+        tools mailed), whether it made something), or None when the materials ran out (the profession
+        stalls)."""
+        _key, r, crafts, lo, tools, requests = best
+        step_cost, extra = Cost(), {}
+        if r.spell_id not in self.learned and r.source == "trainer":
+            self._train_in_window(prof, s, name)
+        if r.spell_id not in self.learned:
+            requests = lo[3] + requests  # quest hand-ins, taken with the crafts
+            for i, q in lo[3]:
+                extra[i] = extra.get(i, 0) + q
+            step_cost += self._learn_now(r, lo, s, name)
+        tool_cost, tool_extra, bought, tools_mailed = self._get_tools(tools, s, name)
+        step_cost += tool_cost
+        for i, q in tool_extra.items():
+            extra[i] = extra.get(i, 0) + q
+        before = _snapshot(self.pools)
+        c = self.valuer.take_many(requests, self.pools, self.skill, commit=True, learned=self.learned)
+        if c is None:  # cannot happen: same requests, same order as the check above
+            self.p.stalled[prof], self.p.stall_reasons[prof] = s, f"{name}: materials ran out at {s}"
+            return None
+        step_cost += c
+        mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(self.pools))
+        made_something = False
+        if r.output:
+            item, per = r.output
+            n = per * crafts
+            opts = self.valuer.output_options(item, self.produced.get(item, 0))
+            self.produced[item] = self.produced.get(item, 0) + n
+            if self._should_hold(item, opts):
+                self.held[item] = self.held.get(item, 0) + n
+            else:
+                self.pools.made[item] = self.pools.made.get(item, 0) + n
+            made_something = True
+        self.spent += step_cost
+        return step_cost, (mats, from_stock, used_made, extra, bought, from_mail, tools_mailed), made_something
 
 
 def _snapshot(pools) -> dict:
