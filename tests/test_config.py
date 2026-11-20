@@ -39,14 +39,16 @@ class StockTests(unittest.TestCase):
         self.assertEqual(s.level, 37)
         self.assertEqual(s.mining, 171)
         self.assertEqual(s.short_farm_ore, 200)
-        self.assertEqual(s.target, 225)
         self.assertEqual(s.mining_goal, 171)
 
-    def test_target_and_mining_goal(self):
+    def test_mining_goal_and_an_older_target_key(self):
+        # target (both professions' skill) came from the personal planner; [goals] replaced it, and a
+        # file that still has one loads as before
         text = "target = 300\nmining_goal = 250\n" + STOCK
         with tempfile.TemporaryDirectory() as d:
             s = config.load_stock(write(d, "stock.toml", text, 0o644))
-        self.assertEqual((s.target, s.mining_goal), (300, 250))
+        self.assertEqual(s.mining_goal, 250)
+        self.assertFalse(hasattr(s, "target"))
         self.assertIsNone(s.quest_item_sales)
         s2 = config.load_stock(write(tempfile.mkdtemp(), "stock.toml", "quest_item_sales = 20\n" + STOCK, 0o644))
         self.assertEqual(s2.quest_item_sales, 20)

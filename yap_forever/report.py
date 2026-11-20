@@ -46,7 +46,7 @@ def _q(item, gd):
     return " (quest item)" if item in gd.quest_items else ""
 
 
-def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=None,
+def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
            reading="relative", today=None, saving_line="", budget: Budget | None = None, notes=()) -> str:
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
@@ -88,8 +88,7 @@ def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=No
     else:
         _switch_order(out, section, held_total)
 
-    pair = caps or {BS: stock.target, ENCH: stock.target}
-    _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, pair, stock),
+    _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, caps, stock),
           saving_line, budget, notes)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 

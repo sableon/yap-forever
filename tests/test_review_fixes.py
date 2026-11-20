@@ -120,7 +120,7 @@ class ImportantTests(unittest.TestCase):
         rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
               toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
         p, gd, m, st = run(rs, BARS, stock=toy.stock({toy.VEST: 3}))
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
         self.assertTrue("no market" in text and "Copper Chain Vest" in text)
 
 
@@ -136,5 +136,5 @@ class CraftedIntermediateReportTests(unittest.TestCase):
               toy.recipe(2, "Ench odd", ENCH, {toy.ODD: 1})]
         p, gd, m, st = run(rs, BARS)
         self.assertIn(toy.ODD, p.crafted)
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
         self.assertTrue("Crafted for reagents" in text)

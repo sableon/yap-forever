@@ -16,7 +16,7 @@ def guide(recipes, listings, stock=None, cap=60):
     st = stock or toy.stock()
     p = run(recipes, listings, stock=st, cap=cap)
     gd = toy.gamedata(recipes)
-    return render_guide(p, gd, toy.market(listings), st)
+    return render_guide(p, gd, toy.market(listings), st, {BS: 225, ENCH: 225})
 
 
 def auctionator_market(scan_day="2026-11-18", dropped=0):
@@ -34,7 +34,7 @@ class PricesHeaderTests(unittest.TestCase):
         recipes = base_recipes()
         st = toy.stock()
         p = run(recipes, {toy.COPPER_BAR: [(100, 50)]}, stock=st, cap=60)
-        return render_guide(p, toy.gamedata(recipes), market, st, today=today)
+        return render_guide(p, toy.gamedata(recipes), market, st, {BS: 225, ENCH: 225}, today=today)
 
     def test_fresh_auctionator_scan_header_is_the_exact_line_under_the_title(self):
         text = self.render(auctionator_market(), datetime.date(2026, 11, 20))
@@ -67,7 +67,7 @@ class PricesHeaderTests(unittest.TestCase):
         p = run(recipes, {toy.COPPER_BAR: [(100, 50)]}, stock=st, cap=60)
         m = toy.market({toy.COPPER_BAR: [(100, 50)]})
         m.snapshot_time = "T"
-        text = render_guide(p, toy.gamedata(recipes), m, st, today=datetime.date(2030, 1, 1))
+        text = render_guide(p, toy.gamedata(recipes), m, st, {BS: 225, ENCH: 225}, today=datetime.date(2030, 1, 1))
         self.assertNotIn("Auctionator", text)
         self.assertNotIn("days old", text)
         self.assertEqual(text.splitlines()[1], "")
@@ -216,7 +216,7 @@ class QuestItemNoteTests(unittest.TestCase):
         from yap_forever.costmodel import Valuer
         from yap_forever.planner import plan
         p = plan(gd, Valuer(toy.market(listings), gd, st), st, toy.NO_FAVOR, caps={BS: 60, ENCH: 60})
-        text = render_guide(p, gd, toy.market(listings), st)
+        text = render_guide(p, gd, toy.market(listings), st, {BS: 225, ENCH: 225})
         self.assertIn("sell up to 20 on the AH (quest item), the rest to a vendor", text)
 
 

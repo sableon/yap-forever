@@ -219,10 +219,10 @@ class GuideNotesTests(unittest.TestCase):
         gd, st = toy.gamedata(base_recipes()), toy.stock()
         p = toy_plan([100])
         line = "If trainers offer a saving, this route is cheaper."
-        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, saving_line=line)
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225}, saving_line=line)
         self.assertEqual(text.count(line), 1)
         self.assertGreater(text.index(line), text.index("## Data notes"))
-        self.assertNotIn(line, render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR))
+        self.assertNotIn(line, render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225}))
 
 
 class StudyHintTests(unittest.TestCase):

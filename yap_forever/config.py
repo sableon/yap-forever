@@ -30,7 +30,6 @@ class Stock:
     level: int
     mining: int
     short_farm_ore: int
-    target: int = 225  # skill both professions are planned to
     mining_goal: int = 0  # Mining skill you'll reach while farming; 0 = current
     quest_item_sales: int | None = None  # quest items you expect to sell on the AH; None = no limit
     skills: dict[int, int] = field(default_factory=dict)  # skill line -> current skill; absent = 1
@@ -173,7 +172,6 @@ def _stock(d: dict) -> Stock:
         level=whole("level", 1),
         mining=whole("mining", 0),
         short_farm_ore=whole("short_farm_ore", 200),
-        target=whole("target", 225),
         mining_goal=_whole(d["mining_goal"], "mining_goal") if "mining_goal" in d else whole("mining", 0),
         quest_item_sales=whole("quest_item_sales", None),
         skills=_skills(d.get("skills", {})),
