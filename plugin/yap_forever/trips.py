@@ -103,7 +103,7 @@ class Trip:
     cost: float = 0
     cap: int = 0  # the skill cap a rank stop trains to; a recipe trip's trainer rank
     spells: tuple[int, ...] = ()  # a recipe trip's recipes
-    visit: Visit | None = None  # a rank or recipe trip's trainer visit
+    visit: Visit | None = field(default=None, compare=False)  # a rank or recipe trip's trainer visit
 
     @property
     def key(self) -> int | tuple[int, ...] | None:

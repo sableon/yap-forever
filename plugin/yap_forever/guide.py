@@ -281,7 +281,7 @@ def _recipes_text(spells, v, gd, trainer_info, fees) -> str:
         groups.setdefault(v.fallback.get(spell), []).append(spell)
     who = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
     parts = []
-    for cap in sorted(groups, key=lambda c: -(c or REMOTE_RANK * 2)):  # the visit's own rank first
+    for cap in sorted(groups, key=lambda c: (c is not None, -(c or 0))):  # the visit's own rank, then down
         names = []
         for spell in groups[cap]:
             r = gd.recipes[spell]
