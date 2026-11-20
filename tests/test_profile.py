@@ -173,6 +173,8 @@ class ProfileTests(unittest.TestCase):
             prof = profile.load_profile(write(d, EXAMPLE))
         self.assertEqual(prof.characters["Main"].trainer_trips, "as_needed")
         self.assertEqual(profile.TRAINER_TRIPS, ("as_needed", "one_go"))
+        from yap_forever.trips import AS_NEEDED, ONE_GO
+        self.assertEqual(profile.TRAINER_TRIPS, (AS_NEEDED, ONE_GO))  # the values trips.visits reads
 
     def test_trainer_trips_one_go(self):
         with tempfile.TemporaryDirectory() as d:
