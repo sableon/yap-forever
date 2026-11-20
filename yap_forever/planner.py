@@ -174,81 +174,13 @@ class _Route:
         self.held_mail: dict[int, tuple[float, str]] = {}
 
     def run(self) -> Plan:
-        gd, valuer, stock, favor = self.gd, self.valuer, self.stock, self.favor
+        gd, valuer, stock = self.gd, self.valuer, self.stock
         one_time_in_full, overtime, reading = self.one_time_in_full, self.overtime, self.reading
         quests, reuse, caps, craft_once = self.quests, self.reuse, self.caps, self.craft_once
         profs, has_ench, ench_cap, recipes = self.profs, self.has_ench, self.ench_cap, self.recipes
         pools, p, skill, rank_cap = self.pools, self.p, self.skill, self.rank_cap
         learned, produced, held, skipped = self.learned, self.produced, self.held, self.skipped
         soft_stalls, ench_reagents, held_mail = self.soft_stalls, self.ench_reagents, self.held_mail
-
-        def tool_held(cat):
-            return any(gd.satisfies(i, cat) for i in pools.held())
-
-        def learn_option(r):
-            """(Cost, favor, scroll purchase kind, quest hand-ins) to learn r, or a reason string."""
-            if r.spell_id in learned or r.source == "starter":
-                return Cost(), 0, None, []
-            if r.source == "trainer":
-                return Cost(r.fee, r.fee), 0, None, []
-            if r.source == "scroll":
-                if r.scroll_item and pools.stock.get(r.scroll_item, 0) >= 1:
-                    # your own pattern: no cash, used up; the value modes give up what it would sell for,
-                    # as for any owned item (Valuer._take)
-                    v = valuer.owned_value(r.scroll_item)
-                    return Cost(0, v, v), 0, "owned", []
-                if r.scroll_item and pools.mail.get(r.scroll_item, 0) >= 1:
-                    # a pattern another of your characters mails you: the same, taken from what they hold
-                    v = valuer.owned_value(r.scroll_item)
-                    return Cost(0, v, v), 0, "mail", []
-                opt = valuer.buy_option(r.scroll_item, 1, pools.bought.get(r.scroll_item, 0))
-                if opt is None:
-                    return f"scroll not available: {gd.name(r.scroll_item)}"
-                return Cost(opt[1], opt[1]), 0, opt[0], []
-            if r.source == "favor":
-                price = favor.recipes[r.spell_id]
-                return (Cost(), price, None, []) if price <= self.favor_left else f"not enough Favor ({price})"
-            if r.source == "quest":
-                if stock.level < quests[r.spell_id].level:
-                    return f"quest needs character level {quests[r.spell_id].level}"
-                reqs = list(quests[r.spell_id].items.items())
-                c = valuer.take_many(reqs, pools, skill, commit=False, learned=learned)
-                if c is None:
-                    return "quest items not available: " + ", ".join(gd.name(i) for i, _ in reqs)
-                return c, 0, None, reqs  # hand-ins are taken together with the first crafts
-            return "no known source"
-
-        def tool_option(cat):
-            """Cheapest way to get a missing tool, as a dict, or None."""
-            item = gd.tool_items.get(cat)
-            if item is None:
-                return None
-            opts = []
-            mailed = next((i for i in sorted(pools.mail) if pools.mail[i] >= 1 and gd.satisfies(i, cat)), None)
-            if mailed is not None:  # a tool another of your characters holds: no cash, and it is not used up
-                opts.append({"how": "mail", "item": mailed, "cost": Cost(), "requests": [], "recipe": None})
-            if item in VENDOR_TOOLS and item in gd.items:
-                c = gd.items[item].buy_price
-                opts.append({"how": "vendor", "item": item, "cost": Cost(c, c), "requests": [], "recipe": None})
-            ah = valuer.buy_option(item, 1, pools.bought.get(item, 0))
-            if ah and ah[0] == "ah":
-                opts.append({"how": "ah", "item": item, "cost": Cost(ah[1], ah[1]), "requests": [], "recipe": None})
-            for r in recipes.values():
-                if not r.output or r.output[0] != item or skill.get(r.skill_line, 0) < r.required_skill:
-                    continue
-                if any(not tool_held(c) for c in r.tools):
-                    continue
-                lo = learn_option(r)
-                if isinstance(lo, str):
-                    continue
-                reqs = [(i, q / r.output[1]) for i, q in r.reagents.items()]
-                c = valuer.take_many(reqs, pools, skill, commit=False, learned=learned)
-                if c is not None:
-                    opts.append({"how": "craft", "item": item, "cost": lo[0], "requests": reqs,
-                                 "recipe": r, "peek": c})
-            if not opts:
-                return None
-            return min(opts, key=lambda o: o["cost"].economic + (o["peek"].score if "peek" in o else 0))
 
         def release_held(where=""):
             released = False
@@ -399,7 +331,7 @@ class _Route:
                 elif t["how"] == "craft":
                     tr = t["recipe"]
                     if tr.spell_id not in learned:
-                        cost += learn_now(tr, learn_option(tr), s, PROFESSIONS[tr.skill_line])
+                        cost += learn_now(tr, self._learn_option(tr), s, PROFESSIONS[tr.skill_line])
                     p.events.append(f"{name} {s}: Craft tool {gd.name(item)}")
                     for i, q in t["requests"]:
                         extra[i] = extra.get(i, 0) + q
@@ -418,15 +350,15 @@ class _Route:
             if r is None or s < r.required_skill:
                 p.stall_reasons.setdefault(prof, f"{name}: did not reach {r.name if r else spell}")
                 return
-            lo = learn_option(r)
+            lo = self._learn_option(r)
             if isinstance(lo, str):
                 p.stall_reasons[prof] = f"{name}: can't learn {r.name}: {lo}"
                 return
             tools = []
             for cat in r.tools:
-                if tool_held(cat):
+                if self._tool_held(cat):
                     continue
-                t = tool_option(cat)
+                t = self._tool_option(cat)
                 if t is None:
                     p.stall_reasons[prof] = f"{name}: {r.name} needs a tool that can't be bought or made"
                     return
@@ -485,15 +417,15 @@ class _Route:
                     continue
                 crafts = 1 / chance
                 usable = max(1, min(r.thresholds[3], caps[prof]) - s)
-                lo = learn_option(r)
+                lo = self._learn_option(r)
                 if isinstance(lo, str):
                     skipped[r.spell_id] = lo
                     continue
                 tools, ok = [], True
                 for cat in r.tools:
-                    if tool_held(cat):
+                    if self._tool_held(cat):
                         continue
-                    t = tool_option(cat)
+                    t = self._tool_option(cat)
                     if t is None:
                         item = gd.tool_items.get(cat)
                         skipped[r.spell_id] = f"tool not available: {gd.name(item) if item else cat}"
@@ -633,6 +565,75 @@ class _Route:
         p.cash_total = self.spent.cash
         p.economic_total = self.spent.economic - p.sale_proceeds - p.leftover_value
         return p
+
+    def _tool_held(self, cat):
+        return any(self.gd.satisfies(i, cat) for i in self.pools.held())
+
+    def _learn_option(self, r):
+        """(Cost, favor, scroll purchase kind, quest hand-ins) to learn r, or a reason string."""
+        if r.spell_id in self.learned or r.source == "starter":
+            return Cost(), 0, None, []
+        if r.source == "trainer":
+            return Cost(r.fee, r.fee), 0, None, []
+        if r.source == "scroll":
+            if r.scroll_item and self.pools.stock.get(r.scroll_item, 0) >= 1:
+                # your own pattern: no cash, used up; the value modes give up what it would sell for,
+                # as for any owned item (Valuer._take)
+                v = self.valuer.owned_value(r.scroll_item)
+                return Cost(0, v, v), 0, "owned", []
+            if r.scroll_item and self.pools.mail.get(r.scroll_item, 0) >= 1:
+                # a pattern another of your characters mails you: the same, taken from what they hold
+                v = self.valuer.owned_value(r.scroll_item)
+                return Cost(0, v, v), 0, "mail", []
+            opt = self.valuer.buy_option(r.scroll_item, 1, self.pools.bought.get(r.scroll_item, 0))
+            if opt is None:
+                return f"scroll not available: {self.gd.name(r.scroll_item)}"
+            return Cost(opt[1], opt[1]), 0, opt[0], []
+        if r.source == "favor":
+            price = self.favor.recipes[r.spell_id]
+            return (Cost(), price, None, []) if price <= self.favor_left else f"not enough Favor ({price})"
+        if r.source == "quest":
+            if self.stock.level < self.quests[r.spell_id].level:
+                return f"quest needs character level {self.quests[r.spell_id].level}"
+            reqs = list(self.quests[r.spell_id].items.items())
+            c = self.valuer.take_many(reqs, self.pools, self.skill, commit=False, learned=self.learned)
+            if c is None:
+                return "quest items not available: " + ", ".join(self.gd.name(i) for i, _ in reqs)
+            return c, 0, None, reqs  # hand-ins are taken together with the first crafts
+        return "no known source"
+
+    def _tool_option(self, cat):
+        """Cheapest way to get a missing tool, as a dict, or None."""
+        item = self.gd.tool_items.get(cat)
+        if item is None:
+            return None
+        opts = []
+        mailed = next((i for i in sorted(self.pools.mail) if self.pools.mail[i] >= 1 and self.gd.satisfies(i, cat)),
+                      None)
+        if mailed is not None:  # a tool another of your characters holds: no cash, and it is not used up
+            opts.append({"how": "mail", "item": mailed, "cost": Cost(), "requests": [], "recipe": None})
+        if item in VENDOR_TOOLS and item in self.gd.items:
+            c = self.gd.items[item].buy_price
+            opts.append({"how": "vendor", "item": item, "cost": Cost(c, c), "requests": [], "recipe": None})
+        ah = self.valuer.buy_option(item, 1, self.pools.bought.get(item, 0))
+        if ah and ah[0] == "ah":
+            opts.append({"how": "ah", "item": item, "cost": Cost(ah[1], ah[1]), "requests": [], "recipe": None})
+        for r in self.recipes.values():
+            if not r.output or r.output[0] != item or self.skill.get(r.skill_line, 0) < r.required_skill:
+                continue
+            if any(not self._tool_held(c) for c in r.tools):
+                continue
+            lo = self._learn_option(r)
+            if isinstance(lo, str):
+                continue
+            reqs = [(i, q / r.output[1]) for i, q in r.reagents.items()]
+            c = self.valuer.take_many(reqs, self.pools, self.skill, commit=False, learned=self.learned)
+            if c is not None:
+                opts.append({"how": "craft", "item": item, "cost": lo[0], "requests": reqs,
+                             "recipe": r, "peek": c})
+        if not opts:
+            return None
+        return min(opts, key=lambda o: o["cost"].economic + (o["peek"].score if "peek" in o else 0))
 
 
 def _snapshot(pools) -> dict:
