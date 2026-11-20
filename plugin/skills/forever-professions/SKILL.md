@@ -69,6 +69,12 @@ when a question or answer needs it.
    owned materials at what they'd sell for, so it may leave valuable ones to sell, which takes time
    on the AH. When both are the same route, say so. Ask which guide they want to follow (the report
    files: [setup.md](references/setup.md), "Report names").
+   When the route has a remote trainer (a `**Trip:**` row for a rank to 225 or 300) and the character has
+   no `trainer_trips` yet, ask once per character: **level there in one go, or come back as needed?**
+   (one go: bring everything to the next rank or the target and learn the recipes at the trainer; as
+   needed: come back for each later recipe). Save the answer as `trainer_trips` under
+   `[characters."Name"]` in `profile.toml` (`"one_go"` or `"as_needed"`,
+   [setup.md](references/setup.md), step 2) and, for one go, run `plan` again.
 6. **Walk through the result** top-down, craft by craft, as laid out in
    [references/list-layout.md](references/list-layout.md). When game data and play experience
    disagree, quote [references/game-rules.md](references/game-rules.md) and go with the rules.
