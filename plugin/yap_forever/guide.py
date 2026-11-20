@@ -91,6 +91,9 @@ def _gathers(plan, stock) -> bool:
     return bool(stock.mining or stock.mining_goal or plan.farm)
 
 
+NOTHING_IN_BUDGET = "Nothing to craft within this budget."
+
+
 def _title(caps, route) -> str:
     names = [PROFESSIONS.get(p, str(p)) for p in caps]
     if len(set(caps.values())) == 1:
@@ -143,6 +146,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     _keep(out, plan, gd, market, by_mail, stock)
     hint = _StudyHint(lowest_profession(caps, stock), mode, study_hint_gold_per_point, character)
     _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint)
+    if budget_lines and not plan.steps:
+        out += [NOTHING_IN_BUDGET, ""]
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)

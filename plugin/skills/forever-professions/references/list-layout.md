@@ -124,7 +124,9 @@ and the report in its verdict, what the gold reaches, in one paragraph:
 
 - `<budget> takes <Profession> to <stop> (<gold>).`, the professions that advance joined with "and";
   `<gold>` is the cut route's "Gold to bring". When the budget reaches no stop:
-  `<budget> doesn't reach the first stop: nothing is planned yet.` (the route is empty, never a crash).
+  `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route (guide and report)
+  starts with `Nothing to craft within this budget.` and the report's verdict gives only the budget
+  paragraph, with no "Ready to level".
 - A profession that can't advance: `<Profession> gets none of it: <why>.` (the stall reason).
 - Each profession with a stop above the cut: `The next stop, <Profession> <stop>, costs about <gold> more.`
   (the route planned to that stop, its "Gold to bring" minus the cut route's). No line when the budget

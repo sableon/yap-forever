@@ -113,6 +113,17 @@ class CutTests(unittest.TestCase):
         self.assertEqual(c.next_stop, {BS: (225, 10 * G)})
         self.assertEqual({s.profession for s in c.plan.steps}, {ENCH})
 
+    def test_even_fallback_repeats_while_the_other_fits(self):
+        # A (Blacksmithing) at 100 needs 10g to 150; B (Enchanting) at 120 needs 3s to 150 and 1g 55s to 225.
+        # A is lower, but its stop never fits: B takes both of its stops, so no next stop that fits is left.
+        rs = [toy.recipe(1, "BS iron", BS, {toy.IRON_BAR: 1}), toy.recipe(2, "Ench shard", ENCH, {toy.SHARD: 1})]
+        i = inputs(rs, {BS: 150, ENCH: 225}, skills={BS: 100, ENCH: 120},
+                   listings={toy.IRON_BAR: [(2000, 1000)], toy.SHARD: [(100, 1000)]})
+        c = cut(i, 5)
+        self.assertEqual(c.caps, {BS: 100, ENCH: 225})
+        self.assertEqual(c.spent, 15500)
+        self.assertEqual(c.next_stop, {BS: (150, 10 * G)})
+
     def test_stalled_profession_gets_no_gold(self):  # RF4
         # Enchanting at 225 needs the next rank, which needs character level 35; the character is 30
         i = inputs(both(), {BS: 225, ENCH: 300}, skills={ENCH: 225}, level=30,
@@ -156,7 +167,12 @@ class RenderTests(unittest.TestCase):
             self.assertIn("0.5g doesn't reach the first stop: nothing is planned yet.", text)
             self.assertIn(f"The next stop, Blacksmithing 75, costs about {gold(TO_75)} more.", text)
             self.assertNotIn("already at", text)
+            route = text[text.index("## Route"):]
+            self.assertTrue(route.split("\n", 2)[2].startswith("Nothing to craft within this budget."), route[:80])
         self.assertIn("**Gold to bring: 0c**", guide)
+        verdict_part = report[report.index("## Verdict"):report.index("## Route")]
+        self.assertNotIn("Ready to level", verdict_part)
+        self.assertNotIn("Planned to", verdict_part)
 
     def test_stalled_profession_says_why(self):  # RF4
         i = inputs(both(), {BS: 225, ENCH: 300}, skills={ENCH: 225}, level=30,

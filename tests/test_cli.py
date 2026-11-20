@@ -480,6 +480,37 @@ class CliTests(unittest.TestCase):
         self.assertIn("1000g takes Blacksmithing to 20 (", guide)
         self.assertNotIn("The next stop", guide)
 
+    def test_plan_with_a_budget_and_two_professions(self):
+        self.ready_home()  # the fixture has no Enchanting recipe usable at 1: it can't advance
+        me = ["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20", "--prof", "enchanting:20"]
+        code, out = run(me + ["--budget", "1000", "--order", "enchanting,blacksmithing"], self.paths)
+        self.assertEqual(code, 0, out)
+        for m in ("gold", "value"):
+            guide = next(self.paths.reports.glob(f"*-guide-{m}.md")).read_text(encoding="utf-8")
+            report = next(self.paths.reports.glob(f"*-plan-{m}.md")).read_text(encoding="utf-8")
+            for text in (guide, report):
+                self.assertIn("1000g takes Blacksmithing to 20 (", text)
+                self.assertIn("Enchanting gets none of it: no usable recipe at 1.", text)
+            self.assertIn("Level one profession at a time: Enchanting first, then Blacksmithing.", guide)
+        code, out = run(me + ["--budget", "0"], self.paths)
+        self.assertEqual(code, 0, out)
+        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
+        self.assertIn("0g doesn't reach the first stop: nothing is planned yet.", guide)
+        self.assertIn("The next stop, Blacksmithing 20, costs about", guide)
+        self.assertNotIn("The next stop, Enchanting", guide)
+        self.assertIn("Level both professions side by side", guide)
+
+    def test_plan_with_a_budget_and_a_recipe_target_plans_the_recipe_in_full(self):
+        self.ready_home()
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:2660",
+                         "--budget", "0"], self.paths)
+        self.assertEqual(code, 0, out)
+        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
+        report = next(self.paths.reports.glob("*-plan-gold.md")).read_text(encoding="utf-8")
+        self.assertNotIn("doesn't reach", guide + report)
+        self.assertNotIn("planned to your", report)
+        self.assertIn("once", guide)
+
 
 if __name__ == "__main__":
     unittest.main()

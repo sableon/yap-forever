@@ -5,6 +5,7 @@ from collections import defaultdict
 from yap_forever.budget import amount
 from yap_forever.costmodel import Valuer, money
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
+from yap_forever.guide import NOTHING_IN_BUDGET
 from yap_forever.planner import DISENCHANT, reached_lines, step_factor
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, Budget, mail_text
@@ -61,6 +62,8 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
     reached = reached_lines(plan)
     if len(reached) >= len(caps or (BS, ENCH)):  # every target already reached: no verdict to give
         out += reached
+    elif budget_lines and not plan.steps:  # the budget reaches no stop: nothing to judge
+        out += [" ".join(budget_lines)]
     else:
         out.append(f"**{verdict_text}.**")
         if plan.farm:
@@ -96,6 +99,8 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
           goal=None) -> None:
     # Route
     section("Route")
+    if goal is not None and not plan.steps:
+        out += [NOTHING_IN_BUDGET, ""]
     out += ["| Profession | Skill | Craft | Crafts | Cash | Net cost |", "|---|---|---|---|---|---|"]
     for s in plan.steps:
         n = max(1, round(s.crafts)) if s.spell_id == DISENCHANT else math.ceil(s.crafts * step_factor(s) - 1e-6)
