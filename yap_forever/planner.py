@@ -175,9 +175,8 @@ class _Route:
 
     def run(self) -> Plan:
         gd, valuer, stock = self.gd, self.valuer, self.stock
-        one_time_in_full, overtime, reading = self.one_time_in_full, self.overtime, self.reading
-        reuse, caps, craft_once = self.reuse, self.caps, self.craft_once
-        profs, has_ench, recipes = self.profs, self.has_ench, self.recipes
+        caps, craft_once = self.caps, self.craft_once
+        profs, has_ench = self.profs, self.has_ench
         pools, p, skill, rank_cap = self.pools, self.p, self.skill, self.rank_cap
         learned, produced, held, skipped = self.learned, self.produced, self.held, self.skipped
         soft_stalls = self.soft_stalls
@@ -199,68 +198,7 @@ class _Route:
                 self._rank_step(prof, s, name)
                 continue
 
-            best = None
-            for r in recipes.values():
-                if r.skill_line != prof or r.required_skill > s:
-                    continue
-                chance = skillup_chance(s, r.thresholds, overtime, reading)
-                if chance <= 0:
-                    continue
-                crafts = 1 / chance
-                usable = max(1, min(r.thresholds[3], caps[prof]) - s)
-                lo = self._learn_option(r)
-                if isinstance(lo, str):
-                    skipped[r.spell_id] = lo
-                    continue
-                tools, ok = [], True
-                for cat in r.tools:
-                    if self._tool_held(cat):
-                        continue
-                    t = self._tool_option(cat)
-                    if t is None:
-                        item = gd.tool_items.get(cat)
-                        skipped[r.spell_id] = f"tool not available: {gd.name(item) if item else cat}"
-                        ok = False
-                        break
-                    tools.append(t)
-                if not ok:
-                    continue
-                requests = [rq for t in tools for rq in t["requests"]] + \
-                    [(item, q * crafts) for item, q in r.reagents.items()]
-                c = valuer.take_many(requests, pools, skill, commit=False, learned=learned)
-                if c is not None and lo[3] and \
-                        valuer.take_many(lo[3] + requests, pools, skill, commit=False, learned=learned) is None:
-                    skipped[r.spell_id] = "not enough materials for quest and reagents"
-                    continue
-                if c is None:
-                    bad = next((i for i, q in requests
-                                if valuer.take(i, q, pools, skill, commit=False, learned=learned) is None), None)
-                    skipped[r.spell_id] = (f"unpriceable: {gd.name(bad)}" if bad is not None
-                                           else "not enough materials for tool and reagents")
-                    continue
-                # Only outputs the route reuses (disenchanted for Enchanting) lower the score. Resale is
-                # counted in the totals but must not pull in extra, lower-chance crafts.
-                out_val = reuse_val = 0
-                if r.output:
-                    de = (valuer.output_options(r.output[0], produced.get(r.output[0], 0)).get("de", 0)
-                          if self._de_within_target(r.output[0]) else 0)
-                    out_val = de * r.output[1] * crafts
-                    # A reagent later steps consume is worth what it would cost, up to the count they need.
-                    if r.output[0] in reuse:
-                        need, unit = reuse[r.output[0]]
-                        left = max(0.0, need - produced.get(r.output[0], 0))
-                        reuse_val = unit * min(r.output[1] * crafts, left)
-                        out_val += reuse_val
-                one_time = lo[0].economic + sum(t["cost"].economic for t in tools)
-                score = c.score - out_val + one_time / usable
-                if valuer.mode == "gold":  # gold spent first; among equal gold, the lower total value
-                    one_cash = lo[0].cash + sum(t["cost"].cash for t in tools)
-                    spread = 1 if one_time_in_full else usable
-                    key = (round(c.cash + one_cash / spread - reuse_val, 2), score, r.spell_id)
-                else:
-                    key = (score, r.spell_id)
-                if best is None or key < best[0]:
-                    best = (key, r, crafts, lo, tools, requests)
+            best = self._best_recipe(prof, s)
 
             if best is None:
                 p.stalled[prof], p.stall_reasons[prof] = s, f"{name}: no usable recipe at {s}"
@@ -641,6 +579,74 @@ class _Route:
             self.rank_cap[prof] = nxt.cap
             self.p.ranks.append((prof, s, nxt.cap, nxt.fee))
             self.p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
+
+    def _best_recipe(self, prof, s):
+        """The recipe to craft at skill s: (sort key, recipe, crafts per point, learn option, tools to get,
+        material requests), or None. Recipes that can't be used are noted in skipped."""
+        best = None
+        for r in self.recipes.values():
+            if r.skill_line != prof or r.required_skill > s:
+                continue
+            chance = skillup_chance(s, r.thresholds, self.overtime, self.reading)
+            if chance <= 0:
+                continue
+            crafts = 1 / chance
+            usable = max(1, min(r.thresholds[3], self.caps[prof]) - s)
+            lo = self._learn_option(r)
+            if isinstance(lo, str):
+                self.skipped[r.spell_id] = lo
+                continue
+            tools, ok = [], True
+            for cat in r.tools:
+                if self._tool_held(cat):
+                    continue
+                t = self._tool_option(cat)
+                if t is None:
+                    item = self.gd.tool_items.get(cat)
+                    self.skipped[r.spell_id] = f"tool not available: {self.gd.name(item) if item else cat}"
+                    ok = False
+                    break
+                tools.append(t)
+            if not ok:
+                continue
+            requests = [rq for t in tools for rq in t["requests"]] + \
+                [(item, q * crafts) for item, q in r.reagents.items()]
+            c = self.valuer.take_many(requests, self.pools, self.skill, commit=False, learned=self.learned)
+            if c is not None and lo[3] and self.valuer.take_many(lo[3] + requests, self.pools, self.skill,
+                                                                 commit=False, learned=self.learned) is None:
+                self.skipped[r.spell_id] = "not enough materials for quest and reagents"
+                continue
+            if c is None:
+                bad = next((i for i, q in requests
+                            if self.valuer.take(i, q, self.pools, self.skill, commit=False,
+                                                learned=self.learned) is None), None)
+                self.skipped[r.spell_id] = (f"unpriceable: {self.gd.name(bad)}" if bad is not None
+                                            else "not enough materials for tool and reagents")
+                continue
+            # Only outputs the route reuses (disenchanted for Enchanting) lower the score. Resale is
+            # counted in the totals but must not pull in extra, lower-chance crafts.
+            out_val = reuse_val = 0
+            if r.output:
+                de = (self.valuer.output_options(r.output[0], self.produced.get(r.output[0], 0)).get("de", 0)
+                      if self._de_within_target(r.output[0]) else 0)
+                out_val = de * r.output[1] * crafts
+                # A reagent later steps consume is worth what it would cost, up to the count they need.
+                if r.output[0] in self.reuse:
+                    need, unit = self.reuse[r.output[0]]
+                    left = max(0.0, need - self.produced.get(r.output[0], 0))
+                    reuse_val = unit * min(r.output[1] * crafts, left)
+                    out_val += reuse_val
+            one_time = lo[0].economic + sum(t["cost"].economic for t in tools)
+            score = c.score - out_val + one_time / usable
+            if self.valuer.mode == "gold":  # gold spent first; among equal gold, the lower total value
+                one_cash = lo[0].cash + sum(t["cost"].cash for t in tools)
+                spread = 1 if self.one_time_in_full else usable
+                key = (round(c.cash + one_cash / spread - reuse_val, 2), score, r.spell_id)
+            else:
+                key = (score, r.spell_id)
+            if best is None or key < best[0]:
+                best = (key, r, crafts, lo, tools, requests)
+        return best
 
 
 def _snapshot(pools) -> dict:
