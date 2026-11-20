@@ -46,7 +46,7 @@ working_overtime_reading = "relative"
 favor_standing = "Honored"
 working_overtime = 2
 dedicated_study = true
-[gold]                      # gold shared by the characters of one ruleset and faction
+[gold]                      # see "Ruleset and faction groups" below
 "2/alliance" = 45
 ```
 
@@ -95,12 +95,12 @@ Each character planned gets `characters/<Name>/stock.toml`:
 ```toml
 level = 40
 favor = 300          # Merchant's Favor points
-cash_gold = 25       # old place for gold: prefer [gold] in profile.toml (shared by the group)
+cash_gold = 25       # old place for gold: see "Ruleset and faction groups"
 mining = 0           # Mining skill, if the character mines
 short_farm_ore = 0
 bag_slots = 40       # free normal bag slots while crafting; gives mailbox trips (leave out to skip them)
 reagent_slots = 0    # slots in a reagent bag (materials only, filled first); 0 = none
-keep_greens = false  # without Enchanting: keep green crafts to disenchant on another character
+keep_greens = false  # see "Green crafts" below
 [goals]              # one or two professions: a skill up to 300, or a recipe to craft once
 blacksmithing = 225
 enchanting = "Enchant Bracer - Minor Health"
@@ -112,6 +112,11 @@ enchanting = 95
 ```
 
 `plan --prof NAME:TARGET` overrides `[goals]` for one run.
+
+**Green crafts.** `keep_greens` (default `false`) matters only when the plan has no Enchanting.
+With `true`, green crafts that can be disenchanted are kept for another character's Enchanting
+instead of sold, and the plan counts them at the value of their disenchanting materials. With
+`false` they are sold.
 
 **Report names.** `plan` writes `reports/<date>-<name>-plan-gold.md`, `-plan-value.md`,
 `-guide-gold.md` and `-guide-value.md`, so each character keeps its own set. `<name>` is the

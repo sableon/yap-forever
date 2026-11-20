@@ -111,6 +111,30 @@ class PublishableTests(unittest.TestCase):
             body = ref.read_text(encoding="utf-8")
             self.assertNotIn("<python> -m yap_forever", body, ref.name)
 
+    def test_named_sections_exist(self):
+        """SKILL.md and the coverage page point to a rule by file and section ("Green crafts",
+        step 2); every section named is in the file linked."""
+        link = re.compile(r'\]\((?:references/)?([\w-]+\.md)\)((?:,? (?:and )?(?:step \d|"[^"]+"))*)')
+        checked = 0
+        for page in (SKILL / "SKILL.md", SKILL / "references" / "coverage.md"):
+            for m in link.finditer(page.read_text(encoding="utf-8")):
+                target = (SKILL / "references" / m.group(1)).read_text(encoding="utf-8")
+                for name in re.findall(r'"([^"]+)"', m.group(2)):
+                    self.assertIn(name, target, f"{page.name} -> {m.group(1)}")
+                    checked += 1
+                for step in re.findall(r"step (\d)", m.group(2)):
+                    self.assertIn(f"\n## {step}. ", target, f"{page.name} -> {m.group(1)}")
+                    checked += 1
+        self.assertGreaterEqual(checked, 12)
+
+    def test_skill_keeps_questions_and_links_the_rules(self):
+        """Finding 9: SKILL.md says what to ask and what to run; the rules live once in the references."""
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        for rule in ("cash_gold", '"2/alliance"', "bound on pickup", "bag_slots", "reagent_slots",
+                     "reports/<date>", "150, 225", "study_hint_gold_per_point", "listing depth"):
+            self.assertNotIn(rule, text)
+        self.assertIn("references/coverage.md", text)
+
     def test_skill_reference_links_exist(self):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         refs = set(re.findall(r"references/[\w-]+\.md", text))

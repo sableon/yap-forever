@@ -22,6 +22,7 @@ licence and the credits. Tests and project documents stay at the repository root
 - [references/setup.md](plugin/skills/forever-professions/references/setup.md): first-time setup
 - [references/list-layout.md](plugin/skills/forever-professions/references/list-layout.md): how routes are written
 - [references/game-rules.md](plugin/skills/forever-professions/references/game-rules.md): Forever rules learned in play
+- [references/coverage.md](plugin/skills/forever-professions/references/coverage.md): what the planner covers and what not yet
 
 ## Code
 
