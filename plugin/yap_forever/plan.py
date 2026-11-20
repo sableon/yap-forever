@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from yap_forever import budget as budget_cut
 from yap_forever import gamedata, trainer_text
 from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
 from yap_forever.config import Stock, load_stock
@@ -16,7 +17,7 @@ from yap_forever.profile import report_name
 from yap_forever.quests import QuestPlan, load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
-from yap_forever.shopping import render_shopping
+from yap_forever.shopping import gold_to_bring, render_shopping
 from yap_forever.trips import trip_alternatives
 
 REUSE_ROUNDS = 4
@@ -149,18 +150,35 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     favor = no_favor() if faction == "horde" else load_favor(standing)  # the Favor list is Alliance's
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
+    if once:  # a recipe goal wins over a budget: planned in full, the budget line as without a budget goal
+        target = None
     inputs = PlanInputs(gd=gd, market=market, stock=stock, favor=favor, caps=caps, craft_once=once,
-                        quests=quests, overtime=overtime, reading=reading)
+                        quests=quests, overtime=overtime, reading=reading, order=target.order if target else None)
     routes, same = settle_routes(candidates(inputs), caps)
+    per_mode = {m: inputs for m in routes}  # each route's own targets: a budget cuts each at its own stops
+    cuts: dict[str, budget_cut.BudgetCut] = {}
+    if target is not None:
+        cache = {budget_cut.key(caps): (routes, same)}
+        cuts = {m: budget_cut.cut(inputs, m, target, lambda p: gold_to_bring(p, gd, market, stock), cache)
+                for m in routes}
+        routes = {m: c.plan for m, c in cuts.items()}
+        same = routes["gold"] is routes["value"]
+        per_mode = {m: dataclasses.replace(inputs, caps=c.planned_caps) for m, c in cuts.items()}
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
-    savings = listed_savings(inputs, routes)
+    if cuts:
+        savings = {}
+        for m, route in routes.items():
+            savings.update(listed_savings(per_mode[m], {m: route}))
+    else:
+        savings = listed_savings(inputs, routes)
     table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same)
     today = date.today().isoformat()
     paths.reports.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
     who = f"{report_name(character.name, profile_names)}-" if character else ""
     for m, route in routes.items():
-        alts = trip_alternatives(route, inputs, m)
+        caps = per_mode[m].caps
+        alts = trip_alternatives(route, per_mode[m], m)
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
