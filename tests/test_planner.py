@@ -297,6 +297,25 @@ class PlannerTests(unittest.TestCase):
         p2, *_ = run_with_data([rs[0], rs[2]], BARS)  # only the hammer recipe for Blacksmithing
         self.assertIn(toy.HAMMER, p2.vendor_bought)
 
+    def test_order_levels_first_profession_first(self):
+        rs = [toy.recipe(1, "BS belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),  # a green: disenchanted
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        for order in ((BS, ENCH), (ENCH, BS)):
+            p = run(rs, BARS, order=order)
+            self.assertEqual(p.final_skill, {BS: 225, ENCH: 225})
+            crafts = [s.profession for s in p.steps if s.spell_id != 0]  # disenchant steps excepted
+            first, second = order
+            self.assertLess(max(i for i, x in enumerate(crafts) if x == first),
+                            min(i for i, x in enumerate(crafts) if x == second), order)
+
+    def test_no_order_is_unchanged(self):
+        def rows(p):
+            return [(s.profession, s.skill_from, s.skill_to, s.spell_id) for s in p.steps]
+        p = run(base_recipes(), BARS)
+        self.assertEqual(rows(p), rows(run(base_recipes(), BARS, order=None)))
+        # side by side: the lower profession first, Blacksmithing on a tie
+        self.assertEqual(rows(p)[:4], [(BS, 1, 2, 1), (ENCH, 1, 2, 2), (BS, 2, 3, 1), (ENCH, 2, 3, 2)])
+
 
 def crafts_of(p, prof, spell=None):
     return sum(s.crafts for s in p.steps if s.profession == prof and (spell is None or s.spell_id == spell))

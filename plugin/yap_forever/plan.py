@@ -27,7 +27,8 @@ MIN_SAVING = 100  # copper: below 1 silver the gap is noise from the greedy plan
 class PlanInputs:
     """What every planning round of one character reads: game data, prices, stock, Favor, the targets
     (caps: profession -> skill; craft_once: profession -> recipe crafted once at the end), the quest
-    recipes, and the character's Working Overtime rank and how it reads (see costmodel.skillup_chance)."""
+    recipes, and the character's Working Overtime rank and how it reads (see costmodel.skillup_chance);
+    order: raise the professions one at a time in this order (None: side by side; see planner.plan)."""
     gd: gamedata.GameData
     market: Market
     stock: Stock
@@ -37,6 +38,7 @@ class PlanInputs:
     quests: dict[int, QuestPlan]
     overtime: int = 0
     reading: str = "relative"
+    order: tuple[int, ...] | None = None
 
 
 def unit_value(item: int, gd, market) -> float:
@@ -62,7 +64,7 @@ def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full):
     for _ in range(REUSE_ROUNDS):
         p = plan(gd, valuer, inputs.stock, inputs.favor, quests=inputs.quests, reuse=reuse, caps=inputs.caps,
                  craft_once=inputs.craft_once, exclude=exclude, one_time_in_full=one_time_in_full,
-                 overtime=inputs.overtime, reading=inputs.reading)
+                 overtime=inputs.overtime, reading=inputs.reading, order=inputs.order)
         out.append(p)
         used: dict[int, float] = {}
         for st in p.steps:
