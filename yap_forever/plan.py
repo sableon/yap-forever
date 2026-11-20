@@ -119,6 +119,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     profile); without a character they keep the plain names."""
     overtime = character.working_overtime if character else 0
     gamedata.fetch_all(dest=paths.gamedata, skip=gamedata.TRAINER_FILES)
+    gamedata.prune_stale(paths.gamedata)  # copies of earlier pins
     trainer_info, trainer_note = trainer_text.load_info(paths.gamedata, faction)
     quests = load_quest_plans()
     gd = gamedata.safe_requirements(gamedata.load_gamedata(paths.gamedata, professions=goals), skip=quests)

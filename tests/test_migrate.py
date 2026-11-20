@@ -40,7 +40,8 @@ class MigrateTests(unittest.TestCase):
         self.assertFalse((self.dest.character("Bo") / "bags.toml").exists())
         self.assertEqual(profile.load_house(self.dest.house), 4242)
         self.assertTrue(self.dest.prices.exists())
-        self.assertTrue((self.dest.gamedata / "Recipes.lua").exists())
+        # game data of an unknown pin is not copied: plan downloads the pinned files
+        self.assertFalse((self.dest.gamedata / "Recipes.lua").exists())
         prof = profile.load_profile(self.dest.profile)
         self.assertEqual(set(prof.characters), {"Ana", "Bo"})
         self.assertEqual(prof.faction, "alliance")

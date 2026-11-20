@@ -278,6 +278,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(text.count("Trainer names are left out"), 1)
         self.assertIn("foreverNpcDB.lua is damaged", text)
 
+    def test_plan_with_a_damaged_game_data_file_names_it_without_a_traceback(self):
+        self.ready_home()
+        bad = self.paths.gamedata / "Vendor.lua"
+        bad.write_text("<html>\n<body>Bad gateway</body>\n</html>\n", encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertNotIn("Traceback", out)
+        self.assertIn(str(bad), out)
+        self.assertIn("delete it", out)
+
     def test_plan_offline_with_trainer_files_missing_still_renders(self):
         import urllib.error
         from unittest import mock
