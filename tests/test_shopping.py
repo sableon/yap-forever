@@ -208,20 +208,32 @@ class BringListTests(unittest.TestCase):
         self.assertIn(f"10 {gd.name(L)} (yours)", bring_text(p, gd, trip, None, trainer_trips="one_go"))
 
     def test_as_needed_unchanged(self):
+        # the outputs main (e94cb24) gives for this fixture, before trainer_trips existed
         from yap_forever.guide import render_guide
         from yap_forever.shopping import bring_list, bring_text
         from yap_forever.trips import trips
         p, gd = self.recipe_visit_plan()
         start = {BS: 225}
+        text = (" Bring: 20 Copper Bar (from the bank), 40 Copper Bar (from the mail): enough to craft to 235 at the "
+                "trainer (3 bag slots); the town may have no auction house, mailbox or bank, so buy and collect before "
+                "you go.")
         for bags in (None, 16):
-            self.assertEqual(bring_list(p, gd, self.trip(), bags, start_skills=start, trainer_trips="as_needed"),
-                             bring_list(p, gd, self.trip(), bags, start_skills=start))
-            self.assertEqual(bring_text(p, gd, self.trip(), bags, start_skills=start, trainer_trips="as_needed"),
-                             bring_text(p, gd, self.trip(), bags, start_skills=start))
-        self.assertEqual(trips(p, gd, start, "as_needed"), trips(p, gd, start))
+            for kw in ({}, {"trainer_trips": "as_needed"}):
+                self.assertEqual(bring_list(p, gd, self.trip(), bags, start_skills=start, **kw),
+                                 (235, [(S, 20, "bank"), (S, 40, "mail")]))
+                self.assertEqual(bring_text(p, gd, self.trip(), bags, start_skills=start, **kw), text)
+        for found in (trips(p, gd, start), trips(p, gd, start, "as_needed")):
+            self.assertEqual([(x.kind, x.skill, x.what, x.cost, x.cap, x.spells) for x in found],
+                             [("rank", 225, "Blacksmithing rank to 300", 9000, 300, ()), ("recipe", 235, "BS two", 0, 300, (2,))])
         args = (p, gd, toy.market({S: [(10, 1000)]}), toy.stock(skills=start), {BS: 300})
-        self.assertEqual(render_guide(*args, trainer_trips="as_needed"), render_guide(*args))
-        self.assertIn("enough to craft to 235 at the trainer", render_guide(*args))
+        for text in (render_guide(*args), render_guide(*args, trainer_trips="as_needed")):
+            self.assertEqual([line for line in text.splitlines() if line.startswith("- **Trip:**")],
+                             ["- **Trip:** Blacksmithing rank to 300: the trainer is in a set town (the planner doesn't "
+                              "say where yet). Bring: 60 Copper Bar (from the mail): enough to craft to 235 at the trainer "
+                              "(3 bag slots); the town may have no auction house, mailbox or bank, so buy and collect "
+                              "before you go.",
+                              "- **Trip:** back to the Master Blacksmith in a set town (the planner doesn't say where "
+                              "yet), at 235 for BS two."])
 
     def warning(self, p, gd, bags, trainer_trips="one_go"):
         from yap_forever.shopping import bring_text
