@@ -4,7 +4,7 @@ Trainer recipes are not trips (every trainer teaches the same list), nor are the
 (Expert and Journeyman trainers are in the main cities: `city_ranks` lists those stops), nor AH
 patterns (they come by mail).
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.trainers import RANK_BY_CAP
@@ -49,6 +49,75 @@ def city_ranks(plan) -> list["Trip"]:
     """The ranks below REMOTE_RANK, trained at any trainer of that rank in a capital: stops, not trips."""
     return [Trip(s, prof, "city", f"{PROFESSIONS.get(prof, prof)} rank to {cap}", None, fee, cap)
             for prof, s, cap, fee in plan.ranks if cap < REMOTE_RANK]
+
+
+@dataclass
+class Visit:
+    """A trainer visit the route makes, and the trainer recipes learned there.
+    kind: "rank" (a rank training: `remote` for Artisan and Master, else a capital), "recipe" (a trip to an
+    Artisan or Master trainer only to learn recipes) or "city" (the same, at an Expert or Journeyman trainer
+    in a capital). rank_cap: the cap of the trainer's rank. learn: trainer recipes the route needs later
+    whose required skill is reached by `skill` (learn ahead). if_missing: recipes already reachable at the
+    start skill (the stock doesn't say which are known), listed at the first visit that teaches them.
+    fallback: spell -> the cap of the lowest rank that teaches it, for recipes below this trainer's rank."""
+    profession: int
+    skill: int
+    rank_cap: int
+    remote: bool
+    kind: str
+    learn: list[int] = field(default_factory=list)
+    if_missing: list[int] = field(default_factory=list)
+    fallback: dict[int, int] = field(default_factory=dict)
+
+
+def _visits(plan, gd, start_skills: dict[int, int]) -> tuple[list[Visit], dict[int, list[int]]]:
+    """(visits in skill order, profession -> recipes to know before the first visit that teaches them)."""
+    ranks = [Visit(prof, s, cap, cap >= REMOTE_RANK, "rank") for prof, s, cap, _fee in plan.ranks]
+    out = sorted(ranks, key=lambda v: v.skill)
+    learns = sorted(((prof, s, spell, gd.recipes[spell].required_skill) for prof, s, spell, how in plan.learn_log
+                     if how == "trainer" and spell in gd.recipes), key=lambda x: x[1])
+    known: list[tuple[int, int, int, int]] = []
+
+    def first(prof, req, rank, at):
+        return next((v for v in out if v.profession == prof and req <= v.skill <= at and v.rank_cap >= rank), None)
+
+    def add(v, into, spell, rank):
+        into.append(spell)
+        if rank < v.rank_cap:
+            v.fallback[spell] = rank
+
+    for prof, s, spell, req in learns:
+        if req <= max(1, start_skills.get(prof, 1)):  # reachable at the start: never a visit of its own
+            known.append((prof, s, spell, req))
+            continue
+        rank = recipe_rank_cap(req)
+        v = first(prof, req, rank, s)
+        if v is None:
+            v = Visit(prof, s, rank, rank >= REMOTE_RANK, "recipe" if rank >= REMOTE_RANK else "city")
+            out.append(v)
+            out.sort(key=lambda v: v.skill)  # stable: a visit made at a rank training's skill comes after it
+        add(v, v.learn, spell, rank)
+    before: dict[int, list[int]] = {}
+    for prof, s, spell, req in known:
+        rank = recipe_rank_cap(req)
+        v = first(prof, req, rank, s)
+        if v is None:
+            before.setdefault(prof, []).append(spell)
+        else:
+            add(v, v.if_missing, spell, rank)
+    return out, before
+
+
+def visits(plan, gd, start_skills: dict[int, int]) -> list[Visit]:
+    """The trainer visits of the route, in skill order: each rank training, and a visit for each trainer
+    recipe that no earlier visit can teach (see Visit). start_skills: profession -> the route's start skill."""
+    return _visits(plan, gd, start_skills)[0]
+
+
+def before_start(plan, gd, start_skills: dict[int, int]) -> dict[int, list[int]]:
+    """profession -> trainer recipes already reachable at the start skill that the route uses before any
+    visit that teaches them: the player should know them before starting."""
+    return _visits(plan, gd, start_skills)[1]
 
 
 def trip_alternatives(base, inputs, mode) -> dict[int, float | None]:
