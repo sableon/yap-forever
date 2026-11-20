@@ -1,7 +1,9 @@
 name: tests
 
 on:
-  push:
+  push:  # a pull request's branch is tested by pull_request alone
+    branches: [main]
+    tags: ['v*']
   pull_request:
 
 permissions:
