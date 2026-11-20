@@ -39,25 +39,29 @@ class StockTests(unittest.TestCase):
         self.assertEqual(s.level, 37)
         self.assertEqual(s.mining, 171)
         self.assertEqual(s.short_farm_ore, 200)
-        self.assertIsNone(s.marker)
-        self.assertEqual(s.target, 225)
         self.assertEqual(s.mining_goal, 171)
 
-    def test_target_and_mining_goal(self):
+    def test_mining_goal_and_an_older_target_key(self):
+        # target (both professions' skill) came from the personal planner; [goals] replaced it, and a
+        # file that still has one loads as before
         text = "target = 300\nmining_goal = 250\n" + STOCK
         with tempfile.TemporaryDirectory() as d:
             s = config.load_stock(write(d, "stock.toml", text, 0o644))
-        self.assertEqual((s.target, s.mining_goal), (300, 250))
+        self.assertEqual(s.mining_goal, 250)
+        self.assertFalse(hasattr(s, "target"))
         self.assertIsNone(s.quest_item_sales)
         s2 = config.load_stock(write(tempfile.mkdtemp(), "stock.toml", "quest_item_sales = 20\n" + STOCK, 0o644))
         self.assertEqual(s2.quest_item_sales, 20)
 
-    def test_marker_set(self):
-        text = STOCK.replace("item_id = 0", "item_id = 2589").replace(
-            "buyout_copper = 0", "buyout_copper = 71313")
+    def test_a_filled_in_marker_table_from_an_older_file_still_loads(self):
+        # [marker] came from the personal planner (the auction house probe now takes --item and
+        # --buyout); nothing reads it, and a file that still has one loads as before
+        text = STOCK.replace("item_id = 0", "item_id = 1111").replace(
+            "buyout_copper = 0", "buyout_copper = 2222")
         with tempfile.TemporaryDirectory() as d:
             s = config.load_stock(write(d, "stock.toml", text, 0o644))
-        self.assertEqual(s.marker, (2589, 71313))
+        self.assertEqual((s.favor, s.items[2841]), (245, 238))
+        self.assertFalse(hasattr(s, "marker"))
 
 
     def test_a_bad_value_names_the_file_and_the_key(self):

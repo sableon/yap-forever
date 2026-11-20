@@ -513,7 +513,7 @@ class BudgetLineTests(unittest.TestCase):
         gd = toy.gamedata(recipes())
         st = toy.stock(items, shared=shared_items)
         p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
-        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, budget=budget)
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225}, budget=budget)
         return p, text
 
     def cash_line(self, text):
@@ -552,7 +552,8 @@ class BudgetLineTests(unittest.TestCase):
         gd = toy.gamedata(recipes())
         st = toy.stock()
         p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
-        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, notes=["ann.toml can't be read"])
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225},
+                      notes=["ann.toml can't be read"])
         self.assertEqual(text.count("- ann.toml can't be read"), 1)
 
     def test_a_sum_is_said_once_in_the_notes(self):
@@ -618,7 +619,7 @@ class GuideTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock(shared={"Ann": {S: 100}})
         p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 30})
-        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR)
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
         self.assertNotIn(f"{p.used_mail[S][0][1]} Copper Bar (mail from Ann)", text)  # the buffered count instead
         self.assertIn(f"{shopping.mailed(p, gd, st)[S][0][1]} Copper Bar (mail from Ann)", text)
 

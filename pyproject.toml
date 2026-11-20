@@ -7,7 +7,8 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["F", "B", "E7", "E9", "PLE", "UP", "SIM", "RUF", "S"]
-# C90 (complexity) is left out until planner.plan is split (review finding 5, part C).
+# C90 (complexity) is left out: planner.plan is split, but report._rest, guide._route and a few loaders
+# are still over the default limit.
 ignore = [
     "RUF001", "RUF002", "RUF003",  # the guides use en dashes, minus and multiplication signs on purpose
     "S310",  # urlopen only gets the pinned https URLs and the Blizzard API

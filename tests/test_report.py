@@ -17,7 +17,7 @@ def sample():
     gd = toy.gamedata(rs)
     st = toy.stock({toy.COPPER_BAR: 5})
     m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.STONE: [(50, 3)]})
-    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR), m, gd, st
+    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 225, 333: 225}), m, gd, st
 
 
 class VerdictTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class PricesHeaderTests(unittest.TestCase):
         p, m, gd, st = sample()
         for k, v in fields.items():
             setattr(m, k, v)
-        return render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, today=today)
+        return render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225}, today=today)
 
     def test_api_prices_keep_todays_report(self):
         text = self.render(datetime.date(2026, 11, 20))
@@ -64,7 +64,7 @@ class PricesHeaderTests(unittest.TestCase):
 class RenderTests(unittest.TestCase):
     def test_report_sections_in_order(self):
         p, m, gd, st = sample()
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         positions = [text.index(f"## {s}\n") for s in SECTIONS]
         self.assertEqual(positions, sorted(positions))
         self.assertEqual(len(SECTIONS), 9)
@@ -72,13 +72,13 @@ class RenderTests(unittest.TestCase):
     def test_report_has_no_secrets(self):
         creds = Credentials("myclientid", "s3cr3tvalue", "eu")
         p, m, gd, st = sample()
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertNotIn(creds.client_id, text)
         self.assertNotIn(creds.client_secret, text)
 
     def test_route_lists_steps(self):
         p, m, gd, st = sample()
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertIn("BS basic", text)
         self.assertIn("Ench basic", text)
 
@@ -103,8 +103,8 @@ class BankGreensReportTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock({toy.BELT: 30})
         m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.DUST: [(300, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=40)
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 40, 333: 40})
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertRegex(text, r"\| Enchanting \| 1→\d+ \| Disenchant greens \| \d+ \| 0s 0c \| 0s 0c \|")
         self.assertIn("Enchanting 1: disenchant 30 Runed Copper Belt from your bank", text)
 
@@ -114,8 +114,8 @@ class BankGreensReportTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock({toy.BELT: 30})
         m = toy.market({toy.COPPER_BAR: [(100, 100000)], toy.DUST: [(300, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=40)
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 40, 333: 40})
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertNotIn("wait in the bank or mail", text)
         self.assertIn("disenchanted first", text)
 
@@ -127,8 +127,8 @@ class BufferTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock(skills={333: 60})
         m = toy.market({toy.COPPER_BAR: [(100, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=60)
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 60, 333: 60})
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertIn("| Blacksmithing | 1→60 | BS basic | 59 |", text)
 
     def test_route_crafts_match_guide_buffer(self):
@@ -139,8 +139,8 @@ class BufferTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         st = toy.stock()
         m = toy.market({toy.COPPER_BAR: [(100, 100000)]})
-        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, cap=11)
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 11, 333: 11})
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         yellow = [s for s in p.steps if s.spell_id == 1 and s.crafts > 1]
         self.assertTrue(yellow)
         for s in yellow:
@@ -161,7 +161,7 @@ class AnyPairReportTests(unittest.TestCase):
     def test_report_keeps_switch_order_for_the_main_pair(self):
         from yap_forever.planner import Plan
         p = Plan(final_skill={164: 40, 333: 40})
-        text = render(p, "Switch now", toy.market(), toy.gamedata([]), toy.stock(), toy.NO_FAVOR)
+        text = render(p, "Switch now", toy.market(), toy.gamedata([]), toy.stock(), toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertIn("## Switch order", text)
 
     def test_verdict_for_other_pairs(self):
@@ -173,11 +173,11 @@ class TalentNoteTests(unittest.TestCase):
     def test_data_notes_state_the_talents(self):
         from yap_forever.profile import Character
         p, m, gd, st = sample()
-        none = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR)
+        none = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225})
         self.assertNotIn("Working Overtime", none)
         self.assertNotIn("Dedicated Study", none)
         c = Character("A B", working_overtime=5, dedicated_study=True)
-        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, character=c, reading="points")
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 225, 333: 225}, character=c, reading="points")
         notes = text[text.index("## Data notes"):]
         self.assertIn("Working Overtime 5/5, read as +20 percentage points (unconfirmed in game).", notes)
         self.assertIn("Dedicated Study: one free point a day goes to your lowest profession;", notes)

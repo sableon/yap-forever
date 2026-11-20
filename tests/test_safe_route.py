@@ -100,28 +100,31 @@ class SafeRouteTests(unittest.TestCase):
         self.assertEqual(resolve_goals({BS: Goal(recipe="BS cheap")}, listed), ({BS: 20}, {BS: 3}))
 
     def test_plan_route_on_safe_data_learns_the_trainer_recipe_at_the_inferred_skill(self):
-        from yap_forever.plan import plan_route
+        from yap_forever.plan import PlanInputs, plan_route
         gd = safe_requirements(toy.gamedata(cheap_recipes()))
-        p = plan_route(gd, toy.market({**BARS, **IRON}), toy.stock(), toy.NO_FAVOR, {BS: 60}, {}, "gold", {})
+        p = plan_route(PlanInputs(gd=gd, market=toy.market({**BARS, **IRON}), stock=toy.stock(), favor=toy.NO_FAVOR,
+                                  caps={BS: 60}, craft_once={}, quests={}), "gold")
         self.assertEqual(learned_at(p, 3), 50)
 
 
 class ListedSavingTests(unittest.TestCase):
     def setUp(self):
         from yap_forever.compare import settle_routes
-        from yap_forever.plan import candidates
-        self.args = (toy.market({**BARS, **IRON}), toy.stock(), toy.NO_FAVOR, {BS: 60}, {}, {})
+        from yap_forever.plan import PlanInputs, candidates
         self.settle_routes, self.candidates = settle_routes, candidates
+        market, stock = toy.market({**BARS, **IRON}), toy.stock()
+        self.inputs_for = lambda gd, m=market: PlanInputs(
+            gd=gd, market=m, stock=stock, favor=toy.NO_FAVOR, caps={BS: 60}, craft_once={}, quests={})
 
     def routes(self, gd):
-        return self.settle_routes(self.candidates(gd, *self.args), {BS: 60})[0]
+        return self.settle_routes(self.candidates(self.inputs_for(gd)), {BS: 60})[0]
 
     def test_saving_is_the_listed_routes_gap_in_each_routes_own_measure(self):
         from yap_forever.plan import listed_savings
         gd = safe_requirements(toy.gamedata(cheap_recipes()))
         safe = self.routes(gd)
         listed = self.routes(gamedata.listed_requirements(gd))
-        got = listed_savings(gd, safe, *self.args)
+        got = listed_savings(self.inputs_for(gd), safe)
         self.assertEqual(got["gold"], safe["gold"].cash_total - listed["gold"].cash_total)
         self.assertEqual(got["value"], safe["value"].economic_total - listed["value"].economic_total)
         self.assertGreater(got["gold"], 100)
@@ -129,29 +132,29 @@ class ListedSavingTests(unittest.TestCase):
     def test_no_saving_when_the_listing_is_no_cheaper(self):
         from yap_forever.plan import listed_savings
         gd = safe_requirements(toy.gamedata(cheap_recipes(inferred=None)))
-        self.assertEqual(listed_savings(gd, self.routes(gd), *self.args), {})
+        self.assertEqual(listed_savings(self.inputs_for(gd), self.routes(gd)), {})
         dear = cheap_recipes()
         dear[-1].reagents = {toy.COPPER_BAR: 3}  # costlier than BS basic: the listing changes nothing
         gd = safe_requirements(toy.gamedata(dear))
-        self.assertEqual(listed_savings(gd, self.routes(gd), *self.args), {})
+        self.assertEqual(listed_savings(self.inputs_for(gd), self.routes(gd)), {})
 
     def test_a_gap_under_one_silver_gives_no_line(self):
         from unittest import mock
 
         from yap_forever import plan as plan_mod
         market = toy.market({**BARS, toy.IRON_BAR: [(99, 100000)]})  # iron 1c under copper: a tiny gap
-        args = (market, *self.args[1:])
         gd = safe_requirements(toy.gamedata(cheap_recipes()))
-        safe = self.settle_routes(self.candidates(gd, *args), {BS: 60})[0]
-        self.assertEqual(plan_mod.listed_savings(gd, safe, *args), {})
+        inputs = self.inputs_for(gd, market)
+        safe = self.settle_routes(self.candidates(inputs), {BS: 60})[0]
+        self.assertEqual(plan_mod.listed_savings(inputs, safe), {})
         with mock.patch.object(plan_mod, "MIN_SAVING", 1):  # the same gap is there, only the floor hides it
-            self.assertTrue(plan_mod.listed_savings(gd, safe, *args))
+            self.assertTrue(plan_mod.listed_savings(inputs, safe))
 
     def test_quest_recipes_are_left_alone_and_claim_no_saving(self):
         from yap_forever.plan import listed_savings
         gd = safe_requirements(toy.gamedata(cheap_recipes()), skip={3})
         self.assertEqual((gd.recipes[3].required_skill, gd.recipes[3].listed_skill), (20, None))
-        self.assertEqual(listed_savings(gd, self.routes(gd), *self.args), {})
+        self.assertEqual(listed_savings(self.inputs_for(gd), self.routes(gd)), {})
 
     def test_the_line_names_the_amount_in_guide_gold(self):
         from yap_forever.guide import gold
@@ -216,10 +219,10 @@ class GuideNotesTests(unittest.TestCase):
         gd, st = toy.gamedata(base_recipes()), toy.stock()
         p = toy_plan([100])
         line = "If trainers offer a saving, this route is cheaper."
-        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, saving_line=line)
+        text = render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225}, saving_line=line)
         self.assertEqual(text.count(line), 1)
         self.assertGreater(text.index(line), text.index("## Data notes"))
-        self.assertNotIn(line, render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR))
+        self.assertNotIn(line, render(p, verdict(p, st), toy.market(BARS), gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225}))
 
 
 class StudyHintTests(unittest.TestCase):

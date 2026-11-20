@@ -20,7 +20,8 @@ def run(recipes, listings=None, stock=None, favor=toy.NO_FAVOR, quest=(), cap=22
         **talents):
     gd = toy.gamedata(recipes, quest_items=quest)
     st = stock or toy.stock()
-    return plan(gd, Valuer(toy.market(listings), gd, st), st, favor, cap=cap, quests=quests, reuse=reuse,
+    return plan(gd, Valuer(toy.market(listings), gd, st), st, favor, caps={BS: cap, ENCH: cap}, quests=quests,
+                reuse=reuse,
                 **talents)
 
 
@@ -122,7 +123,7 @@ class PlannerTests(unittest.TestCase):
         gd.items[toy.BELT] = dataclasses.replace(gd.items[toy.BELT], item_level=50)
         st = toy.stock()
         market = toy.market({**BARS, toy.BELT: [(5000, 10)]})
-        p = plan(gd, Valuer(market, gd, st), st, toy.NO_FAVOR)
+        p = plan(gd, Valuer(market, gd, st), st, toy.NO_FAVOR, caps={BS: 225, ENCH: 225})
         self.assertEqual(p.held_for_de, {})
         self.assertGreater(p.sale_proceeds, 0)
 
@@ -137,7 +138,7 @@ class PlannerTests(unittest.TestCase):
         gd.items[toy.BELT] = dataclasses.replace(gd.items[toy.BELT], item_level=50)
         st = toy.stock()
         market = toy.market({**BARS, toy.BELT: [(5000, 10)]})
-        p = plan(gd, Valuer(market, gd, st), st, toy.NO_FAVOR)
+        p = plan(gd, Valuer(market, gd, st), st, toy.NO_FAVOR, caps={BS: 225, ENCH: 225})
         self.assertIn(toy.BELT, p.held_for_de)
         self.assertEqual(p.sale_proceeds, 0)
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from yap_forever.config import STATIC_DIR
 from yap_forever.costmodel import BARS, ORES, STONES
-from yap_forever.gamedata import BS, ENCH, PROFESSIONS
+from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
 from yap_forever import trainer_text
 from yap_forever.prices import source_line
@@ -95,10 +95,10 @@ def _title(caps, route) -> str:
     return title + (f" — {route} route" if route else "")
 
 
-def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", alts=None,
+def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=None,
                  character=None, reading="relative", today=None, trainer_info=None, trainer_note="",
                  saving_line="", mode="gold", study_hint_gold_per_point=100, extra_notes=()) -> str:
-    """caps: profession -> target (default Blacksmithing and Enchanting to the stock's target).
+    """caps: profession -> target skill (see planner.resolve_goals).
     alts: recipe spell -> what skipping its trip costs (None: no other way), from trips.trip_alternatives.
     character, reading: the profile.Character and Working Overtime reading, for the talent lines.
     today: the date the staleness of imported prices is judged against (default: today).
@@ -108,7 +108,6 @@ def render_guide(plan, gd, market, stock, caps=None, route="", comparison="", al
     mode: "gold" or "value", the measure the route was planned for (a row's cost per point is in it).
     study_hint_gold_per_point: a row of the lowest profession at this many gold a point gets a Dedicated Study hint.
     extra_notes: lines for the Notes section (a character's stock file that was left out of the plan)."""
-    caps = caps or {BS: stock.target, ENCH: stock.target}
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
     if prices_line:
