@@ -91,7 +91,7 @@ class Group:
         character being planned included). With no entry and no other character, it is this character's
         own figure: not shared, and not a sum."""
         if self.gold is not None:
-            return Budget(int(round(self.gold * COPPER_PER_GOLD)), self.label)
+            return Budget(round(self.gold * COPPER_PER_GOLD), self.label)
         alone = not self.others
         return Budget(stock.cash + sum(s.cash for s in self.others.values()), self.label, not alone, not alone)
 

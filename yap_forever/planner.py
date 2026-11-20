@@ -107,7 +107,7 @@ def apply_favor(recipes: dict, favor) -> dict:
 
     Forever sells these as scroll items for Favor, so game data may call them "scroll"."""
     out = dict(recipes)
-    for spell, price in favor.recipes.items():
+    for spell in favor.recipes:
         r = out.get(spell)
         if not r or r.source not in ("unknown", "scroll"):
             continue

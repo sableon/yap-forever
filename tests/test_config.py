@@ -49,7 +49,7 @@ class StockTests(unittest.TestCase):
             s = config.load_stock(write(d, "stock.toml", text, 0o644))
         self.assertEqual((s.target, s.mining_goal), (300, 250))
         self.assertIsNone(s.quest_item_sales)
-        s2 = config.load_stock(write(d2 := tempfile.mkdtemp(), "stock.toml", "quest_item_sales = 20\n" + STOCK, 0o644))
+        s2 = config.load_stock(write(tempfile.mkdtemp(), "stock.toml", "quest_item_sales = 20\n" + STOCK, 0o644))
         self.assertEqual(s2.quest_item_sales, 20)
 
     def test_marker_set(self):

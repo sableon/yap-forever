@@ -39,7 +39,7 @@ _PROFESSION_BY_WORD = {
     "Tailor": 197, "Tailoring": 197,
 }
 _PEOPLE = {"Alchemist", "Blacksmith", "Enchanter", "Engineer", "Leatherworker", "Tailor"}
-_TITLE = re.compile(r"(?:(%s) )?(%s)( Trainer)?" % ("|".join(RANKS), "|".join(_PROFESSION_BY_WORD)))
+_TITLE = re.compile(rf"(?:({'|'.join(RANKS)}) )?({'|'.join(_PROFESSION_BY_WORD)})( Trainer)?")
 
 # Fields of an NPC row in foreverNpcDB.lua
 _NAME, _SPAWNS, _ZONE, _FRIENDLY, _TITLE_AT, _FLAGS = 0, 6, 8, 12, 13, 14

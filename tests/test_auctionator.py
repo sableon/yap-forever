@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from yap_forever import auctionator, cli, settings
+from yap_forever import cli, settings
 from yap_forever.auctionator import cbor_decode, lua_string_at, realms, load_auctionator
 from yap_forever.prices import Market
 

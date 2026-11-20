@@ -1,0 +1,22 @@
+# Developer tooling only: the planner itself needs nothing but the Python standard library.
+# CI runs `ruff check` (the lint job in .github/workflows/tests.yml).
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "B", "E7", "E9", "PLE", "UP", "SIM", "RUF", "S"]
+# C90 (complexity) is left out until planner.plan is split (review finding 5, part C).
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # the guides use en dashes, minus and multiplication signs on purpose
+    "S310",  # urlopen only gets the pinned https URLs and the Blizzard API
+]
+
+[tool.ruff.lint.per-file-ignores]
+"yap_forever/bnet.py" = ["S105"]  # TOKEN_URL is a URL, not a password
+"tests/*" = [
+    "S",  # tests run subprocesses, write temporary files and use fake secrets
+    "RUF005", "RUF059", "SIM117", "E731", "E741", "RUF007", "RUF012",  # style in test set-up, not bugs
+    "B023", "B905",  # helpers called inside the same loop pass; zips over lists of one length
+]

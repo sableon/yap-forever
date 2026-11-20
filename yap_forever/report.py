@@ -64,7 +64,7 @@ def render(plan, verdict_text, market, gd, stock, favor, caps=None, character=No
     if plan.farm:
         out.append(f"Mining still needed for {sum(plan.farm.values())} ore "
                    f"(a short farm is up to {stock.short_farm_ore}, set in stock.toml).")
-    for prof, reason in plan.stall_reasons.items():
+    for reason in plan.stall_reasons.values():
         out.append(f"- Stops early: {reason}.")
     final = ", ".join(f"{PROFESSIONS[p]} {s}" for p, s in plan.final_skill.items())
     out.append(f"Planned to: {final}.")

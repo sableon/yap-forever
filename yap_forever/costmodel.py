@@ -51,7 +51,7 @@ def skillup_chance(skill: int, t: tuple[int, int, int, int], overtime: int = 0,
 
 
 def money(c: float) -> str:
-    c = int(round(c))
+    c = round(c)
     sign = "-" if c < 0 else ""
     c = abs(c)
     g, s, cp = c // 10000, c // 100 % 100, c % 100

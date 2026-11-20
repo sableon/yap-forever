@@ -12,7 +12,7 @@ from pathlib import Path
 from yap_forever import auctionator, bnet, prices, probe, profile, remote, settings
 from yap_forever.settings import Paths, command_hint
 
-__all__ = ["main", "command_hint"]
+__all__ = ["command_hint", "main"]
 
 PROFILE_TEMPLATE = """# yap-forever profile: edit to match your account.
 region = "eu"        # eu, us, kr or tw

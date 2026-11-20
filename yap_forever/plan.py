@@ -29,7 +29,7 @@ def unit_value(item: int, gd, market) -> float:
         if r.output and r.output[0] == item:
             parts = [market.min_price(i) or gd.vendor_prices.get(i) for i in r.reagents]
             if all(parts):
-                opts.append(sum(p * q for p, q in zip(parts, r.reagents.values())) / r.output[1])
+                opts.append(sum(p * q for p, q in zip(parts, r.reagents.values(), strict=True)) / r.output[1])
     return min(opts) if opts else 0
 
 

@@ -509,7 +509,6 @@ class GroupTests(unittest.TestCase):
 
 class BudgetLineTests(unittest.TestCase):
     def render(self, budget, items=None, shared_items=None):
-        from yap_forever.planner import Plan
         from yap_forever.report import render, verdict
         gd = toy.gamedata(recipes())
         st = toy.stock(items, shared=shared_items)

@@ -175,7 +175,7 @@ def _stock(d: dict) -> Stock:
     return Stock(
         items=items,
         favor=whole("favor", 0),
-        cash=int(round(_number(d.get("cash_gold", 0), "cash_gold") * 10000)),
+        cash=round(_number(d.get("cash_gold", 0), "cash_gold") * 10000),
         level=whole("level", 1),
         mining=whole("mining", 0),
         short_farm_ore=whole("short_farm_ore", 200),
