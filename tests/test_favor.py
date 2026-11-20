@@ -14,8 +14,8 @@ class FavorCatalogueTests(unittest.TestCase):
     def test_friendly_adds_23(self):
         self.assertEqual(len(load_favor("Friendly").recipes), len(NEUTRAL_IDS) + 23)
 
-    def test_honored_adds_all_28(self):
-        self.assertEqual(len(load_favor("Honored").recipes), len(NEUTRAL_IDS) + 28)
+    def test_honored_adds_all_29(self):
+        self.assertEqual(len(load_favor("Honored").recipes), len(NEUTRAL_IDS) + 29)
 
     def test_turnins_do_not_depend_on_standing(self):
         self.assertEqual(load_favor("Neutral").turnins, load_favor("Exalted").turnins)

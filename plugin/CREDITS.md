@@ -17,7 +17,7 @@ when it first plans; none of that data is stored in this repository.
 
 | File | What | Source |
 |---|---|---|
-| `favor.toml` | Merchant's Favor recipes and crate turn-ins (Alliance, Blacksmithing and Enchanting) | method.gg Merchant's Favor guide, wowhandbook.com, foreverchanges.pro (read 2026-11-10) |
+| `favor.toml` | Merchant's Favor recipes and crate turn-ins (Alliance, Blacksmithing and Enchanting) | method.gg Merchant's Favor guide, wowhandbook.com, foreverchanges.pro (read 2026-11-10); standings checked at the Alliance vendors 2026-11-20 |
 | `disenchant.toml` | Disenchanting results for green items | Classic disenchant tables, used as estimates |
 | `ore.toml` | Ore, bars and the Mining skill for each | Classic data with Forever's mithril change (Mining 175) |
 | `quest_plans.toml` | Blacksmithing plans learned from quests | wow-professions.com Forever Blacksmithing guide (2026-11) |
