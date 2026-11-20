@@ -17,6 +17,7 @@ REGIONS = ("eu", "us", "kr", "tw")
 FACTIONS = ("alliance", "horde")
 OVERTIME_READINGS = ("relative", "points")
 MAX_OVERTIME = 5
+TRAINER_TRIPS = ("as_needed", "one_go")  # how a route uses a remote trainer: come back as needed, or level there in one go
 
 
 @dataclass
@@ -27,6 +28,7 @@ class Character:
     dedicated_study: bool = False  # Dedicated Study talent taken
     ruleset: int | None = None  # None = the profile's ruleset
     faction: str | None = None  # None = the profile's faction
+    trainer_trips: str = "as_needed"  # "as_needed" or "one_go" (see trips.visits)
 
 
 @dataclass
@@ -147,7 +149,9 @@ def load_profile(path: Path) -> Profile:
         own_faction = c.get("faction")
         if "faction" in c:
             _check(f"characters.{name}.faction", own_faction, FACTIONS)
-        chars[name] = Character(name, standing, overtime, study, own_ruleset, own_faction)
+        trips = c.get("trainer_trips", "as_needed")
+        _check(f"characters.{name}.trainer_trips", trips, TRAINER_TRIPS)
+        chars[name] = Character(name, standing, overtime, study, own_ruleset, own_faction, trips)
     return Profile(region, int(d.get("ruleset", 2)), faction, chars, reading, hint,
                    _gold_table(d["gold"]) if "gold" in d else {})
 

@@ -168,6 +168,26 @@ class ProfileTests(unittest.TestCase):
                 profile.load_house(Path(d) / "house.json")
         self.assertIn("probe", str(cm.exception))
 
+    def test_trainer_trips_default(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, EXAMPLE))
+        self.assertEqual(prof.characters["Main"].trainer_trips, "as_needed")
+        self.assertEqual(profile.TRAINER_TRIPS, ("as_needed", "one_go"))
+
+    def test_trainer_trips_one_go(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, EXAMPLE + 'trainer_trips = "one_go"\n'))
+        self.assertEqual(prof.characters["Main"].trainer_trips, "one_go")
+
+    def test_bad_trainer_trips_names_key(self):
+        for bad in ('"sometimes"', "true", "1"):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ValueError) as cm:
+                    profile.load_profile(write(d, EXAMPLE + f"trainer_trips = {bad}\n"))
+                self.assertIn("characters.Main.trainer_trips", str(cm.exception))
+                self.assertIn("profile.toml", str(cm.exception))
+                self.assertIn("as_needed, one_go", str(cm.exception))
+
 
 class ApiShapeTests(unittest.TestCase):
     def test_namespace_us(self):
