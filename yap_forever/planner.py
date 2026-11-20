@@ -182,28 +182,6 @@ class _Route:
         learned, produced, held, skipped = self.learned, self.produced, self.held, self.skipped
         soft_stalls, ench_reagents, held_mail = self.soft_stalls, self.ench_reagents, self.held_mail
 
-        def release_held(where=""):
-            released = False
-            if not has_ench:
-                return released
-            for item in list(held):
-                gate = de_skill_needed(gd.items[item].item_level)
-                if skill[ENCH] >= gate:
-                    n = held.pop(item)
-                    for mat, per in de_yield(gd.items[item]).items():
-                        pools.made[mat] = pools.made.get(mat, 0) + n * per
-                        p.de_materials[mat] = p.de_materials.get(mat, 0) + n * per
-                    if item in held_mail:  # say which part is mailed, and by whom
-                        mailed_n, who = held_mail.pop(item)
-                        src = (f" (mail from {who})" if mailed_n >= n - 1e-9
-                               else f" ({n - mailed_n:.0f} your own, {mailed_n:.0f} mail from {who})")
-                    else:
-                        src = where
-                    p.events.append(f"Enchanting {skill[ENCH]}: disenchant {n:.0f} {gd.name(item)}{src}")
-                    de_skillups(n)
-                    released = True
-            return released
-
         def disenchant_bank():
             """Greens in the bank are disenchanted first, all at once: a green you can disenchant is not a
             lost sale, and each one is a chance at an Enchanting skill-up below 60. Then the greens another of
@@ -223,37 +201,17 @@ class _Route:
                 held[i] = held.get(i, 0) + n
             first = len(p.steps)
             if greens:
-                release_held(" from your bank")
+                self._release_held(" from your bank")
             for i, n in mailed.items():  # each one says whose it is
                 del pools.mail[i]
                 held[i] = held.get(i, 0) + n
                 who = ", ".join(name for name, _n in allocate(getattr(stock, "shared", {}), i, math.ceil(n - 1e-9)))
                 held_mail[i] = (n, who)
-                release_held()
+                self._release_held()
             if len(p.steps) > first:  # show the greens on the first disenchant step and in the keep table
                 p.steps[first].materials = {**greens, **mailed}
                 p.steps[first].from_stock = dict(greens)
                 p.steps[first].from_mail = dict(mailed)
-
-        def de_skillups(n):
-            """Disenchanting n items gives Enchanting skill-ups at the expected rate."""
-            self.de_credit += n
-            while skill[ENCH] < min(ench_cap, rank_cap[ENCH]):
-                s = skill[ENCH]
-                chance = skillup_chance(s, DE_THRESHOLDS, overtime, reading)
-                if chance <= 0:
-                    self.de_credit = 0.0
-                    return
-                need = 1 / chance
-                if self.de_credit + 1e-9 < need:
-                    return
-                self.de_credit -= need
-                last = next((x for x in reversed(p.steps) if x.profession == ENCH), None)
-                if last and last.spell_id == DISENCHANT and last.skill_to == s:
-                    last.skill_to, last.crafts, last.buffered = s + 1, last.crafts + need, last.buffered + need
-                else:  # no buffer: the count is limited by the greens you have
-                    p.steps.append(Step(ENCH, s, s + 1, DISENCHANT, "Disenchant greens", need, 0, 0, buffered=need))
-                skill[ENCH] = s + 1
 
         def de_within_target(item):
             """Enchanting is planned and reaches the skill this item needs to be disenchanted."""
@@ -526,7 +484,7 @@ class _Route:
                                     mats, from_stock, used_made, crafts * buffer_factor(crafts), extra, bought,
                                     from_mail, tools_mailed))
             skill[prof] = s + 1
-            made_something = release_held() or made_something
+            made_something = self._release_held() or made_something
             for other in profs:
                 if made_something and other != prof and other in soft_stalls:
                     soft_stalls.discard(other)
@@ -634,6 +592,48 @@ class _Route:
         if not opts:
             return None
         return min(opts, key=lambda o: o["cost"].economic + (o["peek"].score if "peek" in o else 0))
+
+    def _release_held(self, where=""):
+        released = False
+        if not self.has_ench:
+            return released
+        for item in list(self.held):
+            gate = de_skill_needed(self.gd.items[item].item_level)
+            if self.skill[ENCH] >= gate:
+                n = self.held.pop(item)
+                for mat, per in de_yield(self.gd.items[item]).items():
+                    self.pools.made[mat] = self.pools.made.get(mat, 0) + n * per
+                    self.p.de_materials[mat] = self.p.de_materials.get(mat, 0) + n * per
+                if item in self.held_mail:  # say which part is mailed, and by whom
+                    mailed_n, who = self.held_mail.pop(item)
+                    src = (f" (mail from {who})" if mailed_n >= n - 1e-9
+                           else f" ({n - mailed_n:.0f} your own, {mailed_n:.0f} mail from {who})")
+                else:
+                    src = where
+                self.p.events.append(f"Enchanting {self.skill[ENCH]}: disenchant {n:.0f} {self.gd.name(item)}{src}")
+                self._de_skillups(n)
+                released = True
+        return released
+
+    def _de_skillups(self, n):
+        """Disenchanting n items gives Enchanting skill-ups at the expected rate."""
+        self.de_credit += n
+        while self.skill[ENCH] < min(self.ench_cap, self.rank_cap[ENCH]):
+            s = self.skill[ENCH]
+            chance = skillup_chance(s, DE_THRESHOLDS, self.overtime, self.reading)
+            if chance <= 0:
+                self.de_credit = 0.0
+                return
+            need = 1 / chance
+            if self.de_credit + 1e-9 < need:
+                return
+            self.de_credit -= need
+            last = next((x for x in reversed(self.p.steps) if x.profession == ENCH), None)
+            if last and last.spell_id == DISENCHANT and last.skill_to == s:
+                last.skill_to, last.crafts, last.buffered = s + 1, last.crafts + need, last.buffered + need
+            else:  # no buffer: the count is limited by the greens you have
+                self.p.steps.append(Step(ENCH, s, s + 1, DISENCHANT, "Disenchant greens", need, 0, 0, buffered=need))
+            self.skill[ENCH] = s + 1
 
 
 def _snapshot(pools) -> dict:
