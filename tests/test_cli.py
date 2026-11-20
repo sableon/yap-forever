@@ -416,6 +416,52 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Firstname Lastname", out)
 
+    def test_cli_budget_flag_wins(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Budget
+        stock = self.ready_home()
+        stock.write_text('level = 20\n[items]\n\n[goals]\nbudget = 9\nbudget_order = ["enchanting", "blacksmithing"]\n'
+                         'blacksmithing = 20\nenchanting = 20\n', encoding="utf-8")
+        me = ["plan", "--character", "Firstname Lastname"]
+        with mock.patch.object(plan_mod, "write_reports", return_value=("table", {})) as w:
+            for argv, want in (([], Budget(9, (333, 164))),
+                               (["--budget", "4.5"], Budget(4.5, (333, 164))),
+                               (["--budget", "4.5", "--order", "even"], Budget(4.5, None)),
+                               (["--order", "Blacksmithing,enchanting"], Budget(9, (164, 333))),
+                               (["--order", "enchanting"], Budget(9, (333, 164)))):
+                code, out = run(me + argv, self.paths)
+                self.assertEqual(code, 0, out)
+                self.assertEqual(w.call_args.kwargs["target"], want, argv)
+            # one profession: the order is ignored
+            code, out = run(me + ["--prof", "blacksmithing:20", "--budget", "3"], self.paths)
+            self.assertEqual((code, w.call_args.kwargs["target"]), (0, Budget(3, None)), out)
+            stock.write_text("level = 20\n[items]\n\n[goals]\nblacksmithing = 20\n", encoding="utf-8")
+            code, out = run(me, self.paths)
+            self.assertEqual((code, w.call_args.kwargs["target"]), (0, None), out)
+        for bad, said in ((["--budget", "-1"], "--budget"), (["--budget", "lots"], "--budget"),
+                          (["--order", "even"], "--order goes with a budget")):
+            code, out = run(me + bad, self.paths)
+            self.assertEqual(code, 1, bad)
+            self.assertIn(said, out)
+
+    def test_order_name_not_planned_is_refused(self):
+        stock = self.ready_home()
+        stock.write_text("level = 20\n[items]\n\n[goals]\nbudget = 9\nblacksmithing = 20\nenchanting = 20\n",
+                         encoding="utf-8")
+        for order, said in (("tailoring,blacksmithing", "Tailoring, which is not planned"), ("cooking", "unknown profession"),
+                            ("enchanting,enchanting", "twice")):
+            code, out = run(["plan", "--character", "Firstname Lastname", "--order", order], self.paths)
+            self.assertEqual(code, 1, order)
+            self.assertIn(said, out)
+        stock.write_text('level = 20\n[items]\n\n[goals]\nbudget = 9\nbudget_order = ["tailoring"]\n'
+                         "blacksmithing = 20\nenchanting = 20\n", encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertIn("Tailoring", out)
+        self.assertIn("not planned", out)
+
 
 if __name__ == "__main__":
     unittest.main()

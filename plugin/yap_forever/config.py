@@ -42,6 +42,7 @@ class Stock:
     skinning: int = 0  # Skinning skill; above 0 the guide says leather can be gathered
     shared: dict[str, dict[int, int]] = field(default_factory=dict)  # your group's other characters' mailable items,
     # by name (not in the file: set from the other characters' stock files, see shared.Group)
+    budget: "Budget | None" = None  # [goals] budget: plan only as far as this gold reaches; None = to the targets
 
 
 MAX_SKILL = 300
@@ -52,6 +53,39 @@ class Goal:
     """Where to plan a profession to: a skill, or one recipe (name or spell ID) to craft once."""
     skill: int | None = None
     recipe: str | None = None
+
+
+@dataclass(frozen=True)
+class Budget:
+    """A budget as a goal: plan each profession to the last stop this much gold reaches (see budget.cut).
+    order: None raises two professions evenly; skill line IDs raise them one at a time, in that order."""
+    gold: float
+    order: tuple[int, ...] | None = None
+
+
+def parse_order(names, key: str) -> tuple[int, ...] | None:
+    """'even' -> None; profession names (a list, or text 'NAME,NAME') -> their skill line IDs, in order."""
+    if isinstance(names, str):
+        if names.strip().lower() == "even":
+            return None
+        names = [n for n in names.split(",") if n.strip()]
+    if not isinstance(names, list) or not names:
+        raise ValueError(f'{key}: use "even" or a list of professions, e.g. ["blacksmithing", "enchanting"]')
+    try:
+        out = tuple(_profession_id(n) for n in names)
+    except ValueError as e:
+        raise ValueError(f"{key}: {e}") from None
+    if len(set(out)) < len(out):
+        raise ValueError(f"{key}: a profession is named twice")
+    return out
+
+
+def parse_budget(value, key: str) -> float:
+    """A budget in gold: a number, 0 or more."""
+    n = _number(value, key)
+    if n < 0:
+        raise ValueError(f"{key} must be 0 or more, not {value}")
+    return n
 
 
 def parse_goal(value: int | str) -> Goal:
@@ -166,7 +200,16 @@ def _stock(d: dict) -> Stock:
             raise ValueError(f"items.{k}: use an item ID (a number) as the key")
         items[int(k)] = _whole(v, f"items.{k}")
     goals = {}
-    for k, v in _table(d.get("goals", {}), "goals").items():
+    table = dict(_table(d.get("goals", {}), "goals"))
+    budget = None
+    if "budget" in table:  # not professions: read first
+        budget = Budget(parse_budget(table.pop("budget"), "goals.budget"))
+    if "budget_order" in table:
+        order = table.pop("budget_order")
+        if budget is None:
+            raise ValueError("goals.budget_order goes with goals.budget: set the budget too, or leave it out")
+        budget = Budget(budget.gold, parse_order(order, "goals.budget_order"))
+    for k, v in table.items():
         try:
             goals[_profession_id(k)] = parse_goal(v)
         except ValueError as e:
@@ -186,4 +229,5 @@ def _stock(d: dict) -> Stock:
         bag_slots=_slots(d, "bag_slots", None),
         keep_greens=bool(d.get("keep_greens", False)),
         reagent_slots=_slots(d, "reagent_slots", 0),
+        budget=budget,
     )
