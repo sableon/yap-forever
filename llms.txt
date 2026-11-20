@@ -10,6 +10,7 @@
 - [HANDOFF.md](HANDOFF.md): state of the project for people picking it up
 - [docs/project-setup.md](docs/project-setup.md): working agreements (branches, CI, tags, reviews)
 - [docs/progress.md](docs/progress.md): finished tasks, one line each
+- [docs/skill-checks.md](docs/skill-checks.md): skill cases run by hand before a tag
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to contribute; [SECURITY.md](SECURITY.md): reporting leaks
 
 ## The skill
