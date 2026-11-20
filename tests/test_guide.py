@@ -916,3 +916,9 @@ class VisitRowTests(unittest.TestCase):
         self.assertIn(" Learn at the trainer as you reach them: Recipe 21 at 146 (if the Artisan Blacksmith doesn't "
                       "list it: any Expert Blacksmith), Recipe 22 at 170.", row)
         self.assertNotIn("in a capital", text[text.index("## Route"):].replace(row, ""))
+        # without trainer data (no faction) the row still lists them
+        text = self.render(130, [(140, 225)], [(21, 145, 500), (22, 160, 500)], [(21, 146), (22, 170)], final=225,
+                           trainer_trips="one_go", faction="")
+        row = self.row(text, "- **Trip:**", "rank to 225")
+        self.assertIn("(the planner doesn't say where yet). Learn at the trainer as you reach them: Recipe 21 at 146 "
+                      "(if the Artisan Blacksmith doesn't list it: any Expert Blacksmith), Recipe 22 at 170.", row)

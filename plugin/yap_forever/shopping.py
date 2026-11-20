@@ -127,9 +127,10 @@ def _sum(dicts) -> dict:
     return out
 
 
-def merged_steps(plan, gd) -> list[tuple]:
+def merged_steps(plan, gd, split: tuple[int, int] | None = None) -> list[tuple]:
     """(step, parts): runs of one recipe over consecutive skill points as one step, so the buffer is
-    rounded up once per run, not once per skill point."""
+    rounded up once per run, not once per skill point. split: (profession, skill): no run of that profession
+    crosses that skill (a trip's bring list starts there)."""
     out: list[tuple] = []
     latest: dict[int, int] = {}  # profession -> index of its latest entry (professions interleave)
     for st in plan.steps:
@@ -139,7 +140,8 @@ def merged_steps(plan, gd) -> list[tuple]:
         last = out[at] if at is not None else None
         if (last and st.skill_from < st.skill_to and last[0].skill_from < last[0].skill_to
                 and last[0].spell_id == st.spell_id and last[0].profession == st.profession
-                and last[0].skill_to == st.skill_from):
+                and last[0].skill_to == st.skill_from
+                and not (split and split[0] == st.profession and last[0].skill_from < split[1] <= st.skill_from)):
             parts = last[1] + [st]
             out[at] = (dataclasses.replace(
                 last[0], skill_to=st.skill_to, crafts=sum(p.crafts for p in parts),
@@ -155,13 +157,14 @@ def merged_steps(plan, gd) -> list[tuple]:
     return out
 
 
-def route_rows(plan, gd) -> list[dict]:
+def route_rows(plan, gd, split: tuple[int, int] | None = None) -> list[dict]:
     """Rows in whole crafts: n crafts (buffer included) take n times what one craft takes, so no count
     leaves a remainder too small for another craft. Your own crafts from earlier rows are used first;
     intermediates still missing are crafted in whole batches at the first row that needs or makes them.
     need: what to bring (bank, mail or vendor); earlier: your own crafts (from any row) or disenchants used;
-    here: intermediates crafted on the spot; more: extra crafts of the row's own recipe for later rows."""
-    merged = merged_steps(plan, gd)
+    here: intermediates crafted on the spot; more: extra crafts of the row's own recipe for later rows.
+    split: see merged_steps."""
+    merged = merged_steps(plan, gd, split)
     steps = [st for st, _parts in merged]
     makes = {r.output[0]: r for r in gd.recipes.values() if r.output}
     craftable = set(plan.crafted) | {gd.recipes[st.spell_id].output[0] for st in steps if gd.recipes[st.spell_id].output}
@@ -342,8 +345,9 @@ def _made_earlier(rows, gd) -> dict[int, int]:
 
 
 def _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills, trainer_trips):
-    """(rows the trip's bring list covers, what the bank and the mail hold when it starts): see bring_list."""
-    every = route_rows(plan, gd)
+    """(rows the trip's bring list covers, what the bank and the mail hold when it starts): see bring_list. With
+    one go, a run of one recipe that crosses the trip's skill is split there, so its rest is brought too."""
+    every = route_rows(plan, gd, (trip.profession, trip.skill) if trainer_trips == ONE_GO else None)
     at = next((k for k, r in enumerate(every)
                if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
     rows = [r for r in every[at:] if r["st"].profession == trip.profession]

@@ -260,6 +260,17 @@ class BringListTests(unittest.TestCase):
         p.final_skill = {BS: 235}
         self.assertEqual(self.warning(p, gd, 16), "")
 
+    def test_one_go_bring_list_takes_a_run_that_crosses_the_trip(self):
+        # one recipe from 210 to 235, trained to 300 at 225: one go brings what 225-235 takes, not only later rows
+        from yap_forever.shopping import bring_list
+        gd = toy.gamedata([toy.recipe(1, "A", BS, {S: 1}), toy.recipe(2, "B", BS, {T: 1})])
+        p = orange(Plan(steps=[Step(BS, 210, 225, 1, "A", 15, 0, 0, {S: 15}), Step(BS, 225, 235, 1, "A", 10, 0, 0, {S: 10}),
+                               Step(BS, 235, 245, 2, "B", 10, 0, 0, {T: 10})],
+                        ranks=[(BS, 225, 300, 0)], bought={S: 25, T: 10}, final_skill={BS: 245}))
+        self.assertEqual(bring_list(p, gd, self.trip(), None, trainer_trips="one_go"),
+                         (245, [(S, 10, "mail"), (T, 10, "mail")]))
+        self.assertEqual(bring_list(p, gd, self.trip(), None), (245, [(T, 10, "mail")]))  # as needed: as before
+
 
 if __name__ == "__main__":
     unittest.main()
