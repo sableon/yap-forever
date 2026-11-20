@@ -56,7 +56,7 @@ class RemoteTests(unittest.TestCase):
     def test_host_only_fills_defaults(self):
         self.assertEqual(self.load('host = "example-host"\n'), settings.Remote(
             host="example-host", key=None,
-            command="cd yap-forever && git pull -q && python3 -m yap_forever prices",
+            command="cd yap-forever && git pull -q && cd plugin && python3 -m yap_forever prices",
             remote_file=".yap-forever/cache/prices.json"))
 
     def test_missing_file_is_none(self):

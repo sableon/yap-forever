@@ -1,5 +1,5 @@
 # Developer tooling only: the planner itself needs nothing but the Python standard library.
-# CI runs `ruff check` (the lint job in .github/workflows/tests.yml).
+# CI runs `ruff check plugin tests` (the lint job in .github/workflows/tests.yml).
 
 [tool.ruff]
 target-version = "py311"
@@ -15,7 +15,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"yap_forever/bnet.py" = ["S105"]  # TOKEN_URL is a URL, not a password
+"plugin/yap_forever/bnet.py" = ["S105"]  # TOKEN_URL is a URL, not a password
+"plugin/yap-forever.py" = ["UP031", "UP036"]  # runs on any old Python to say which version is needed
 "tests/*" = [
     "S",  # tests run subprocesses, write temporary files and use fake secrets
     "RUF005", "RUF059", "SIM117", "E731", "E741", "RUF007", "RUF012",  # style in test set-up, not bugs

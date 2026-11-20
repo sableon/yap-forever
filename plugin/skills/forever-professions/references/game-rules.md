@@ -29,7 +29,7 @@ say so.
 - From what character level each Artisan and Master trip is comfortable, which trainers have a
   flight path for repeat visits, small tips, and which capital trainers are close together
   (Stormwind City: Tailoring, Alchemy and Enchanting; Blacksmithing and Engineering; Leatherworking
-  alone) were noted in play (2026-11-19) and live in `data_static/trainer_notes.toml`; the guide's
+  alone) were noted in play (2026-11-19) and live in `yap_forever/data_static/trainer_notes.toml`; the guide's
   trainer rows say them. They are tips only and never change the route.
 
 ## Bags, bank and mail
@@ -68,6 +68,8 @@ say so.
 
 ## Legacy talents
 
+- **Milestones:** the first time a profession on the account reaches 150, 225 and 300 gives one
+  legacy talent point each. They make good targets to suggest; the planner doesn't count them.
 - **Working Overtime** (up to 5 ranks, 4% each) raises the chance of a skill-up from every
   tradeskill. Guides disagree whether 20% at 5/5 means 20 percentage points or 20% more of the
   base chance. The planner takes the rank from the profile (`working_overtime`) and the reading

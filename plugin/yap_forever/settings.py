@@ -91,7 +91,7 @@ def load_credentials(path: Path | None = None, os_name: str = os.name) -> Creden
     return Credentials(cid, secret, data.get("region", "eu"))
 
 
-REMOTE_COMMAND = "cd yap-forever && git pull -q && python3 -m yap_forever prices"
+REMOTE_COMMAND = "cd yap-forever && git pull -q && cd plugin && python3 -m yap_forever prices"
 REMOTE_FILE = ".yap-forever/cache/prices.json"
 
 

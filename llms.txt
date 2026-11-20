@@ -10,22 +10,28 @@
 - [HANDOFF.md](HANDOFF.md): state of the project for people picking it up
 - [docs/project-setup.md](docs/project-setup.md): working agreements (branches, CI, tags, reviews)
 - [docs/progress.md](docs/progress.md): finished tasks, one line each
+- [docs/skill-checks.md](docs/skill-checks.md): skill cases run by hand before a tag
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to contribute; [SECURITY.md](SECURITY.md): reporting leaks
 
 ## The skill
 
-- [skills/forever-professions/SKILL.md](skills/forever-professions/SKILL.md): workflow for Claude
-- [references/setup.md](skills/forever-professions/references/setup.md): first-time setup
-- [references/list-layout.md](skills/forever-professions/references/list-layout.md): how routes are written
-- [references/game-rules.md](skills/forever-professions/references/game-rules.md): Forever rules learned in play
+Players install only `plugin/` (the marketplace's source): the skill, the planner package, the
+licence and the credits. Tests and project documents stay at the repository root.
+
+
+- [plugin/skills/forever-professions/SKILL.md](plugin/skills/forever-professions/SKILL.md): workflow for Claude
+- [references/setup.md](plugin/skills/forever-professions/references/setup.md): first-time setup
+- [references/list-layout.md](plugin/skills/forever-professions/references/list-layout.md): how routes are written
+- [references/game-rules.md](plugin/skills/forever-professions/references/game-rules.md): Forever rules learned in play
+- [references/coverage.md](plugin/skills/forever-professions/references/coverage.md): what the planner covers and what not yet
 
 ## Code
 
-- `yap_forever/cli.py`: commands `init`, `check`, `probe`, `prices`, `plan`, `migrate`
-- `yap_forever/settings.py`: the player's home folder and paths; credentials loader
-- `yap_forever/profile.py`: profile (region, ruleset, faction, characters), auction house file
-- `yap_forever/planner.py`, `costmodel.py`: route search and costs
-- `yap_forever/gamedata.py`: pinned game data sources (see [CREDITS.md](CREDITS.md))
-- `yap_forever/report.py`, `guide.py`: report and guide rendering
-- `yap_forever/plan.py`, `compare.py`, `trips.py`, `shopping.py`: both routes, the comparison, trips away, shopping list and mailbox trips
+- `plugin/yap_forever/cli.py`: commands `init`, `check`, `probe`, `prices`, `plan`, `migrate`
+- `plugin/yap_forever/settings.py`: the player's home folder and paths; credentials loader
+- `plugin/yap_forever/profile.py`: profile (region, ruleset, faction, characters), auction house file
+- `plugin/yap_forever/planner.py`, `costmodel.py`: route search and costs
+- `plugin/yap_forever/gamedata.py`: pinned game data sources (see [plugin/CREDITS.md](plugin/CREDITS.md))
+- `plugin/yap_forever/report.py`, `guide.py`: report and guide rendering
+- `plugin/yap_forever/plan.py`, `compare.py`, `trips.py`, `shopping.py`: both routes, the comparison, trips away, shopping list and mailbox trips
 - `tests/`: `python3 -m unittest discover -s tests -t .`

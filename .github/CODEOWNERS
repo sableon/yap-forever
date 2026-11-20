@@ -1,11 +1,13 @@
 # The maintainer reviews every change to how the skill works, what the game data says,
 # the project rules, the licence and the CI.
-/skills/                    @sableon
-/yap_forever/data_static/   @sableon
-/AGENTS.md                  @sableon
-/CLAUDE.md                  @sableon
-/docs/project-setup.md      @sableon
-/CREDITS.md                 @sableon
-/LICENSE                    @sableon
-/.claude-plugin/            @sableon
-/.github/                   @sableon
+/plugin/skills/                    @sableon
+/plugin/yap_forever/data_static/   @sableon
+/plugin/.claude-plugin/            @sableon
+/plugin/CREDITS.md                 @sableon
+/plugin/LICENSE                    @sableon
+/AGENTS.md                         @sableon
+/CLAUDE.md                         @sableon
+/docs/project-setup.md             @sableon
+/LICENSE                           @sableon
+/.claude-plugin/                   @sableon
+/.github/                          @sableon

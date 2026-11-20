@@ -8,8 +8,9 @@ from pathlib import Path
 
 from yap_forever import gamedata
 
-ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / "skills" / "forever-professions"
+ROOT = Path(__file__).resolve().parent.parent  # the repository: the marketplace and the project files
+PLUGIN = ROOT / "plugin"  # what players install (the marketplace's source)
+SKILL = PLUGIN / "skills" / "forever-professions"
 
 
 def frontmatter(text: str) -> dict[str, str]:
@@ -20,6 +21,18 @@ def frontmatter(text: str) -> dict[str, str]:
         if sep and not line.startswith(" "):
             out[key.strip()] = value.strip()
     return out
+
+
+def frontmatter_list(text: str, key: str) -> list[str]:
+    """The items of a YAML block list under `key` in the frontmatter (`  - item` lines)."""
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    items, inside = [], False
+    for line in (m.group(1) if m else "").splitlines():
+        if not line.startswith(" "):
+            inside = line.split(":", 1)[0].strip() == key
+        elif inside and line.lstrip().startswith("- "):
+            items.append(line.lstrip()[2:].strip())
+    return items
 
 
 def tracked_text_files() -> list[Path]:
@@ -46,17 +59,17 @@ PRIVATE = [
 
 class PublishableTests(unittest.TestCase):
     def test_manifests_valid(self):
-        plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
         self.assertEqual(plugin["name"], "yap-forever")
         self.assertEqual(market["plugins"][0]["name"], plugin["name"])
-        self.assertEqual(market["plugins"][0]["source"], "./")
+        self.assertEqual(market["plugins"][0]["source"], "./plugin")
         self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
         self.assertEqual(plugin["license"], "GPL-3.0-or-later")
 
     def test_one_version_in_the_package_and_the_manifest(self):
         import yap_forever
-        plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(plugin["version"], yap_forever.__version__)
 
     def test_the_manifest_version_is_not_behind_the_newest_tag(self):
@@ -79,6 +92,58 @@ class PublishableTests(unittest.TestCase):
         self.assertEqual(fm.get("name"), SKILL.name)
         self.assertTrue(0 < len(fm.get("description", "")) <= 1024)
 
+    def test_skill_runs_the_planner_by_the_plugin_root(self):
+        """Finding 8: the plugin root comes from ${CLAUDE_PLUGIN_ROOT}, never a guessed path, and
+        each interpreter has an allowed-tools rule whose text is the command the skill writes."""
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        launcher = '"${CLAUDE_PLUGIN_ROOT}/yap-forever.py"'
+        self.assertTrue((PLUGIN / "yap-forever.py").is_file())
+        self.assertIn(f"`<python> {launcher} <command>`", text)
+        rules = frontmatter_list(text, "allowed-tools")
+        self.assertEqual(rules, [f"Bash({python} {launcher} *)" for python in ("python3", "python", "py -3")])
+        for python in ("py -3", "python3", "python"):
+            self.assertIn(f"`{python}`", text.split("## Workflow")[0])
+        self.assertNotIn("two folders above", text)
+        self.assertNotRegex(text, r"`cd [^`]*`")
+
+    def test_references_use_the_planner_form(self):
+        for ref in (SKILL / "references").glob("*.md"):
+            body = ref.read_text(encoding="utf-8")
+            self.assertNotIn("<python> -m yap_forever", body, ref.name)
+
+    def test_named_sections_exist(self):
+        """SKILL.md and the coverage page point to a rule by file and section ("Green crafts",
+        step 2); every section named is in the file linked."""
+        link = re.compile(r'\]\((?:references/)?([\w-]+\.md)\)((?:,? (?:and )?(?:step \d|"[^"]+"))*)')
+        checked = 0
+        for page in (SKILL / "SKILL.md", SKILL / "references" / "coverage.md"):
+            for m in link.finditer(page.read_text(encoding="utf-8")):
+                target = (SKILL / "references" / m.group(1)).read_text(encoding="utf-8")
+                for name in re.findall(r'"([^"]+)"', m.group(2)):
+                    self.assertIn(name, target, f"{page.name} -> {m.group(1)}")
+                    checked += 1
+                for step in re.findall(r"step (\d)", m.group(2)):
+                    self.assertIn(f"\n## {step}. ", target, f"{page.name} -> {m.group(1)}")
+                    checked += 1
+        self.assertGreaterEqual(checked, 12)
+
+    def test_skill_keeps_questions_and_links_the_rules(self):
+        """Finding 9: SKILL.md says what to ask and what to run; the rules live once in the references."""
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        for rule in ("cash_gold", '"2/alliance"', "bound on pickup", "bag_slots", "reagent_slots",
+                     "reports/<date>", "150, 225", "study_hint_gold_per_point", "listing depth"):
+            self.assertNotIn(rule, text)
+        self.assertIn("references/coverage.md", text)
+
+    def test_milestones_are_the_expert_artisan_and_master_caps(self):
+        """game-rules.md: a legacy talent point the first time a profession reaches 150, 225 and 300,
+        the caps of the Expert, Artisan and Master ranks the planner trains."""
+        from yap_forever.trainers import RANK_BY_CAP
+        text = (SKILL / "references" / "game-rules.md").read_text(encoding="utf-8")
+        m = re.search(r"\*\*Milestones:\*\* the first time a profession on the account reaches (\d+), (\d+) and (\d+)", text)
+        caps = [c for c, rank in RANK_BY_CAP.items() if rank in ("Expert", "Artisan", "Master")]
+        self.assertEqual([int(g) for g in m.groups()], sorted(caps))
+
     def test_skill_reference_links_exist(self):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         refs = set(re.findall(r"references/[\w-]+\.md", text))
@@ -86,14 +151,35 @@ class PublishableTests(unittest.TestCase):
         for ref in refs:
             self.assertTrue((SKILL / ref).exists(), ref)
 
+    def test_setup_shows_the_default_remote_command(self):
+        from yap_forever import settings
+        text = (SKILL / "references" / "setup.md").read_text(encoding="utf-8")
+        self.assertIn(f'command = "{settings.REMOTE_COMMAND}"  # default, run there', text)
+
     def test_credits_cover_sources(self):
-        credits = (ROOT / "CREDITS.md").read_text(encoding="utf-8")
+        credits = (PLUGIN / "CREDITS.md").read_text(encoding="utf-8")
         for url in gamedata.SOURCES.values():
             m = re.match(r"https://raw\.githubusercontent\.com/([^/]+/[^/]+)/", url)
             origin = m.group(1) if m else re.match(r"https://([^/]+)/", url).group(1)
             self.assertIn(origin, credits)
         for pin in (gamedata.SKILLUP_SHA, gamedata.QUESTIE_SHA, str(gamedata.WAGO_BUILD)):
             self.assertIn(pin, credits)
+
+    def test_installs_ship_the_licence_and_credits(self):
+        """An install copies only plugin/: the GPL text and the credits must be in it. The root
+        LICENSE stays for GitHub's licence detection and must be the same file."""
+        self.assertEqual((PLUGIN / "LICENSE").read_bytes(), (ROOT / "LICENSE").read_bytes())
+        self.assertTrue((PLUGIN / "CREDITS.md").is_file())
+        self.assertFalse((ROOT / "CREDITS.md").exists(), "one credits file, in plugin/")
+
+    def test_tests_import_the_installed_package(self):
+        import yap_forever
+        self.assertEqual(Path(yap_forever.__file__).resolve().parent, PLUGIN / "yap_forever")
+
+    def test_the_private_details_scan_covers_the_plugin(self):
+        files = tracked_text_files()
+        for path in (SKILL / "SKILL.md", PLUGIN / "yap_forever" / "cli.py", ROOT / "README.md"):
+            self.assertIn(path, files)
 
     def test_no_private_details(self):
         deny_file = ROOT / ".private-denylist"

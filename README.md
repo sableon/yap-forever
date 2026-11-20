@@ -51,7 +51,7 @@ share that file.
 ## Command line
 
 The skill runs these for you, but they work on their own too (`py -3` instead of `python3` on
-Windows):
+Windows). From a clone of this repository, run them in the `plugin` folder (`cd plugin` first):
 
 ```
 python3 -m yap_forever init       # create ~/.yap-forever with a profile and credentials file
@@ -69,5 +69,5 @@ Bug reports, game-data corrections from play, and pull requests are welcome: see
 
 ## Licence and credits
 
-GPL-3.0-or-later. Game data comes from other projects and Blizzard; see [CREDITS.md](CREDITS.md).
+GPL-3.0-or-later. Game data comes from other projects and Blizzard; see [plugin/CREDITS.md](plugin/CREDITS.md).
 Not affiliated with Blizzard Entertainment.
