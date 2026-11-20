@@ -86,6 +86,11 @@ def _add(into: dict, more: dict) -> None:
         into[i] = into.get(i, 0) + q
 
 
+def _gathers(plan, stock) -> bool:
+    """The character mines, or the plan farms ore (it can with Mining 0 and a mining_goal: costmodel.farmable)."""
+    return bool(stock.mining or stock.mining_goal or plan.farm)
+
+
 def _title(caps, route) -> str:
     names = [PROFESSIONS.get(p, str(p)) for p in caps]
     if len(set(caps.values())) == 1:
@@ -117,8 +122,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     intro = []
     if len(caps) > 1:
         intro.append("Level both professions side by side: craft in whichever one is lower.")
-    if stock.mining or plan.farm:
-        intro.append("Until you switch, gather and keep the materials below instead of selling them.")
+    if _gathers(plan, stock):
+        intro.append("Gather and keep the materials below instead of selling them.")
     if intro:
         out += [" ".join(intro), ""]
     if trainer_note:
@@ -133,7 +138,7 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)
-    _notes(out, plan, market, gatherer=bool(stock.mining or plan.farm), skins=bool(stock.skinning),
+    _notes(out, plan, market, gatherer=_gathers(plan, stock), skins=bool(stock.skinning),
            mailed=by_mail, gd=gd, notes=extra_notes)
     return "\n".join(out) + "\n"
 
@@ -190,7 +195,7 @@ def _keep(out, plan, gd, market, by_mail=None, stock=None) -> None:
                        + (f"| {count(mail.get(item, 0))} " if by_mail else "")
                        + f"| {count(still)} | {price} |")
         out.append("")
-        out += _group_notes(group, items, gd, bool(stock and stock.mining))
+        out += _group_notes(group, items, gd, bool(stock and _gathers(plan, stock)))
 
     vendor = groups.get("Vendor", [])
     if vendor:

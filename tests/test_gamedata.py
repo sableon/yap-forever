@@ -396,6 +396,10 @@ class MainTests(unittest.TestCase):
         self.assertIn("--checks", out)
         fetch.assert_not_called()
 
+    def test_usage_names_the_command_for_the_system(self):
+        self.assertEqual(gamedata.usage_prog("nt"), "py -3 -m yap_forever.gamedata")
+        self.assertEqual(gamedata.usage_prog("posix"), "python3 -m yap_forever.gamedata")
+
     def test_unknown_flag_is_refused(self):
         code, _out, err, fetch = self.run_main(["--bogus"])
         self.assertEqual(code, 2)

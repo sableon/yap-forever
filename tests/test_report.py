@@ -26,7 +26,7 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(verdict(Plan(farm={}), toy.stock()), "Ready to level")
 
     def test_verdict_short(self):
-        self.assertEqual(verdict(Plan(farm={2770: 100, 2771: 50}), toy.stock()), "Switch after a short farm")
+        self.assertEqual(verdict(Plan(farm={2770: 100, 2771: 50}), toy.stock()), "Short farm first")
 
     def test_verdict_not_yet(self):
         self.assertEqual(verdict(Plan(farm={2770: 250}), toy.stock()), "Not yet")
@@ -118,6 +118,20 @@ class RenderTests(unittest.TestCase):
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 300})
         verdict_part = text[text.index("## Verdict"):text.index("## Route")]
         self.assertIn("Blacksmithing is already at 300: nothing to plan.", verdict_part)
+        self.assertNotIn("Ready to level", verdict_part)  # every target reached: no verdict is claimed
+        self.assertNotIn("Planned to", verdict_part)
+
+    def test_a_verdict_stays_while_another_target_is_still_to_plan(self):
+        from tests.test_planner import run_caps
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        st = toy.stock(skills={BS: 300})
+        p = run_caps(rs, {BS: 300, ENCH: 20}, BARS, stock=st)
+        text = render(p, verdict(p, st), toy.market(BARS), toy.gamedata(rs), st, toy.NO_FAVOR, {BS: 300, ENCH: 20})
+        verdict_part = text[text.index("## Verdict"):text.index("## Route")]
+        self.assertIn("Blacksmithing is already at 300: nothing to plan.", verdict_part)
+        self.assertIn("**Ready to level.**", verdict_part)
+        self.assertIn("Planned to:", verdict_part)
 
 
 if __name__ == "__main__":
@@ -197,7 +211,7 @@ class AnyPairReportTests(unittest.TestCase):
         gd = toy.gamedata([])
         ore, bar = toy.IRON_ORE, toy.IRON_BAR
         farming = Plan(final_skill={164: 40}, farm={ore: 30}, farmed_bars={bar: 10})
-        text = render(farming, "Switch after a short farm", toy.market(), gd, toy.stock(), toy.NO_FAVOR, {BS: 40})
+        text = render(farming, "Short farm first", toy.market(), gd, toy.stock(), toy.NO_FAVOR, {BS: 40})
         self.assertIn("## Ore to mine\n", text)
         self.assertIn("| Iron Ore | 30 |", text)
         self.assertIn("Smelts into: 10 Iron Bar.", text)

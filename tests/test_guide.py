@@ -220,6 +220,17 @@ class GuideTests(unittest.TestCase):
                 self.assertIn("### Mining", text)
                 self.assertEqual("Bars: mine the ore" in text, expected)
 
+    def test_bars_note_when_the_plan_farms_with_a_mining_goal(self):
+        st = toy.stock(mining=0)
+        st.mining_goal = 150  # farms ore without mining yet (costmodel.farmable)
+        text = guide(base_recipes(), BARS, stock=st)
+        self.assertIn("Bars: mine the ore", text)
+
+    def test_gathering_intro_has_no_switch(self):
+        text = guide(base_recipes(), BARS, stock=toy.stock(mining=120))
+        self.assertIn("Gather and keep the materials below instead of selling them.", text)
+        self.assertNotIn("Until you switch", text)
+
     def test_skin_clause_only_for_skinners(self):
         for skinning, expected in ((100, True), (0, False)):
             with self.subTest(skinning=skinning):

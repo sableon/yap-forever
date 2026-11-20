@@ -423,9 +423,14 @@ def checks_report(gd: GameData, cap: int = 225) -> str:
     return "\n".join(lines) + "\n"
 
 
+def usage_prog(os_name: str = os.name) -> str:
+    """The command as the player types it on their system, for the usage line."""
+    return f"{'py -3' if os_name == 'nt' else 'python3'} -m yap_forever.gamedata"
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="python3 -m yap_forever.gamedata",
+        prog=usage_prog(),
         description="Download the pinned game data into your cache (what is already there is kept).")
     parser.add_argument("--fetch", action="store_true", help="download again even when the files are cached")
     parser.add_argument("--checks", action="store_true",

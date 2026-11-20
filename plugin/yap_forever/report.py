@@ -18,7 +18,7 @@ def verdict(plan, stock) -> str:
     if ore == 0:
         return "Ready to level"
     if ore <= stock.short_farm_ore:
-        return "Switch after a short farm"
+        return "Short farm first"
     return "Not yet"
 
 
@@ -53,15 +53,19 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
 
     # Verdict
     section("Verdict")
-    out.append(f"**{verdict_text}.**")
-    if plan.farm:
-        out.append(f"Mining still needed for {sum(plan.farm.values())} ore "
-                   f"(a short farm is up to {stock.short_farm_ore}, set in stock.toml).")
-    out += reached_lines(plan)
-    for reason in plan.stall_reasons.values():
-        out.append(f"- Stops early: {reason}.")
-    final = ", ".join(f"{PROFESSIONS[p]} {s}" for p, s in plan.final_skill.items())
-    out.append(f"Planned to: {final}.")
+    reached = reached_lines(plan)
+    if len(reached) >= len(caps or (BS, ENCH)):  # every target already reached: no verdict to give
+        out += reached
+    else:
+        out.append(f"**{verdict_text}.**")
+        if plan.farm:
+            out.append(f"Mining still needed for {sum(plan.farm.values())} ore "
+                       f"(a short farm is up to {stock.short_farm_ore}, set in stock.toml).")
+        out += reached
+        for reason in plan.stall_reasons.values():
+            out.append(f"- Stops early: {reason}.")
+        final = ", ".join(f"{PROFESSIONS[p]} {s}" for p, s in plan.final_skill.items())
+        out.append(f"Planned to: {final}.")
 
     held_total = sum(n for n in plan.de_materials.values())
     if held_total:
