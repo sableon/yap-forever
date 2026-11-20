@@ -1,17 +1,19 @@
 """Plan a character's professions: the least-gold and least-total-value routes, guides and reports."""
+import dataclasses
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 from yap_forever import gamedata, trainer_text
 from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
-from yap_forever.config import load_stock
+from yap_forever.config import Stock, load_stock
 from yap_forever.costmodel import Valuer
-from yap_forever.favor import load_favor
+from yap_forever.favor import FavorData, load_favor
 from yap_forever.guide import gold, render_guide
 from yap_forever.planner import DISENCHANT, plan, resolve_goals
 from yap_forever.prices import Market
 from yap_forever.profile import report_name
-from yap_forever.quests import load_quest_plans
+from yap_forever.quests import QuestPlan, load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
 from yap_forever.shopping import render_shopping
@@ -19,6 +21,22 @@ from yap_forever.trips import trip_alternatives
 
 REUSE_ROUNDS = 4
 MIN_SAVING = 100  # copper: below 1 silver the gap is noise from the greedy planner, not a saving to name
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlanInputs:
+    """What every planning round of one character reads: game data, prices, stock, Favor, the targets
+    (caps: profession -> skill; craft_once: profession -> recipe crafted once at the end), the quest
+    recipes, and the character's Working Overtime rank and how it reads (see costmodel.skillup_chance)."""
+    gd: gamedata.GameData
+    market: Market
+    stock: Stock
+    favor: FavorData
+    caps: dict[int, int]
+    craft_once: dict[int, int]
+    quests: dict[int, QuestPlan]
+    overtime: int = 0
+    reading: str = "relative"
 
 
 def unit_value(item: int, gd, market) -> float:
@@ -33,18 +51,18 @@ def unit_value(item: int, gd, market) -> float:
     return min(opts) if opts else 0
 
 
-def _rounds(gd, market, stock, favor, caps, craft_once, mode, quests, exclude, one_time_in_full,
-            overtime=0, reading="relative"):
+def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full):
     """Plans of each reuse round: reagents later steps consume count as savings when a step makes
     them, replanned until those counts settle."""
-    valuer = Valuer(market, gd, stock, mode=mode)
-    makes = {r.output[0] for r in gd.recipes.values() if r.skill_line in caps and r.output}
+    gd, market = inputs.gd, inputs.market
+    valuer = Valuer(market, gd, inputs.stock, mode=mode)
+    makes = {r.output[0] for r in gd.recipes.values() if r.skill_line in inputs.caps and r.output}
     reuse: dict = {}
     out = []
     for _ in range(REUSE_ROUNDS):
-        p = plan(gd, valuer, stock, favor, quests=quests, reuse=reuse, caps=caps,
-                 craft_once=craft_once, exclude=exclude, one_time_in_full=one_time_in_full,
-                 overtime=overtime, reading=reading)
+        p = plan(gd, valuer, inputs.stock, inputs.favor, quests=inputs.quests, reuse=reuse, caps=inputs.caps,
+                 craft_once=inputs.craft_once, exclude=exclude, one_time_in_full=one_time_in_full,
+                 overtime=inputs.overtime, reading=inputs.reading)
         out.append(p)
         used: dict[int, float] = {}
         for st in p.steps:
@@ -60,35 +78,31 @@ def _rounds(gd, market, stock, favor, caps, craft_once, mode, quests, exclude, o
     return out
 
 
-def plan_route(gd, market, stock, favor, caps, craft_once, mode, quests, exclude=frozenset(),
-               one_time_in_full=False, overtime=0, reading="relative"):
+def plan_route(inputs: PlanInputs, mode, exclude=frozenset(), one_time_in_full=False):
     """The best reuse round of one mode, by that mode's own measure."""
-    rounds = _rounds(gd, market, stock, favor, caps, craft_once, mode, quests, exclude, one_time_in_full,
-                     overtime, reading)
-    routes, _ = settle_routes(rounds, caps)
+    rounds = _rounds(inputs, mode, exclude, one_time_in_full)
+    routes, _ = settle_routes(rounds, inputs.caps)
     return routes[mode]
 
 
-def candidates(gd, market, stock, favor, caps, craft_once, quests, overtime=0, reading="relative") -> list:
+def candidates(inputs: PlanInputs) -> list:
     """Every reuse round of the value mode, the gold mode, and the gold mode with one-time costs
     charged in full."""
     out = []
     for mode, full in (("value", False), ("gold", False), ("gold", True)):
-        out += _rounds(gd, market, stock, favor, caps, craft_once, mode, quests, frozenset(), full,
-                       overtime, reading)
+        out += _rounds(inputs, mode, frozenset(), full)
     return out
 
 
-def listed_savings(gd, routes, market, stock, favor, caps, craft_once, quests, overtime=0,
-                   reading="relative") -> dict[str, float]:
+def listed_savings(inputs: PlanInputs, routes) -> dict[str, float]:
     """What the routes could cost less if every trainer offered its recipes at the Forever listing:
     mode -> copper, in the mode's own measure, for the modes where it is worth saying.
-    gd: the game data the routes were planned on (see gamedata.safe_requirements); routes: their settled
-    routes. The listed routes are settled the same way, from the same candidates."""
+    inputs.gd: the game data the routes were planned on (see gamedata.safe_requirements); routes: their
+    settled routes. The listed routes are settled the same way, from the same candidates."""
+    gd, caps = inputs.gd, inputs.caps
     if not any(r.listed_skill is not None for r in gd.recipes.values()):
         return {}
-    listed, _ = settle_routes(candidates(gamedata.listed_requirements(gd), market, stock, favor, caps,
-                                         craft_once, quests, overtime, reading), caps)
+    listed, _ = settle_routes(candidates(dataclasses.replace(inputs, gd=gamedata.listed_requirements(gd))), caps)
     out = {}
     for mode, safe in routes.items():
         better, measure = listed[mode], ("cash_total" if mode == "gold" else "economic_total")
@@ -131,18 +145,18 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     favor = load_favor(standing)
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
-    routes, same = settle_routes(
-        candidates(gd, market, stock, favor, caps, once, quests, overtime, reading), caps)
+    inputs = PlanInputs(gd=gd, market=market, stock=stock, favor=favor, caps=caps, craft_once=once,
+                        quests=quests, overtime=overtime, reading=reading)
+    routes, same = settle_routes(candidates(inputs), caps)
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
-    savings = listed_savings(gd, routes, market, stock, favor, caps, once, quests, overtime, reading)
+    savings = listed_savings(inputs, routes)
     table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same)
     today = date.today().isoformat()
     paths.reports.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
     who = f"{report_name(character.name, profile_names)}-" if character else ""
     for m, route in routes.items():
-        alts = trip_alternatives(route, gd, market, stock, favor, caps, once, m, quests,
-                                 overtime, reading)
+        alts = trip_alternatives(route, inputs, m)
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
         full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps,

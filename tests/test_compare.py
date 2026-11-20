@@ -58,17 +58,18 @@ class TripTests(unittest.TestCase):
         self.assertEqual([(prof, cap) for prof, _s, cap, _f in p.ranks], [(BS, 150)])
 
     def test_trip_alternative_cost(self):
-        from yap_forever.plan import plan_route
+        from yap_forever.plan import PlanInputs, plan_route
         from yap_forever.trips import trip_alternatives
         rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
               toy.recipe(30, "BS scroll", BS, {toy.IRON_BAR: 1}, (toy.STONE, 1), source="scroll", scroll=toy.SCROLL)]
         gd = toy.gamedata(rs)
         gd.vendor_prices[toy.SCROLL] = 500
         st, m = toy.stock(), toy.market({**BARS, toy.IRON_BAR: [(10, 100000)]})
-        args = (gd, m, st, toy.NO_FAVOR, {BS: 40}, {}, "gold", {})
-        base = plan_route(*args)
-        skip = plan_route(*args, exclude=frozenset({30}))
-        alts = trip_alternatives(base, *args)
+        inputs = PlanInputs(gd=gd, market=m, stock=st, favor=toy.NO_FAVOR, caps={BS: 40}, craft_once={},
+                            quests={})
+        base = plan_route(inputs, "gold")
+        skip = plan_route(inputs, "gold", exclude=frozenset({30}))
+        alts = trip_alternatives(base, inputs, "gold")
         self.assertEqual(alts, {30: skip.cash_total - base.cash_total})
         self.assertGreater(alts[30], 0)
 
@@ -132,7 +133,7 @@ class OneTimeInFullTests(unittest.TestCase):
 
 class GoalTripTests(unittest.TestCase):
     def test_goal_recipe_trip_has_no_skip_alternative(self):
-        from yap_forever.plan import plan_route
+        from yap_forever.plan import PlanInputs, plan_route
         from yap_forever.trips import trip_alternatives
         rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
               toy.recipe(30, "BS scroll", BS, {toy.IRON_BAR: 1}, (toy.STONE, 1), req=20,
@@ -140,8 +141,9 @@ class GoalTripTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         gd.vendor_prices[toy.SCROLL] = 500
         st, m = toy.stock(), toy.market({**BARS, toy.IRON_BAR: [(10, 100000)]})
-        args = (gd, m, st, toy.NO_FAVOR, {BS: 20}, {BS: 30}, "gold", {})
-        self.assertEqual(trip_alternatives(plan_route(*args), *args), {})
+        inputs = PlanInputs(gd=gd, market=m, stock=st, favor=toy.NO_FAVOR, caps={BS: 20}, craft_once={BS: 30},
+                            quests={})
+        self.assertEqual(trip_alternatives(plan_route(inputs, "gold"), inputs, "gold"), {})
 
 
 class TripLineTests(unittest.TestCase):

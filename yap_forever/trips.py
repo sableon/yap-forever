@@ -41,20 +41,19 @@ def city_ranks(plan) -> list["Trip"]:
             for prof, s, cap, fee in plan.ranks if cap < REMOTE_RANK]
 
 
-def trip_alternatives(base, gd, market, stock, favor, caps, craft_once, mode, quests, overtime=0,
-                      reading="relative") -> dict[int, float | None]:
+def trip_alternatives(base, inputs, mode) -> dict[int, float | None]:
     """For vendor and Favor trips (the costliest few): what the route costs more without that recipe,
-    in the route's own measure; None when the targets can't be reached without it."""
+    in the route's own measure; None when the targets can't be reached without it.
+    inputs: the plan.PlanInputs the route was planned from."""
     from yap_forever.plan import plan_route  # plan imports this module
 
     measure = (lambda p: p.cash_total) if mode == "gold" else (lambda p: p.economic_total)
-    goals = set(craft_once.values())  # the goal recipe can't be skipped
-    picks = sorted((t for t in trips(base, gd) if t.spell is not None and t.spell not in goals),
+    goals = set(inputs.craft_once.values())  # the goal recipe can't be skipped
+    picks = sorted((t for t in trips(base, inputs.gd) if t.spell is not None and t.spell not in goals),
                    key=lambda t: -t.cost)[:MAX_TRIP_ALTS]
     out: dict[int, float | None] = {}
     for t in picks:
-        alt = plan_route(gd, market, stock, favor, caps, craft_once, mode, quests, exclude=frozenset({t.spell}),
-                         overtime=overtime, reading=reading)
-        reached = all(alt.final_skill.get(p, 0) >= base.final_skill.get(p, 0) for p in caps)
+        alt = plan_route(inputs, mode, exclude=frozenset({t.spell}))
+        reached = all(alt.final_skill.get(p, 0) >= base.final_skill.get(p, 0) for p in inputs.caps)
         out[t.spell] = measure(alt) - measure(base) if reached else None
     return out
