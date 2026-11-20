@@ -133,23 +133,27 @@ def trips(plan, gd, start_skills: dict[int, int]) -> list[Trip]:
     return sorted(out, key=lambda t: (t.skill, t.kind != "vendor" and t.kind != "favor", t.profession))
 
 
-def trip_alternatives(base, inputs, mode) -> dict[int | tuple[int, ...], float | None]:
+def trip_alternatives(base, inputs, mode, cache: dict | None = None) -> dict[int | tuple[int, ...], float | None]:
     """What the route costs more without a trip's recipes, in the route's own measure, by Trip.key; None when
-    the targets can't be reached without them. For every recipe trip, and the costliest few vendor and
-    Favor trips. inputs: the plan.PlanInputs the route was planned from."""
+    the targets can't be reached without them. For the costliest MAX_TRIP_ALTS trips (vendor and Favor
+    patterns, and recipe trips by their fees); a recipe trip for the goal recipe is always None.
+    inputs: the plan.PlanInputs the route was planned from. cache: routes planned without some recipes, kept
+    by the caller across calls (by mode, targets and the recipes left out), so none is planned twice."""
     from yap_forever.plan import plan_route  # plan imports this module
 
     measure = (lambda p: p.cash_total) if mode == "gold" else (lambda p: p.economic_total)
     goals = set(inputs.craft_once.values())  # the goal recipe can't be skipped
     found = trips(base, inputs.gd, inputs.stock.skills)
-    picks = sorted((t for t in found if t.spell is not None and t.spell not in goals),
-                   key=lambda t: -t.cost)[:MAX_TRIP_ALTS]
-    out: dict[int | tuple[int, ...], float | None] = {}
-    for t in [t for t in found if t.kind == "recipe"] + picks:
-        if goals & set(t.spells):  # a recipe trip for the goal recipe can't be skipped either
-            out[t.key] = None
-            continue
-        alt = plan_route(inputs, mode, exclude=frozenset(t.spells or {t.spell}))
+    out: dict[int | tuple[int, ...], float | None] = {t.key: None for t in found if goals & set(t.spells)}
+    picks = sorted((t for t in found if (t.spell is not None and t.spell not in goals)
+                    or (t.kind == "recipe" and t.key not in out)), key=lambda t: -t.cost)[:MAX_TRIP_ALTS]
+    cache = {} if cache is None else cache
+    for t in picks:
+        excluded = frozenset(t.spells or {t.spell})
+        k = (mode, tuple(sorted(inputs.caps.items())), excluded)
+        if k not in cache:
+            cache[k] = plan_route(inputs, mode, exclude=excluded)
+        alt = cache[k]
         reached = all(alt.final_skill.get(p, 0) >= base.final_skill.get(p, 0) for p in inputs.caps)
         out[t.key] = measure(alt) - measure(base) if reached else None
     return out

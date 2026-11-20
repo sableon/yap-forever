@@ -157,27 +157,36 @@ def _apart(info: TrainerInfo, zone: int, planned: tuple[int, ...]) -> str:
 
 
 def city_row(info: TrainerInfo | None, profession: int, cap: int, planned: tuple[int, ...] = (),
-             said: set[int] | None = None, lead: str = "") -> str | None:
+             said: set[int] | None = None, lead: str = "", after: str = "", named: set | None = None,
+             brief: bool = False) -> str | None:
     """The row (without its dash) for a rank trained at any trainer of that rank in a capital.
     planned: the professions the guide plans, in order; a capital whose notes put two of them in
     different groups says so. said: the zones that already said it (a set the caller keeps, so a
     city says it once in the guide); a zone is added when its row says it.
-    lead: what the row is for ("Learn X"); default "Train <profession> to <cap>"."""
+    lead: what the row is for ("Learn X"); default "Train <profession> to <cap>". after: said right after
+    the place (a note on the recipes). named: (profession, cap) of the rows that already named capital
+    trainers and city tips (a set the caller keeps); with brief, such a row is short: "<lead> at any
+    <Rank> <Person> in a capital."."""
     if not _usable(info, cap):
         return None
     rank, name = RANK_BY_CAP[cap], PROFESSIONS.get(profession, str(profession))
     lead = lead or f"Train {name} to {cap}"
     found = trainers.trainers_for(info.data.trainers, profession, rank, info.faction)
     if not found:
-        return f"{lead}: {_no_trainer(rank, profession)}"
+        return f"{lead}{after}: {_no_trainer(rank, profession)}"
     capital = [t for t in found if t.zone in CAPITALS[info.faction]]
     examples = _confirmed_first(capital)[:MAX_EXAMPLES]
     if not examples:  # no trainer of the rank in a capital: say where they are, never "in a capital"
         where = " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}"
                             for t, flag in _confirmed_first(found)[:MAX_EXAMPLES])
-        return f"{lead} at {where} (no {rank} {PERSON.get(profession, name)} in a capital in the data)."
+        return f"{lead} at {where} (no {rank} {PERSON.get(profession, name)} in a capital in the data){after}."
     text = f"{lead} at any {rank} {PERSON.get(profession, name)} in a capital"
-    text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")."
+    named = set() if named is None else named
+    if brief and (profession, cap) in named:
+        return f"{text}{after}."
+    named.add((profession, cap))
+    text += " (for example " + " or ".join(f"{t.name}{flag}, {info.data.zone_name(t.zone)}" for t, flag in examples) + ")"
+    text += after + "."
     notes = info.notes
     said = set() if said is None else said
     parts = [text]

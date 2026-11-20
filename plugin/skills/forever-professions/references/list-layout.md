@@ -63,7 +63,8 @@ Write it for that.
   towns), trips back to them for recipes, vendor-sold patterns and the Merchant's Favor vendor. Say
   a trip is needed, how to avoid a second one (buy every vendor pattern on one visit; patterns can be
   bought before they can be learned), and what to bring to keep levelling at a remote trainer, with
-  the bag slots it takes.
+  the bag slots it takes. The bring list ends at the next rank trip or trip back for recipes: level
+  at home after that and come back then.
 - A trainer teaches recipes up to its rank's cap ([game-rules.md](game-rules.md), "Trainers and
   ranks"), so every trainer visit learns ahead: a rank row ends with `While there, learn: <recipe>
   (<fee>), ...` for the trainer recipes the route needs later whose required skill is reached and
@@ -72,6 +73,9 @@ Write it for that.
   own: they are listed once, at the first visit that teaches them, as `If you don't have them yet:
   <recipe>, ...` (`it` for one). When the route uses one before any such visit, the route starts with
   `- **Before you start**, make sure you know: <recipes> (any <Rank> <Person> teaches them).`
+  A recipe learned at a visit or before the start is not learned again where the route first uses it:
+  that row reads `*At <skill>: start crafting <recipe> (learned at <trainer>)*` or `(learned before you
+  start)`, with no second fee, and comes after the visit's row at the same skill.
 - A recipe below the visit trainer's rank says where else to learn it, since the lower ranks are
   unconfirmed: `(if <trainer> doesn't list it: <who>)` after the recipes it is for (`them` for
   several), where `<trainer>` is the one trainer the row names or `the <Rank> <Person>`, and `<who>`
@@ -79,11 +83,18 @@ Write it for that.
   `any <Rank> <Person>` below them.
 - A trainer recipe that no earlier visit of its rank can teach gets a visit of its own at the skill
   the route needs it, and later recipes of that rank with a required skill at or below that skill
-  join it (two needs at 240 and 245 make two rows). An Artisan or Master recipe is a trip:
+  join it: a recipe needed at 240 and used then, and one at 245, make two rows; when the first isn't
+  used before 245, one visit teaches both. The recipes of a trip or a capital stop are listed with
+  their fees (`<recipe> (<fee>)`). An Artisan or Master recipe is a trip:
   `- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>`, then `; or skip it: +<gold>
   for the route without it` (the route planned again without those recipes) or `; there is no other
-  way to reach the target without it`, and a full stop. Below Artisan it is a stop in a capital:
-  `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).` Without
+  way to reach the target without it`, and a full stop. Like vendor and Favor trips, only the
+  costliest three trips (by pattern price or trainer fees) get the skip clause; a trip for the goal
+  recipe always says there is no other way. Below Artisan it is a stop in a capital:
+  `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`, with a
+  recipe below the stop's rank noted after the place: `(if <trainer> doesn't list <recipe>: <who>)`.
+  After the first row of a rank and profession has named the capital trainers (and the city's tip),
+  later stops of that rank read `Learn <recipes> at any <Rank> <Person> in a capital.` Without
   the faction or the trainer in the data the row says so (`back to the Master Enchanter in a set
   town (the planner doesn't say where yet)`) and still lists the recipes.
 - Name the trainer from the data, for the character's faction (the profile's `faction`; without it

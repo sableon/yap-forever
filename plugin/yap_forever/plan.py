@@ -177,9 +177,15 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     paths.reports.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
     who = f"{report_name(character.name, profile_names)}-" if character else ""
+    alt_cache: dict = {}
+    alts_of: dict[str, dict] = {}
     for m, route in routes.items():
         caps = per_mode[m].caps
-        alts = trip_alternatives(route, per_mode[m], m)
+        if m == "value" and route is routes.get("gold") and caps == per_mode["gold"].caps:
+            alts = alts_of["gold"]  # the same route: its trips are skipped at the same cost
+        else:
+            alts = trip_alternatives(route, per_mode[m], m, alt_cache)
+        alts_of[m] = alts
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
         said = budget_cut.lines(cuts[m], target) if m in cuts else []

@@ -116,5 +116,43 @@ class RecipeTripTests(unittest.TestCase):
         self.assertEqual([v for v in got if v.skill > 225 or v.rank_cap > 225], [])
 
 
+class AlternativeCapTests(unittest.TestCase):
+    """Recipe trips share MAX_TRIP_ALTS with pattern trips, by cost; nothing is planned twice."""
+
+    def setup(self):
+        from types import SimpleNamespace
+        recipes = [(spell, req, fee) for spell, req, fee in
+                   ((1, 240, 100), (2, 250, 500), (3, 260, 300), (4, 270, 200), (5, 280, 400))]
+        gd = toy.gamedata([toy.recipe(s, f"Recipe {s}", BS, {toy.IRON_BAR: 1}, req=r, fee=f) for s, r, f in recipes]
+                          + [toy.recipe(9, "Pattern", BS, {toy.IRON_BAR: 1}, source="scroll", scroll=toy.SCROLL)])
+        gd.vendor_prices[toy.SCROLL] = 1000
+        base = Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300},
+                    learn_log=[(BS, req, s, "trainer") for s, req, _f in recipes] + [(BS, 230, 9, "vendor")])
+        inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills={BS: 225}), craft_once={}, caps={BS: 300})
+        return base, inputs
+
+    def test_recipe_trips_share_the_cap(self):
+        from unittest import mock
+        from yap_forever.trips import MAX_TRIP_ALTS, trip_alternatives
+        base, inputs = self.setup()
+        with mock.patch("yap_forever.plan.plan_route", return_value=base) as replan:
+            alts = trip_alternatives(base, inputs, "gold")
+        self.assertEqual(MAX_TRIP_ALTS, 3)
+        self.assertEqual(set(alts), {9, (2,), (5,)})  # the pattern (10s), then the fees 5s and 4s
+        self.assertEqual(replan.call_count, 3)
+
+    def test_alternatives_are_planned_once(self):
+        from unittest import mock
+        from yap_forever.trips import trip_alternatives
+        base, inputs = self.setup()
+        cache: dict = {}
+        with mock.patch("yap_forever.plan.plan_route", return_value=base) as replan:
+            first = trip_alternatives(base, inputs, "gold", cache)
+            again = trip_alternatives(base, inputs, "gold", cache)
+            trip_alternatives(base, inputs, "value", cache)
+        self.assertEqual(first, again)
+        self.assertEqual(replan.call_count, 6)  # 3 for gold once, 3 for value
+
+
 if __name__ == "__main__":
     unittest.main()

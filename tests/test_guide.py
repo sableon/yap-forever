@@ -752,7 +752,8 @@ class VisitRowTests(unittest.TestCase):
         p = Plan(steps=[Step(BS, start, final, 1, "BS basic", final - start, 0, 0, {toy.COPPER_BAR: final - start})],
                  bought={toy.COPPER_BAR: final - start}, ranks=[(BS, s, cap, 450) for s, cap in ranks],
                  learn_log=[(BS, s, spell, "trainer") for spell, s in learns],
-                 events=[f"Blacksmithing {s}: train rank up to {cap} (4s 50c)" for s, cap in ranks],
+                 events=[f"Blacksmithing {s}: train rank up to {cap} (4s 50c)" for s, cap in ranks]
+                 + [f"Blacksmithing {s}: Learn Recipe {spell} (trainer 1s)" for spell, s in learns],
                  final_skill={BS: final})
         info = TrainerInfo(faction, data or self.data) if faction else None
         return render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: start}),
@@ -799,10 +800,10 @@ class VisitRowTests(unittest.TestCase):
     def test_recipe_trip_has_skip_alternative(self):
         text = self.render(225, [(225, 300)], [(18, 240, 3000), (19, 245, 3000)], [(18, 240), (19, 251)],
                            alts={(18,): 30000, (19,): None})
-        self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 240 for Recipe 18; "
-                      "or skip it: +3.0g for the route without it.", text)
-        self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 251 for Recipe 19; "
-                      "there is no other way to reach the target without it.", text)
+        self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 240 for Recipe 18 "
+                      "(30s); or skip it: +3.0g for the route without it.", text)
+        self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 251 for Recipe 19 "
+                      "(30s); there is no other way to reach the target without it.", text)
         route = text[text.index("## Route"):]
         self.assertLess(route.index("at 240 for"), route.index("at 251 for"))
 
@@ -816,12 +817,12 @@ class VisitRowTests(unittest.TestCase):
         self.assertIn("the planner has no Master Blacksmith trainer for your faction in its data. While there, learn: "
                       "Recipe 13 (10s) (if the Master Blacksmith doesn't list it: any Artisan Blacksmith).", row)
         self.assertIn("- **Trip:** back to the Master Blacksmith (the planner has no Master Blacksmith trainer for "
-                      "your faction in its data), at 240 for Recipe 18.", text)
+                      "your faction in its data), at 240 for Recipe 18 (10s).", text)
         text = self.render(200, [(225, 300)], [(13, 210, 1000), (18, 240, 1000)], [(13, 230), (18, 240)], faction="")
         row = self.row(text, "- **Trip:**", "rank to 300")
         self.assertIn("(the planner doesn't say where yet). While there, learn: Recipe 13 (10s)", row)
         self.assertIn("- **Trip:** back to the Master Blacksmith in a set town (the planner doesn't say where yet), "
-                      "at 240 for Recipe 18.", text)
+                      "at 240 for Recipe 18 (10s).", text)
 
     def test_city_visit_rows(self):
         from yap_forever import trainers
@@ -831,6 +832,68 @@ class VisitRowTests(unittest.TestCase):
                            faction="horde", data=data, final=150)
         self.assertIn("- Train Blacksmithing to 150 at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
                       "Orgrimmar). While there, learn: Recipe 20 (5s).", text)
-        self.assertIn("- Learn Recipe 21 at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
-                      "Orgrimmar).", text)
+        self.assertIn("- Learn Recipe 21 (5s) at any Expert Blacksmith in a capital.", text)  # the rank row named them
 
+    def grom(self):
+        from yap_forever import trainers
+        return trainers.TrainerData([trainers.Trainer(1, "Grom Anvilhand", BS, "Expert", "H", 1637, (80, 20), True)],
+                                    {}, [], {1637: "Orgrimmar"})
+
+    def test_learned_recipe_row_says_where_it_was_learned(self):
+        text = self.render(184, [(225, 300)], [(17, 160, 1000), (13, 210, 2000), (18, 240, 3000)],
+                           [(17, 184), (13, 230), (18, 240)])
+        self.assertIn("- *At 184: start crafting Recipe 17 (learned before you start)*", text)
+        self.assertIn("- *At 230: start crafting Recipe 13 (learned at Brakka Ironfold)*", text)
+        self.assertIn("- *At 240: start crafting Recipe 18 (learned at Brakka Ironfold)*", text)
+        self.assertNotIn("Learn Recipe", text)  # no second fee
+        route = text[text.index("## Route"):]
+        self.assertLess(route.index("at 240 for Recipe 18"), route.index("At 240: start crafting"))  # after the trip
+
+    def test_capital_stops_after_the_first_are_short(self):
+        from yap_forever.trainer_notes import Notes
+        from yap_forever.trainer_text import TrainerInfo
+        from yap_forever.planner import Plan, Step
+        rs = base_recipes() + [toy.recipe(s, f"Recipe {s}", BS, {toy.COPPER_BAR: 1}, req=r, fee=500)
+                               for s, r in ((20, 110), (21, 125), (22, 140))]
+        p = Plan(steps=[Step(BS, 100, 150, 1, "BS basic", 50, 0, 0, {toy.COPPER_BAR: 50})], bought={toy.COPPER_BAR: 50},
+                 learn_log=[(BS, 112, 20, "trainer"), (BS, 126, 21, "trainer"), (BS, 141, 22, "trainer")],
+                 final_skill={BS: 150})
+        info = TrainerInfo("horde", self.grom(), Notes({}, {1637: "A tip."}))
+        text = render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: 100}), caps={BS: 150},
+                            trainer_info=info)
+        rows = [line for line in text.splitlines() if line.startswith("- Learn ")]
+        self.assertEqual(rows, ["- Learn Recipe 20 (5s) at any Expert Blacksmith in a capital (for example Grom "
+                                "Anvilhand, Orgrimmar). A tip.",
+                                "- Learn Recipe 21 (5s) at any Expert Blacksmith in a capital.",
+                                "- Learn Recipe 22 (5s) at any Expert Blacksmith in a capital."])
+
+    def test_capital_stop_fallback_comes_after_the_place(self):
+        # a Journeyman recipe (70) joins an Expert stop: its fallback note follows the place
+        text = self.render(60, [], [(21, 140, 500), (22, 74, 100)], [(21, 142), (22, 145)], faction="horde",
+                           data=self.grom(), final=150)
+        self.assertIn("- Learn Recipe 21 (5s), Recipe 22 (1s) at any Expert Blacksmith in a capital (for example "
+                      "Grom Anvilhand, Orgrimmar) (if the Expert Blacksmith doesn't list Recipe 22: any Journeyman "
+                      "Blacksmith).", text)
+
+    def test_if_missing_on_a_recipe_trip_and_a_capital_stop(self):
+        text = self.render(200, [], [(13, 210, 1000), (14, 190, 1000)], [(13, 212), (14, 220)])
+        self.assertIn("- **Trip:** back to Thessa Hammerlow, Stormwind City (60.5, 40.2) or Wandering Smith, Ironforge "
+                      "(20.0, 20.0), at 212 for Recipe 13 (10s). If you don't have it yet: Recipe 14.", text)
+        text = self.render(100, [], [(21, 140, 500), (23, 90, 500)], [(21, 142), (23, 145)], faction="horde",
+                           data=self.grom(), final=150)
+        self.assertIn("- Learn Recipe 21 (5s) at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
+                      "Orgrimmar). If you don't have it yet: Recipe 23.", text)
+
+    def test_city_rank_row_without_a_faction(self):
+        text = self.render(100, [(130, 150)], [(20, 120, 500)], [(20, 135)], faction="", final=150)
+        self.assertIn("- Train Blacksmithing to 150 at any Expert Blacksmith in a capital. While there, learn: "
+                      "Recipe 20 (5s).", text)
+        text = self.render(100, [(130, 150)], [], [], faction="", final=150)
+        self.assertNotIn("- Train ", text)  # nothing to learn: no row, as before
+
+    def test_recipe_trip_line_without_its_visit(self):
+        from yap_forever.guide import _trip_line
+        from yap_forever.trips import Trip
+        line = _trip_line(Trip(240, BS, "recipe", "Recipe 18", cap=300, spells=(18,)), {(18,): None})
+        self.assertEqual(line, "- **Trip:** back to the Master Blacksmith in a set town (the planner doesn't say where "
+                               "yet), at 240 for Recipe 18; there is no other way to reach the target without it.")

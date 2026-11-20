@@ -429,10 +429,13 @@ class SeenRequirementTests(unittest.TestCase):
         self.assertEqual((gd.recipes[7].required_skill, gd.recipes[7].listed_skill), (180, 150))
         self.assertEqual((gd.recipes[8].required_skill, gd.recipes[8].listed_skill), (150, None))
 
-    def test_shipped_rows_are_trainer_spells_with_a_skill(self):
+    def test_shipped_rows_have_a_spell_a_name_and_a_skill(self):
+        # the fixture game data has none of these spells, so their trainer source is not checked here
         rows = gamedata.load_seen_requirements()
         self.assertEqual(rows[14380], 184)
         self.assertTrue(all(isinstance(s, int) and 1 <= s <= 300 for s in rows.values()))
+        with open(gamedata.SEEN_REQUIREMENTS, "rb") as f:
+            self.assertTrue(all(isinstance(row.get("name"), str) and row["name"] for row in tomllib.load(f)["seen"]))
 
 
 if __name__ == "__main__":

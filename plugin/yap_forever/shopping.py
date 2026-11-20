@@ -11,6 +11,7 @@ from yap_forever.disenchant import ESSENCE_PAIRS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.shared import allocate
+from yap_forever.trips import visits
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
 BRING_POINTS = 25  # without a bag count, bring enough for this many points (or to the stage end)
@@ -328,12 +329,13 @@ def mailed(plan, gd, stock) -> dict[int, list[tuple[str, int]]]:
 
 
 def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0,
-              reagents=None) -> tuple[int, list[tuple[int, int, str]]]:
+              reagents=None, start_skills: dict[int, int] | None = None) -> tuple[int, list[tuple[int, int, str]]]:
     """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
     owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
     the trip use the bank first, as on the shopping list. reagent_slots: a reagent bag holds mats
     first (`reagents`: the set from reagent_items, built here when not given); CRAFT_ROOM stays on
-    normal slots."""
+    normal slots. start_skills: profession -> the route's start skill; with it, the stretch also ends at the
+    profession's next visit for trainer recipes (trips.visits): the player levels at home and comes back."""
     every = route_rows(plan, gd)
     at = next((k for k, r in enumerate(every)
                if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
@@ -344,7 +346,10 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
     mail = _mail(plan, whole_pool=owned is not None)
     _split(every[:at], plan, gd, left, mail)  # the bank and the mail the rows before the trip use
     later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
-    if later:  # the next rank trip brings its own
+    if start_skills is not None:
+        later += [v.skill for v in visits(plan, gd, start_skills)
+                  if v.profession == trip.profession and v.kind != "rank" and v.skill > trip.skill]
+    if later:  # the next rank trip, or the next trip back for recipes, brings its own
         rows = [r for r in rows if r["st"].skill_to <= min(later)] or rows[:1]
     if bag_slots:
         items = {i for r in rows for i in r["need"]}
@@ -358,10 +363,11 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
 
 
 def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
-               services_known: bool = False) -> str:
-    """services_known: the row already says what is near the trainer (or that it is a capital)."""
+               services_known: bool = False, start_skills: dict[int, int] | None = None) -> str:
+    """services_known: the row already says what is near the trainer (or that it is a capital).
+    start_skills: see bring_list."""
     reagents = reagent_items(gd) if reagent_slots else None
-    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents)
+    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills)
     if not items:
         return ""
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}

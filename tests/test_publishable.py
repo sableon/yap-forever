@@ -240,13 +240,14 @@ class PublishableTests(unittest.TestCase):
         """#82: game-rules.md gives the rank caps trips.recipe_rank_cap uses and the Truesilver Rod sighting of
         seen_requirements.toml; list-layout.md gives the rows the guide prints (tests/test_guide.py VisitRowTests)."""
         from yap_forever import gamedata
-        from yap_forever.trips import RANK_CAPS
+        from yap_forever.trips import MAX_TRIP_ALTS, RANK_CAPS
 
         def read(name):
             return " ".join((SKILL / name).read_text(encoding="utf-8").split())
         rules, layout, coverage = read("references/game-rules.md"), read("references/list-layout.md"), \
             read("references/coverage.md")
         self.assertEqual(RANK_CAPS, (75, 150, 225, 300))
+        self.assertEqual(MAX_TRIP_ALTS, 3)  # "only the costliest three trips"
         self.assertIn("Journeyman to 75, Expert to 150, Artisan to 225, Master to 300", rules)
         self.assertIn("one sighting", rules)
         self.assertEqual(gamedata.load_seen_requirements()[14380], 184)
@@ -256,7 +257,11 @@ class PublishableTests(unittest.TestCase):
                      "(if <trainer> doesn't list it: <who>)", "any <Rank> <Person>",
                      "- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>",
                      "; or skip it: +<gold> for the route without it", "; there is no other way to reach the target without it",
-                     "Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>)."):
+                     "Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).",
+                     "*At <skill>: start crafting <recipe> (learned at <trainer>)*", "(learned before you start)",
+                     "(if <trainer> doesn't list <recipe>: <who>)", "Learn <recipes> at any <Rank> <Person> in a capital.",
+                     "only the costliest three trips", "a recipe needed at 240 and used then, and one at 245, make two rows",
+                     "The bring list ends at the next rank trip or trip back for recipes"):
             self.assertIn(line, layout)
         self.assertIn("trips back to them for recipes", coverage)
 
