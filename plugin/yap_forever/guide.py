@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from yap_forever.config import STATIC_DIR
 from yap_forever.costmodel import BARS, ORES, STONES
 from yap_forever.gamedata import ENCH, PROFESSIONS
-from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, step_factor
+from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, reached_lines, step_factor
 from yap_forever import trainer_text
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, mail_text
@@ -367,6 +367,8 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None) -> No
             lines.setdefault((stage(t.profession, t.skill, True), t.profession), []).append((t.skill, 0.5, f"- {row}"))
 
     out += ["## Route", ""]
+    for line in reached_lines(plan):
+        out += [line, ""]
     for k in sorted({k for k, _p in lines}):
         out += [f"### Stage {k + 1}: to {STAGE_CAPS[min(k, len(STAGE_CAPS) - 1)]}", ""]
         for p in caps:

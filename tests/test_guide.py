@@ -197,6 +197,15 @@ class GuideTests(unittest.TestCase):
         self.assertTrue(rows)
         self.assertFalse(any("Blacksmith Hammer" in l for l in rows))
 
+    def test_reached_target_is_said(self):
+        from tests.test_planner import run_caps
+        rs = base_recipes()
+        st = toy.stock(skills={BS: 300})
+        p = run_caps(rs, {BS: 300}, BARS, stock=st)
+        text = render_guide(p, toy.gamedata(rs), toy.market(BARS), st, {BS: 300})
+        route = text[text.index("## Route"):text.index("## Money")]
+        self.assertIn("Blacksmithing is already at 300: nothing to plan.", route)
+
 
 if __name__ == "__main__":
     unittest.main()

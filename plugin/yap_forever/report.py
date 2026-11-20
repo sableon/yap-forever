@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from yap_forever.costmodel import Valuer, money
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
-from yap_forever.planner import DISENCHANT, step_factor
+from yap_forever.planner import DISENCHANT, reached_lines, step_factor
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, Budget, mail_text
 from yap_forever.talents import talent_lines
@@ -64,6 +64,7 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
     if plan.farm:
         out.append(f"Mining still needed for {sum(plan.farm.values())} ore "
                    f"(a short farm is up to {stock.short_farm_ore}, set in stock.toml).")
+    out += reached_lines(plan)
     for reason in plan.stall_reasons.values():
         out.append(f"- Stops early: {reason}.")
     final = ", ".join(f"{PROFESSIONS[p]} {s}" for p, s in plan.final_skill.items())

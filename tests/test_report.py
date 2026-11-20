@@ -109,6 +109,16 @@ class RenderTests(unittest.TestCase):
         text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
         self.assertTrue("Crafted for reagents" in text)
 
+    def test_reached_target_is_said(self):
+        from tests.test_planner import run_caps
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1))]
+        st = toy.stock(skills={BS: 300})
+        p = run_caps(rs, {BS: 300}, BARS, stock=st)
+        gd, m = toy.gamedata(rs), toy.market(BARS)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 300})
+        verdict_part = text[text.index("## Verdict"):text.index("## Route")]
+        self.assertIn("Blacksmithing is already at 300: nothing to plan.", verdict_part)
+
 
 if __name__ == "__main__":
     unittest.main()

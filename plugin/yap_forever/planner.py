@@ -1,6 +1,7 @@
 """Greedy route: at each skill point, craft the recipe with the lowest net cost."""
 import dataclasses
 import math
+import re
 from dataclasses import dataclass, field
 
 from yap_forever.costmodel import VENDOR_TOOLS, Cost, Pools, bars_to_ore, money, skillup_chance
@@ -9,6 +10,7 @@ from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.shared import allocate, mail_used
 
 START_CAP = 75  # Apprentice
+ALREADY_AT = re.compile(r"^(.+) already at (\d+)$")  # the event _Route.run records for a target reached
 DISENCHANT = 0  # Step.spell_id of an Enchanting skill-up from disenchanting
 BUFFER = 1.15  # extra crafts on yellow and green steps, which are expected values, not promises
 
@@ -75,6 +77,13 @@ class Plan:
     economic_total: float = 0
     sale_proceeds: float = 0
     leftover_value: float = 0
+
+
+def reached_lines(plan) -> list[str]:
+    """One line for each target the character already has (the planner's "<Prof> already at N" events),
+    for the guide and the report to say instead of showing an empty route."""
+    return [f"{m.group(1)} is already at {m.group(2)}: nothing to plan."
+            for e in plan.events if (m := ALREADY_AT.match(e))]
 
 
 def resolve_goals(goals: dict, gd, favor=None, quests: dict | None = None) -> tuple[dict[int, int], dict[int, int]]:
