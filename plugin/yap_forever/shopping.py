@@ -422,7 +422,7 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
              "that is too little for another craft.", "",
              "| Item | Count | Where | Cost |", "|---|---:|---|---:|"]
     bill = _bill(plan, gd, market, stock, rows)
-    lines += [f"| {name} | {n} | {where} | {gold(cost)} |" for name, n, where, cost in bill]
+    lines += [f"| {name} |{f' {n} ' if n != '' else ' '}| {where} | {gold(cost)} |" for name, n, where, cost in bill]
     lines += ["", f"**Gold to bring: {gold(sum(cost for *_line, cost in bill))}**", ""]
     if not stock.bag_slots:
         return lines, None

@@ -63,6 +63,7 @@ class CutTests(unittest.TestCase):
         lines, _ = render_shopping(p, i.gd, i.market, i.stock)
         self.assertIn(f"**Gold to bring: {gold(gold_to_bring(p, i.gd, i.market, i.stock))}**", lines)
         self.assertGreater(gold_to_bring(p, i.gd, i.market, i.stock), p.cash_total)
+        self.assertIn("| Trainer: ranks and recipes | | trainer | 4s |", lines)  # the rows read as before
 
     def test_budget_below_first_stop(self):  # RF1
         i = inputs(bs_only(), {BS: 225})
