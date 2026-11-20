@@ -13,4 +13,7 @@ if sys.version_info < (3, 11):
     sys.exit(1)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from yap_forever import settings
+
+settings.LAUNCHER = os.path.abspath(__file__)  # next-step hints name this command, not `-m yap_forever`
 runpy.run_module("yap_forever", run_name="__main__", alter_sys=True)
