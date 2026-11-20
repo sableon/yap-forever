@@ -15,6 +15,12 @@ Recorded in [docs/project-setup.md](docs/project-setup.md): remote and branch ru
   (character names, realm, IDs) goes into the denylist before any code uses it.
 - No force-push: bring a branch up to date by merging `main` into it. Every PR appends to
   `docs/progress.md`, so open the next PR only after the previous one is merged.
+- A pull request that changes the folder layout, the version, a default command or the game-data
+  cache gets an "Outside the repo" section: every caller outside the repo (the price command on a
+  server, defaults saved in older installs, existing player homes) and what each does on its first
+  run after the update.
+- A new test that guards a rule (a document check, the version, the file layout) is broken once on
+  purpose and seen to fail before the pull request; the pull request says how.
 
 ## Branch rules on GitHub
 

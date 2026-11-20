@@ -11,6 +11,26 @@ The pull request before a tag sets the new `X.Y.Z` in both `plugin/.claude-plugi
 an earlier version never get the new one, and a `v*` tag can't be moved or deleted afterwards.
 `tests/test_publishable.py` checks that the two match and are not behind the newest tag.
 
+## Before the tag: the first run after an update
+
+Players update from the previous tag, so check that a home folder it used still works with the new
+`main`. Use a scratch home, so your own stays as it is:
+
+```
+export YAP_FOREVER_HOME="$HOME/.yap-update-check"
+rm -rf "$YAP_FOREVER_HOME" && mkdir -p "$YAP_FOREVER_HOME" && cp -R ~/.yap-forever/. "$YAP_FOREVER_HOME"/
+git worktree add ../yap-prev <previous tag>
+```
+
+- Run one `plan` for a character with the previous tag, in its package folder (`../yap-prev` for
+  `v0.1.0-*`, `../yap-prev/plugin` after), then the same `plan` with the new `main` from `plugin/`.
+- **Must happen:** the new `plan` runs with no step by hand, downloads the new game data once and
+  removes the old copy, and ends with no traceback. Its guide and report match the previous tag's,
+  unless a pull request since then says what changes.
+- Every "Outside the repo" section in the pull requests since the previous tag is checked here too:
+  for the price command on a server, the folder it runs in still holds the package.
+- Afterwards: `git worktree remove ../yap-prev` and `rm -rf "$YAP_FOREVER_HOME"`.
+
 ## Set up a clean install
 
 Use a separate Claude Code folder and a separate player home, so your own setup and files stay as
