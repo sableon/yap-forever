@@ -196,18 +196,7 @@ class _Route:
             name = PROFESSIONS[prof]
 
             if s >= rank_cap[prof]:
-                nxt = next((r for r in gd.trainer_ranks.get(prof, []) if r.cap > rank_cap[prof]), None)
-                if nxt is None or nxt.required_skill > s:
-                    p.stalled[prof], p.stall_reasons[prof] = s, f"{name}: no next rank to train at {s}"
-                elif stock.level < nxt.level:
-                    p.stalled[prof] = s
-                    p.stall_reasons[prof] = f"{name}: next rank needs character level {nxt.level}"
-                else:
-                    p.fees += nxt.fee
-                    self.spent += Cost(nxt.fee, nxt.fee)
-                    rank_cap[prof] = nxt.cap
-                    p.ranks.append((prof, s, nxt.cap, nxt.fee))
-                    p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
+                self._rank_step(prof, s, name)
                 continue
 
             best = None
@@ -637,6 +626,21 @@ class _Route:
         self.p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
                                  mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
         self.p.events.append(f"{name} {s}: craft {r.name} once")
+
+    def _rank_step(self, prof, s, name):
+        """At the current rank's cap: train the next rank, or stall the profession when it can't be."""
+        nxt = next((r for r in self.gd.trainer_ranks.get(prof, []) if r.cap > self.rank_cap[prof]), None)
+        if nxt is None or nxt.required_skill > s:
+            self.p.stalled[prof], self.p.stall_reasons[prof] = s, f"{name}: no next rank to train at {s}"
+        elif self.stock.level < nxt.level:
+            self.p.stalled[prof] = s
+            self.p.stall_reasons[prof] = f"{name}: next rank needs character level {nxt.level}"
+        else:
+            self.p.fees += nxt.fee
+            self.spent += Cost(nxt.fee, nxt.fee)
+            self.rank_cap[prof] = nxt.cap
+            self.p.ranks.append((prof, s, nxt.cap, nxt.fee))
+            self.p.events.append(f"{name} {s}: train rank up to {nxt.cap} ({money(nxt.fee)})")
 
 
 def _snapshot(pools) -> dict:
