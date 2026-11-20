@@ -184,6 +184,19 @@ class GuideTests(unittest.TestCase):
         self.assertFalse(any(l.startswith("| Copper Rod") for l in keep.splitlines()))
         self.assertIn("Buy from a vendor when you switch", text)
 
+    def test_bought_tool_not_a_material_on_rows_or_keep_table(self):
+        from yap_forever.guide import render_guide
+        rs = [toy.recipe(1, "BS hammer", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1), tools=[162]),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        p = run(rs, BARS)
+        gd = toy.gamedata(rs)
+        guide = render_guide(p, gd, toy.market(BARS), toy.stock(), caps={BS: 225, ENCH: 225})
+        keep = guide[guide.index("## Keep while levelling"):guide.index("## Route")]
+        self.assertNotIn("Blacksmith Hammer", keep)
+        rows = [l for l in guide.splitlines() if l.startswith("- **") and "× BS hammer" in l]
+        self.assertTrue(rows)
+        self.assertFalse(any("Blacksmith Hammer" in l for l in rows))
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -560,6 +573,18 @@ class WholeCraftGuideTests(unittest.TestCase):
         self.assertIn("134× LW basic — 268 Copper Bar", text)
         keep = text[text.index("## Keep while levelling"):text.index("## Route")]
         self.assertIn("268", keep)
+
+    def test_row_names_the_intermediate_to_craft_first(self):
+        from yap_forever.guide import render_guide
+        from yap_forever.planner import Plan, Step
+        S, T, L = toy.COPPER_BAR, toy.IRON_BAR, toy.ROD
+        gd = toy.gamedata([toy.recipe(40, "Make L", BS, {S: 3}, (L, 2)), toy.recipe(42, "Make G", BS, {L: 1, T: 1})])
+        st = Step(BS, 1, 4, 42, "Make G", 3, 0, 0, {T: 3}, buffered=3)
+        p = Plan(steps=[st], crafted={L: 3}, final_skill={BS: 4})
+        text = render_guide(p, gd, toy.market(), toy.stock(), caps={BS: 4})
+        line = next(l for l in text.splitlines() if "× Make G" in l)
+        self.assertIn("first craft 3 Copper Rod", line)
+        self.assertIn("6 Copper Bar", line)
 
 
 class TalentLineTests(unittest.TestCase):

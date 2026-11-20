@@ -9,6 +9,7 @@ from yap_forever.costmodel import Valuer
 from yap_forever.favor import load_favor
 from yap_forever.planner import Plan, plan
 from yap_forever.report import SECTIONS, render, verdict
+from tests.test_planner import BARS, BS, ENCH, run_with_data
 
 
 def sample():
@@ -90,6 +91,23 @@ class RenderTests(unittest.TestCase):
             gd = gamedata.load_gamedata(settings.paths(USER_DIR).gamedata)
             for spell in fav.recipes:
                 self.assertIn(gd.recipes[spell].skill_line, (164, 333))
+
+    def test_no_market_stock_flagged(self):
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        p, gd, m, st = run_with_data(rs, BARS, stock=toy.stock({toy.VEST: 3}))
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
+        self.assertTrue("no market" in text and "Copper Chain Vest" in text)
+
+    def test_report_lists_crafted_intermediates(self):
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(6, "Make Copper Rod", BS, {toy.COPPER_BAR: 1}, (toy.ODD, 1), t=(1, 2, 2, 2),
+                         source="starter"),
+              toy.recipe(2, "Ench odd", ENCH, {toy.ODD: 1})]
+        p, gd, m, st = run_with_data(rs, BARS)
+        self.assertIn(toy.ODD, p.crafted)
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 225, ENCH: 225})
+        self.assertTrue("Crafted for reagents" in text)
 
 
 if __name__ == "__main__":

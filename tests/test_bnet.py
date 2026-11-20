@@ -118,6 +118,22 @@ class ClientTests(unittest.TestCase):
             c.get("/x")
         self.assertEqual(cm.exception.status, 404)
 
+    def test_stale_token_replaced_after_401(self):
+        with tempfile.TemporaryDirectory() as d:
+            cache = Path(d) / "token.json"
+            cache.write_text(json.dumps({"access_token": "old", "expires_at": 10 ** 12}))
+            calls = []
+
+            def api(req):
+                calls.append(req.get_header("Authorization"))
+                if req.get_header("Authorization") == "Bearer old":
+                    raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+                return FakeResp(b'{"ok": 1}')
+            op = FakeOpener(api=api)
+            c = bnet.Client(Credentials("a", "b", "eu"), opener=op, now=lambda: 1000.0, token_cache=cache)
+            self.assertEqual(c.get("/x").body, {"ok": 1})
+            self.assertEqual(op.token_calls, 1)
+
 
 class MarkerTests(unittest.TestCase):
     def load(self):
