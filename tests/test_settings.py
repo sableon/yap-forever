@@ -24,7 +24,8 @@ class HomeTests(unittest.TestCase):
         p = settings.paths(Path("/r"))
         self.assertEqual(p.character("Ana"), Path("/r/characters/Ana"))
         self.assertEqual(p.prices, Path("/r/cache/prices.json"))
-        self.assertEqual(p.gamedata, Path("/r/cache/gamedata"))
+        from yap_forever.gamedata import PIN_KEY
+        self.assertEqual(p.gamedata, Path("/r/cache/gamedata") / PIN_KEY)
         self.assertEqual(p.credentials, Path("/r/credentials.json"))
         self.assertEqual(p.house, Path("/r/house.json"))
         self.assertEqual(p.reports, Path("/r/reports"))

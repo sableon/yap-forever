@@ -28,6 +28,20 @@ Then ask Claude something like "plan my Forever Blacksmithing to 150". The first
 you through setup: your profile, your API client, and finding your auction house with one marker
 listing.
 
+## Update
+
+Each tag is a new version. Updates are off by default for this marketplace; either turn them on
+(`/plugin`, **Marketplaces**, select yap-forever, turn on auto-update) or update by hand in a
+terminal:
+
+```
+claude plugin marketplace update yap-forever
+claude plugin update yap-forever@yap-forever
+```
+
+The new version loads in your next session, or after `/reload-plugins`. Game data follows the
+version: the first plan after an update downloads what changed.
+
 ## Privacy
 
 Your API client, characters, stock and prices stay in `~/.yap-forever/` on your machine. Claude

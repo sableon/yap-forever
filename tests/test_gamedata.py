@@ -162,5 +162,163 @@ class RankLevelFillTests(unittest.TestCase):
         self.assertEqual(ranks[3][0].level, 0)
 
 
+HTML_ONE_LINE = "<html><body>Rate limited</body></html>"
+HTML_LINES = "<!DOCTYPE html>\n<html>\n<head><title>502</title></head>\n<body>Bad gateway</body>\n</html>\n"
+
+
+class _Response:
+    def __init__(self, body: bytes):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return self.body
+
+
+def _serve(bodies: dict[str, str]):
+    """A stand-in for urlopen: each source file name gets its body (the fixture's, unless named)."""
+    def urlopen(req, timeout=None):
+        url = req.full_url
+        name = next(n for n, u in gamedata.SOURCES.items() if u == url)
+        text = bodies[name] if name in bodies else (FIX / name).read_text(encoding="utf-8")
+        return _Response(text.encode("utf-8"))
+    return urlopen
+
+
+class CacheTests(unittest.TestCase):
+    """The game data cache follows the pinned versions, and a bad download is never kept."""
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.paths = settings.paths(Path(self._tmp.name) / "home")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def fetch(self, bodies=None, **kw):
+        from unittest import mock
+        with mock.patch("urllib.request.urlopen", side_effect=_serve(bodies or {})), \
+                mock.patch("builtins.print"):
+            gamedata.fetch_all(dest=self.paths.gamedata, **kw)
+
+    def test_downloads_name_the_package_version(self):
+        from unittest import mock
+
+        import yap_forever
+        seen = []
+        serve = _serve({})
+
+        def urlopen(req, timeout=None):
+            seen.append(req.get_header("User-agent"))
+            return serve(req, timeout)
+        with mock.patch("urllib.request.urlopen", side_effect=urlopen), mock.patch("builtins.print"):
+            gamedata.fetch_all(dest=self.paths.gamedata, only=["Vendor.lua"])
+        self.assertEqual(seen, [f"yap-forever/{yap_forever.__version__}"])
+
+    def test_the_cache_folder_is_named_after_the_pins(self):
+        self.assertEqual(self.paths.gamedata.parent, self.paths.cache / "gamedata")
+        name = self.paths.gamedata.name
+        for pin in (gamedata.SKILLUP_SHA[:12], gamedata.QUESTIE_SHA[:12], gamedata.WAGO_BUILD):
+            self.assertIn(pin, name)
+
+    def test_files_of_an_older_pin_are_downloaded_again(self):
+        old = self.paths.cache / "gamedata"  # the layout before the pins were in the path
+        old.mkdir(parents=True)
+        (old / "Recipes.lua").write_text("ns.RecipeData = {}\n-- an older pin", encoding="utf-8")
+        older = old / "skillup-000000000000_questie-000000000000_wago-1.59.0"
+        older.mkdir()
+        (older / "Recipes.lua").write_text("ns.RecipeData = {}\n-- an older pin", encoding="utf-8")
+        self.fetch()
+        self.assertEqual((self.paths.gamedata / "Recipes.lua").read_text(encoding="utf-8"),
+                         (FIX / "Recipes.lua").read_text(encoding="utf-8"))
+        gd = gamedata.load_gamedata(self.paths.gamedata)
+        self.assertEqual(gd.recipes, gamedata.load_gamedata(FIX).recipes)
+
+    def test_copies_of_older_pins_are_removed_and_nothing_else(self):
+        root = self.paths.cache / "gamedata"
+        older = root / "skillup-000000000000_questie-000000000000_wago-1.59.0"
+        older.mkdir(parents=True)
+        (older / "Recipes.lua").write_text("old", encoding="utf-8")
+        (root / "Recipes.lua").write_text("old", encoding="utf-8")
+        (root / "my-notes.txt").write_text("keep", encoding="utf-8")
+        mine = root / "my-folder"
+        mine.mkdir()
+        self.fetch()
+        gamedata.prune_stale(self.paths.gamedata)
+        self.assertFalse(older.exists())
+        self.assertFalse((root / "Recipes.lua").exists())
+        self.assertTrue((root / "my-notes.txt").exists())
+        self.assertTrue(mine.exists())
+        self.assertTrue((self.paths.gamedata / "Recipes.lua").exists())
+
+    def test_prune_leaves_a_folder_outside_the_cache_alone(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t) / "data"
+            d.mkdir()
+            (Path(t) / "Recipes.lua").write_text("x", encoding="utf-8")
+            gamedata.prune_stale(d)
+            self.assertTrue((Path(t) / "Recipes.lua").exists())
+
+    def assert_refused(self, name, body):
+        with self.assertRaises(ValueError) as cm:
+            self.fetch({name: body})
+        self.assertIn(name, str(cm.exception))
+        self.assertFalse((self.paths.gamedata / name).exists())
+        self.assertFalse((self.paths.gamedata / (name + ".part")).exists())
+
+    def test_an_html_page_as_itemsparse_one_line_is_not_kept(self):
+        self.assert_refused("ItemSparse.csv", HTML_ONE_LINE)
+
+    def test_an_html_page_as_itemsparse_several_lines_is_not_kept(self):
+        self.assert_refused("ItemSparse.csv", HTML_LINES)
+
+    def test_an_html_page_as_vendor_lua_is_not_kept(self):
+        self.assert_refused("Vendor.lua", HTML_LINES)
+
+    def test_a_trainer_file_without_its_table_is_not_kept(self):
+        self.assert_refused("foreverNpcDB.lua", HTML_ONE_LINE)
+
+    def test_every_source_has_a_check(self):
+        self.assertEqual(set(gamedata.EXPECTED), set(gamedata.SOURCES))
+
+    def test_every_fixture_passes_its_check(self):
+        for name in gamedata.SOURCES:
+            gamedata.check_file(FIX / name, name)
+
+    def damaged(self, name, body):
+        import shutil
+        shutil.copytree(FIX, self.paths.gamedata)
+        (self.paths.gamedata / name).write_text(body, encoding="utf-8")
+        with self.assertRaises(ValueError) as cm:
+            gamedata.load_gamedata(self.paths.gamedata)
+        msg = str(cm.exception)
+        self.assertIn(str(self.paths.gamedata / name), msg)
+        self.assertIn("delete it", msg)
+        return msg
+
+    def test_a_cached_html_itemsparse_one_line_is_named(self):
+        self.damaged("ItemSparse.csv", HTML_ONE_LINE)
+
+    def test_a_cached_html_itemsparse_several_lines_is_named(self):
+        self.damaged("ItemSparse.csv", HTML_LINES)
+
+    def test_a_cached_html_vendor_lua_is_named(self):
+        self.damaged("Vendor.lua", HTML_LINES)
+
+    def test_a_bad_row_past_the_header_is_named(self):
+        text = (FIX / "ItemSparse.csv").read_text(encoding="utf-8") + "99999,Broken,x,1,1,1,0,,0\n"
+        self.damaged("ItemSparse.csv", text)
+
+    def test_a_lua_table_cut_short_is_named(self):
+        self.damaged("Thresholds.lua", "ns.Thresholds = {\n  [1] = {1, 2,")
+
+
 if __name__ == "__main__":
     unittest.main()

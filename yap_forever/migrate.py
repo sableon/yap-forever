@@ -131,11 +131,8 @@ def migrate(data_dir: Path, dest: Paths, characters: dict[str, Path], region: st
         profile.save_house(dest.house, house, region, ruleset)
         actions.append(f"saved house {house} -> {dest.house}")
     _copy(Path(data_dir) / "prices.json", dest.prices, actions)
-    gd = Path(data_dir) / "gamedata"
-    if gd.is_dir():
-        for f in sorted(gd.iterdir()):
-            if f.is_file():
-                _copy(f, dest.gamedata / f.name, actions)
+    if (Path(data_dir) / "gamedata").is_dir():  # of an unknown pin: plan downloads the pinned files
+        actions.append("left out the old game data: the next plan downloads the pinned files")
     if dest.profile.exists():
         actions.append(f"kept {dest.profile}")
     else:

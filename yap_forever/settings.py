@@ -53,7 +53,9 @@ class Paths:
 
     @property
     def gamedata(self) -> Path:
-        return self.cache / "gamedata"
+        """The game data of the pinned versions: a new pin is a new folder (gamedata.PIN_KEY)."""
+        from yap_forever.gamedata import PIN_KEY  # gamedata imports this module
+        return self.cache / "gamedata" / PIN_KEY
 
     @property
     def prices(self) -> Path:

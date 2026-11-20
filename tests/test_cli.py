@@ -278,6 +278,31 @@ class CliTests(unittest.TestCase):
         self.assertEqual(text.count("Trainer names are left out"), 1)
         self.assertIn("foreverNpcDB.lua is damaged", text)
 
+    def test_plan_with_a_damaged_game_data_file_names_it_without_a_traceback(self):
+        self.ready_home()
+        bad = self.paths.gamedata / "Vendor.lua"
+        bad.write_text("<html>\n<body>Bad gateway</body>\n</html>\n", encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertNotIn("Traceback", out)
+        self.assertIn(str(bad), out)
+        self.assertIn("delete it", out)
+
+    def test_plan_with_an_error_page_as_a_download_saves_nothing_and_says_so(self):
+        import shutil
+        from unittest import mock
+
+        from tests.test_gamedata import HTML_LINES, _serve
+        self.ready_home()
+        shutil.rmtree(self.paths.gamedata)  # an empty cache: everything is downloaded
+        with mock.patch("urllib.request.urlopen", side_effect=_serve({"ItemSparse.csv": HTML_LINES})):
+            code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+        self.assertEqual(code, 1)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("ItemSparse.csv is not game data", out)
+        self.assertFalse((self.paths.gamedata / "ItemSparse.csv").exists())
+        self.assertEqual(list(self.paths.reports.glob("*.md")) if self.paths.reports.exists() else [], [])
+
     def test_plan_offline_with_trainer_files_missing_still_renders(self):
         import urllib.error
         from unittest import mock
