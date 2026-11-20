@@ -13,7 +13,9 @@ says what is there.
 - The safe route for trainer recipes whose skill requirement is only inferred from Classic, with a
   header line on what the route could save ([game-rules.md](game-rules.md), "Trainers and ranks";
   [list-layout.md](list-layout.md), "Trainer stages and trips").
-- Merchant's Favor recipes for the character's standing (Alliance, Blacksmithing and Enchanting).
+- Merchant's Favor recipes for the character's standing (Alliance, Blacksmithing and Enchanting),
+  as far as their vendor, standing and price are known: up to the Honored Wristguards and Brilliant
+  Wand. Other Favor-era recipes (the Blacksmithing plans at 300 among them) are not listed yet.
 - A shopping list in every guide; mailbox trips when `stock.toml` gives `bag_slots`, and a reagent
   bag when it gives `reagent_slots` ([list-layout.md](list-layout.md), "Mailbox trips").
 - Owned patterns: a pattern in the character's stock teaches its recipe at no cost, and is left

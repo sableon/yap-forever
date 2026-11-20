@@ -2,8 +2,12 @@
 # Blacksmithing and Enchanting only so far.
 # Sources (read 2026-11-10): method.gg Merchant's Favor guide (3 Nov 2026), wowhandbook.com/professions/merchants-favor
 # (build 1.60.1.70862), foreverchanges.pro/merchants-favor. Prices agree across guides; partly from beta data.
-# `standing` is the reputation a recipe needs. Neutral data is certain; Friendly and Honored come from
-# guides that disagree (some say no standing is needed), so they are marked "disputed between guides".
+# `standing` is the reputation a recipe needs. Checked in game for Alliance on 2026-11-20: at Friendly the
+# Blacksmithing Gauntlets and Pauldrons and every Enchanting recipe up to skill 220 can be bought; the
+# Wristguards need Honored. Reputation gives no discount on Favor prices.
+# Brilliant Wand (Enchanting 275, 180 Favor) needs Honored too, and so do the Blacksmithing plans at skill
+# 300. Other Favor-era formulas and plans in the game data are not listed: their vendor, standing and price
+# are not read yet.
 # Vendors: Stondry Darkhammer (Blacksmithing), Alynsia (Enchanting). Crates hand in to Marcy Baker.
 
 # --- Blacksmithing ---
@@ -222,105 +226,105 @@ spell_id = 1252315
 name = "Officer's Gauntlet"
 favor = 60
 skill = 175
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252316
 name = "Sentinel's Gauntlet"
 favor = 60
 skill = 175
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252317
 name = "Warder's Gauntlet"
 favor = 60
 skill = 175
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252318
 name = "Prefect's Gauntlet"
 favor = 60
 skill = 175
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252319
 name = "Justicar's Gauntlet"
 favor = 60
 skill = 175
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252325
 name = "Officer's Pauldrons"
 favor = 60
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252326
 name = "Sentinel's Pauldrons"
 favor = 60
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252327
 name = "Warder's Pauldrons"
 favor = 60
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252328
 name = "Prefect's Pauldrons"
 favor = 60
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252329
 name = "Justicar's Pauldrons"
 favor = 60
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1252330
 name = "Officer's Wristguards"
 favor = 90
 skill = 225
-standing = "Honored"  # disputed between guides
+standing = "Honored"
 
 [[recipe]]
 spell_id = 1252331
 name = "Sentinel's Wristguards"
 favor = 90
 skill = 225
-standing = "Honored"  # disputed between guides
+standing = "Honored"
 
 [[recipe]]
 spell_id = 1252332
 name = "Warder's Wristguards"
 favor = 90
 skill = 225
-standing = "Honored"  # disputed between guides
+standing = "Honored"
 
 [[recipe]]
 spell_id = 1252333
 name = "Prefect's Wristguards"
 favor = 90
 skill = 225
-standing = "Honored"  # disputed between guides
+standing = "Honored"
 
 [[recipe]]
 spell_id = 1252334
 name = "Justicar's Wristguards"
 favor = 90
 skill = 225
-standing = "Honored"  # disputed between guides
+standing = "Honored"
 
 # --- Enchanting ---
 [[recipe]]
@@ -398,91 +402,98 @@ spell_id = 1249059
 name = "Enchant Necklace - Agility"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249060
 name = "Enchant Necklace - Deflection"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249058
 name = "Enchant Necklace - Healing Power"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249057
 name = "Enchant Necklace - Spell Power"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249019
 name = "Enchant Necklace - Strength"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249006
 name = "Libram of Invocation"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1248974
 name = "Talons of Wrath"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249015
 name = "Totem of Ancestral Protection"
 favor = 120
 skill = 210
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249064
 name = "Dreamstaff"
 favor = 120
 skill = 220
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249071
 name = "Enchant Chest - Absorption"
 favor = 120
 skill = 220
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249061
 name = "Radiant Staff"
 favor = 120
 skill = 220
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249069
 name = "Truesilver Conduit"
 favor = 120
 skill = 220
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
 
 [[recipe]]
 spell_id = 1249070
 name = "Twisting Essence Jar"
 favor = 120
 skill = 220
-standing = "Friendly"  # disputed between guides
+standing = "Friendly"
+
+[[recipe]]
+spell_id = 1248650
+name = "Brilliant Wand"
+favor = 180
+skill = 275
+standing = "Honored"
 
 # --- Crate turn-ins: the Waylaid Crate itself plus one bundle. Favor per crate from foreverchanges.pro;
 # Expert/Artisan amounts not known yet, so left out. ---
