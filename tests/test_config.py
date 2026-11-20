@@ -161,6 +161,15 @@ class GoalsTests(unittest.TestCase):
             self.assertEqual(config.load_stock(write(d, "zero.toml", "bag_slots = 0\nreagent_slots = 0\n" + STOCK)).bag_slots, 0)
 
 
+    def test_stock_skinning(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = config.load_stock(write(d, "stock.toml", "skinning = 100\n" + STOCK))
+            plain = config.load_stock(write(d, "plain.toml", STOCK))
+            with self.assertRaisesRegex(ValueError, "skinning"):
+                config.load_stock(write(d, "bad.toml", "skinning = -1\n" + STOCK))
+        self.assertEqual((s.skinning, plain.skinning), (100, 0))
+
+
 class CredentialTests(unittest.TestCase):
     def test_credentials_repr_masks(self):
         c = config.Credentials("myclientid", "s3cr3tvalue", "eu")

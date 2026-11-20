@@ -30,7 +30,7 @@ class Stock:
     favor: int
     cash: int  # copper, soft budget
     level: int
-    mining: int
+    mining: int  # Mining skill; above 0 the guide gives the miner's notes
     short_farm_ore: int
     mining_goal: int = 0  # Mining skill you'll reach while farming; 0 = current
     quest_item_sales: int | None = None  # quest items you expect to sell on the AH; None = no limit
@@ -39,6 +39,7 @@ class Stock:
     bag_slots: int | None = None  # free bag slots while crafting; None = mailbox trips not planned
     keep_greens: bool = False  # keep green crafts to disenchant on another character instead of selling
     reagent_slots: int = 0  # reagent bag slots; 0 = no reagent bag
+    skinning: int = 0  # Skinning skill; above 0 the guide says leather can be gathered
     shared: dict[str, dict[int, int]] = field(default_factory=dict)  # your group's other characters' mailable items,
     # by name (not in the file: set from the other characters' stock files, see shared.Group)
 
@@ -176,6 +177,7 @@ def _stock(d: dict) -> Stock:
         cash=round(_number(d.get("cash_gold", 0), "cash_gold") * 10000),
         level=whole("level", 1),
         mining=whole("mining", 0),
+        skinning=_slots(d, "skinning", 0),
         short_farm_ore=whole("short_farm_ore", 200),
         mining_goal=_whole(d["mining_goal"], "mining_goal") if "mining_goal" in d else whole("mining", 0),
         quest_item_sales=whole("quest_item_sales", None),

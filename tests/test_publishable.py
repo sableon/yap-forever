@@ -145,6 +145,19 @@ class PublishableTests(unittest.TestCase):
         caps = [c for c, rank in RANK_BY_CAP.items() if rank in ("Expert", "Artisan", "Master")]
         self.assertEqual([int(g) for g in m.groups()], sorted(caps))
 
+    def test_order_decision_documented(self):
+        """#35: game-rules.md says the planner never reorders professions for disenchant skill-ups, and the
+        60 it names is the last threshold of disenchant.toml."""
+        import tomllib
+
+        from yap_forever.config import STATIC_DIR
+        text = (SKILL / "references" / "game-rules.md").read_text(encoding="utf-8")
+        self.assertIn("never reorders", text)
+        self.assertIn("41s", text)
+        with open(STATIC_DIR / "disenchant.toml", "rb") as f:
+            self.assertEqual(tomllib.load(f)["skill_ups"][-1], 60)
+        self.assertIn("only up to 60", text.replace("\n", " ").replace("  ", " "))
+
     def test_skill_reference_links_exist(self):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         refs = set(re.findall(r"references/[\w-]+\.md", text))

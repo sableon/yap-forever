@@ -159,7 +159,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         alts = trip_alternatives(route, inputs, m)
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
-        full.write_text(render(route, verdict(route, stock, caps), market, gd, stock, favor, caps,
+        full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,
                                notes=group.notes() if group else ()), encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"

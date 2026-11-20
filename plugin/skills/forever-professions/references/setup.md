@@ -97,6 +97,7 @@ level = 40
 favor = 300          # Merchant's Favor points
 cash_gold = 25       # old place for gold: see "Ruleset and faction groups"
 mining = 0           # Mining skill, if the character mines
+skinning = 0         # Skinning skill, if the character skins (the guide then says to gather leather)
 short_farm_ore = 0
 bag_slots = 40       # free normal bag slots while crafting; gives mailbox trips (leave out to skip them)
 reagent_slots = 0    # slots in a reagent bag (materials only, filled first); 0 = none

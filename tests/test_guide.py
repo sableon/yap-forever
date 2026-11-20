@@ -182,7 +182,7 @@ class GuideTests(unittest.TestCase):
         text = guide(rs, BARS)
         keep = text[text.index("## Keep while levelling"):text.index("## Route")]
         self.assertFalse(any(l.startswith("| Copper Rod") for l in keep.splitlines()))
-        self.assertIn("Buy from a vendor when you switch", text)
+        self.assertIn("### Buy from a vendor\n", text)
 
     def test_bought_tool_not_a_material_on_rows_or_keep_table(self):
         from yap_forever.guide import render_guide
@@ -205,6 +205,29 @@ class GuideTests(unittest.TestCase):
         text = render_guide(p, toy.gamedata(rs), toy.market(BARS), st, {BS: 300})
         route = text[text.index("## Route"):text.index("## Money")]
         self.assertIn("Blacksmithing is already at 300: nothing to plan.", route)
+
+    def test_vendor_heading_has_no_switch(self):
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        text = guide(rs, BARS)
+        self.assertIn("### Buy from a vendor\n", text)
+        self.assertNotIn("when you switch", text)
+
+    def test_bars_note_only_for_miners(self):
+        for mining, expected in ((120, True), (0, False)):
+            with self.subTest(mining=mining):
+                text = guide(base_recipes(), BARS, stock=toy.stock(mining=mining))
+                self.assertIn("### Mining", text)
+                self.assertEqual("Bars: mine the ore" in text, expected)
+
+    def test_skin_clause_only_for_skinners(self):
+        for skinning, expected in ((100, True), (0, False)):
+            with self.subTest(skinning=skinning):
+                st = toy.stock(mining=120)  # the leather note sits with the gatherer notes
+                st.skinning = skinning
+                text = guide(base_recipes(), BARS, stock=st)
+                self.assertIn("Leather is costed as bought on the AH", text)
+                self.assertEqual("since you skin" in text, expected)
 
 
 if __name__ == "__main__":

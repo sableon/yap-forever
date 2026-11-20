@@ -9,21 +9,14 @@ from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, Budget, mail_text
 from yap_forever.talents import talent_lines
 
-SECTIONS = ["Verdict", "Farm before switching", "Switch order", "Route", "Merchant's Favor",
-            "Totals", "Sell now", "Excluded recipes", "Data notes"]
+SECTIONS = ["Verdict", "Route", "Merchant's Favor", "Totals", "Sell now", "Excluded recipes", "Data notes"]
+# plus "Ore to mine" after the verdict, when the plan farms ore
 
 
-def _main_pair(caps) -> bool:
-    """The Blacksmithing + Enchanting switch with Mining that the farm and switch sections describe."""
-    return caps is None or set(caps) == {BS, ENCH}
-
-
-def verdict(plan, stock, caps=None) -> str:
+def verdict(plan, stock) -> str:
     ore = sum(plan.farm.values())
-    if not _main_pair(caps) and ore == 0:
-        return "Ready to level"
     if ore == 0:
-        return "Switch now"
+        return "Ready to level"
     if ore <= stock.short_farm_ore:
         return "Switch after a short farm"
     return "Not yet"
@@ -70,41 +63,22 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
     final = ", ".join(f"{PROFESSIONS[p]} {s}" for p, s in plan.final_skill.items())
     out.append(f"Planned to: {final}.")
 
-    # Farm
-    if _main_pair(caps) or plan.farm:
-        section("Farm before switching")
+    held_total = sum(n for n in plan.de_materials.values())
+    if held_total:
+        out.append("")
+        out.append(f"Disenchanting in this route yields about {held_total:.0f} materials.")
+
+    # Ore
     if plan.farm:
+        section("Ore to mine")
         out += ["| Ore | Count |", "|---|---|"]
         out += [f"| {gd.name(i)} | {n} |" for i, n in sorted(plan.farm.items())]
         bars = ", ".join(f"{math.ceil(n)} {gd.name(b)}" for b, n in sorted(plan.farmed_bars.items()))
         out += ["", f"Smelts into: {bars}."]
-    elif _main_pair(caps):
-        out.append("Nothing: your stock and purchases cover the route.")
-
-    # Switch order
-    held_total = sum(n for n in plan.de_materials.values())
-    if not _main_pair(caps):
-        if held_total:
-            out.append(f"Disenchanting in this route yields about {held_total:.0f} materials.")
-    else:
-        _switch_order(out, section, held_total)
 
     _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, caps, stock),
           saving_line, budget, notes)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
-
-
-def _switch_order(out, section, held_total) -> None:
-    section("Switch order")
-    out.append("Farming time is free, so both orders cost the same gold.")
-    out.append("- **Order A:** drop Skinning and take Blacksmithing now, keep Mining while levelling "
-               "Blacksmithing (mine the list above as you go), then swap Mining for Enchanting. "
-               "Greens already in your bank that Enchanting can disenchant are disenchanted first; "
-               "a green craft is only kept for disenchanting once Enchanting can disenchant it.")
-    out.append("- **Order B:** farm the list first, then switch both. Both professions level side by side, "
-               "so greens are disenchanted as soon as Enchanting allows.")
-    if held_total:
-        out.append(f"Disenchanting in this route yields about {held_total:.0f} materials.")
 
 
 def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None, notes=()) -> None:
