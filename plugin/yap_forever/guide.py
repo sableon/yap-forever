@@ -297,7 +297,7 @@ def _other(spells, v, trainer_info) -> str:
 
 
 def _recipes_text(spells, v, gd, trainer_info, fees) -> str:
-    """'A (10s), B (25s) (if <trainer> doesn't list them: <who else>)': each group of recipes below the visit
+    """'A (10s 0c), B (4s 50c) (if <trainer> doesn't list them: <who else>)': each group of recipes below the visit
     trainer's rank says once who else teaches them (see _groups)."""
     who = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
     parts = []
