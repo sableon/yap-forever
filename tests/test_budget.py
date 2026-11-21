@@ -314,16 +314,19 @@ class FeaturesTogetherTests(unittest.TestCase):
 
     def test_the_budgets_pay_measures_the_cut_and_its_skips(self):
         # #97 part 3: write_reports takes one measure from the budget's pay, for the cut, its free skips and the gold
-        # the cut route spends
+        # the cut route spends; the report's cash line says which
         from unittest import mock
 
         from yap_forever.shopping import gold_as_you_go
         for pay in budget.PAYS:
             with self.subTest(pay=pay), mock.patch.object(budget, "gold_measure", wraps=budget.gold_measure) as made, \
                     mock.patch("yap_forever.budget.gold_as_you_go", wraps=gold_as_you_go) as went:
-                self.reports("as_needed", Budget(1, pay=pay))
+                _table, texts = self.reports("as_needed", Budget(1, pay=pay))
                 self.assertEqual([c.args[0].pay for c in made.call_args_list], [pay])
                 self.assertEqual(went.called, pay == "as_you_go")
+                # the report's cash line says how the budget was counted: its cash before any sales can be over it
+                tail = ", selling crafts to a vendor as you go" if pay == "as_you_go" else ""
+                self.assertIn(f"planned to your 1g budget{tail}), before any sales.", texts["plan-gold"])
 
 
 GEAR = 7811  # a made-up craft that sells to a vendor for 2s

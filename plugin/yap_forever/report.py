@@ -27,8 +27,10 @@ def verdict(plan, stock) -> str:
 
 def _budget_text(cash: float, stock, budget: Budget | None, goal=None) -> str:
     """Whether the route's cash fits the gold: the group's shared gold, or this character's own `cash_gold`
-    when the caller names no group. goal: the config.Budget the route was planned to, said after it."""
-    planned = f"; planned to your {amount(goal)} budget" if goal is not None else ""
+    when the caller names no group. goal: the config.Budget the route was planned to, said after it (with pay
+    "as_you_go", that crafts are sold to a vendor as you go: the cash before any sales can be over the budget)."""
+    planned = "" if goal is None else f"; planned to your {amount(goal)} budget" + (
+        ", selling crafts to a vendor as you go" if goal.pay == "as_you_go" else "")  # its cash can be over the gold
     if budget is None or not budget.shared:
         have = stock.cash if budget is None else budget.copper
         over = cash - have

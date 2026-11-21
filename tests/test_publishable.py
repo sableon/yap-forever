@@ -569,10 +569,12 @@ class PublishableTests(unittest.TestCase):
             self.assertIn(key, setup)
         from yap_forever.shopping import AS_YOU_GO_LINE
         self.assertIn(AS_YOU_GO_LINE.format("<gold>", "<gold>"), layout)
+        self.assertIn("`; planned to your <budget> budget, selling crafts to a vendor as you go`", layout)
         step3 = skill[skill.index("3. **Ask the goal"):skill.index("4. **Refresh prices")]
         self.assertIn("Buy everything before you start, or sell crafts to a vendor as you go? Selling as you go needs "
                       "about Z less up front.", step3)
         self.assertIn("`pay`", step3)
+        self.assertIn("save it under `[goals]` only together with a saved `budget` (`pay` alone is refused)", step3)
         self.assertIn("[--pay upfront|as_you_go]", skill)
         from yap_forever.config import PAYS
         self.assertEqual(PAYS, ("upfront", "as_you_go"))

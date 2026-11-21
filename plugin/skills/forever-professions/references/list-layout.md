@@ -323,7 +323,8 @@ and the report in its verdict, what the gold reaches, in one paragraph:
   stop is where the route stalls, below the target, the line ends `; the route stops there: <why>.`
   instead of the full stop. No line when the budget reaches the target.
 - `<budget>` is the gold as given (`30g`, `12.5g`). The report's budget line ends with
-  `; planned to your <budget> budget`.
+  `; planned to your <budget> budget`, and with `pay = "as_you_go"` `; planned to your <budget> budget,
+  selling crafts to a vendor as you go` (its cash before any sales can then be over the budget).
 - A recipe target wins over the budget ([setup.md](setup.md)): with a budget set and a recipe target, the
   guide (under the comparison) and the report (in its verdict) say only `The <budget> budget is not applied:
   a recipe target is planned in full.`, and the plan command prints the same line.

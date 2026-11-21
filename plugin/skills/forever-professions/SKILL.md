@@ -61,8 +61,9 @@ when a question or answer needs it.
    less up front.** Z is the "(Z less)" of the shopping list's line `If you sell crafts to a vendor as
    you go ...` under "Gold to bring" after a first plan with that budget (it pays up front); with no
    such line both ways need the same gold: don't ask, and keep the default. The answer is `pay`
-   (`"upfront"`, the default, or `"as_you_go"`; `--pay` for one run). Save it under `[goals]` in
-   `stock.toml` if the player wants it kept. If Enchanting isn't in the plan, ask whether green crafts should be
+   (`"upfront"`, the default, or `"as_you_go"`): save it under `[goals]` only together with a saved
+   `budget` (`pay` alone is refused), else pass `--pay` on each run with `--budget`. Save the goal
+   under `[goals]` in `stock.toml` if the player wants it kept. If Enchanting isn't in the plan, ask whether green crafts should be
    kept to disenchant on another character or sold, and set `keep_greens`
    ([setup.md](references/setup.md), step 2, "Green crafts").
    When the goal takes two professions into Artisan stages whose trainers stand in two capitals
