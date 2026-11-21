@@ -82,6 +82,7 @@ class SuggestTests(unittest.TestCase):
         self.assertEqual(case.spells(), [2, 1])
         self.assertIsNone(case.run()[0][1].level)
         self.assertEqual(Case(recipes=((1, "Enchant Ring - Shine", None, 10, None),), level=1).spells(), [1])
+        self.assertEqual(Case(level=1).spells(), [])  # a stock without a level reads 1: a level-30 item is out
 
     def test_unpriced_reagent(self):
         case = Case(listings={})  # no Strange Dust on the AH, and no vendor sells it

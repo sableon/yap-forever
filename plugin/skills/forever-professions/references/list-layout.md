@@ -133,7 +133,8 @@ Write it for that.
   notes say so, one line a trip: `Planned without the trip back to <trainer> at <skill> for <recipes>:
   the route without it costs the same.` (`<trainer>` is the trainer's name when the data names one,
   else `the <Rank> <Person>`), or `Planned without the trip to buy the pattern for <recipe>: the route
-  without it costs the same.` for a vendor or Favor trip. A trip left on the route whose skip costs at
+  without it costs the same.` for a vendor trip (a Favor trip is a
+  target's, never left out). A trip left on the route whose skip costs at
   most 0.5c more gets no skip clause. Below Artisan it is a stop in a capital:
   `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
