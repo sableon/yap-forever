@@ -1,6 +1,7 @@
 """The least-gold and least-total-value routes side by side, with what each asks of your time."""
 import math
 
+from yap_forever.costmodel import Valuer
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import gold
 from yap_forever.planner import measure
@@ -20,7 +21,9 @@ def _to_sell(plan, gd, market) -> str:
     return f"{count} items in {listings} listings"
 
 
-def _thin(plan, gd, market) -> str:
+def _thin(plan, gd, market, sales) -> str:
+    """Thin markets: what the route buys much of, and the crafts it sells on the AH (sales: a costmodel.Valuer, whose
+    rule says which) more of than are listed, and those whose few listings may be bought out, flagged."""
     names = []
     for i, n in sorted(plan.bought.items()):
         depth = market.depth(i)
@@ -28,8 +31,12 @@ def _thin(plan, gd, market) -> str:
             names.append(f"{gd.name(i)} (buys {math.ceil(n)} of {depth})")
     for i, n in sorted(plan.leftovers.items()):
         depth = market.depth(i)
-        if market.net_sell(i) and i not in plan.held_for_de and n > depth:
-            names.append(f"{gd.name(i)} (sells {math.floor(n)}, {depth} listed)")
+        if sales.ah_price(i) is None or not plan.sold(i):
+            continue
+        risk = sales.buyout_risk(i)
+        if n > depth or (risk and n >= 1):
+            flag = ": check the AH before listing" if risk else ""
+            names.append(f"{gd.name(i)} (sells {math.floor(n)}, {depth} listed){flag}")
     return "; ".join(names) or "none"
 
 
@@ -57,6 +64,7 @@ def compare(routes: dict, gd, market, stock, mailbox_trips: dict | None = None, 
     capitals: trips.visits' stage capitals; homes: mode -> the capital its guide starts in (plan.home_capital), whose
     stops are no trips away."""
     modes = [m for m in ROUTE_NAMES if m in routes]
+    sales = Valuer(market, gd, stock)
 
     def row(label, f):
         return f"| {label} | " + " | ".join(f(routes[m], m) for m in modes) + " |"
@@ -80,6 +88,6 @@ def compare(routes: dict, gd, market, stock, mailbox_trips: dict | None = None, 
         row("To sell", lambda p, _m: _to_sell(p, gd, market)),
         row("Mailbox trips", mail),
         row("Trips away", away),
-        row("Thin markets", lambda p, _m: _thin(p, gd, market)),
+        row("Thin markets", lambda p, _m: _thin(p, gd, market, sales)),
     ] + (["", "The least-total-value route also spends the least gold, so both guides are the same route."]
          if same else []))

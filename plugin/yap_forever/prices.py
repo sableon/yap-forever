@@ -109,8 +109,8 @@ def source_line(market: "Market", today: datetime.date | None = None) -> str:
     # a hand-edited prices file can hold anything in these fields
     scan_day = market.scan_day if isinstance(market.scan_day, str) else ""
     dropped = market.dropped if isinstance(market.dropped, int) and not isinstance(market.dropped, bool) else 0
-    line = (f"Prices: Auctionator scan of {scan_day or 'unknown date'} (one price per item, no listing "
-            "depth: costs are a lower bound and AH sale limits are approximate).")
+    line = (f"Prices: Auctionator scan of {scan_day or 'unknown date'} (one price and one count per item, no "
+            "listing depth: costs are a lower bound, and the supplier note and buyout flag use that one count).")
     try:
         age = ((today or datetime.date.today()) - datetime.date.fromisoformat(scan_day)).days
     except ValueError:

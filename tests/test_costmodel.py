@@ -127,11 +127,12 @@ class ValuerTests(unittest.TestCase):
         self.assertEqual(v.output_value(toy.VEST, 0), 950)
         self.assertEqual(v.output_value(toy.VEST, 5), 20)  # vendor price after 5
 
-    def test_ah_value_capped_at_listing_depth(self):
+    def test_ah_value_not_capped_at_listing_depth(self):
+        # #62: what is listed today no longer caps the AH sales; the sale limit does
         v = self.valuer({toy.VEST: [(1000, 3)]})
-        self.assertEqual(v.output_value(toy.VEST, 2), 950)
-        self.assertEqual(v.output_value(toy.VEST, 3), 20)  # only 3 are listed: the rest go to a vendor
-        self.assertNotIn("ah", v.output_options(toy.VEST, 3))
+        self.assertEqual(v.output_value(toy.VEST, 3), 950)
+        self.assertIn("ah", v.output_options(toy.VEST, 4))
+        self.assertNotIn("ah", v.output_options(toy.VEST, 5))
 
     def test_quest_items_not_capped(self):
         v = self.valuer({toy.VEST: [(1000, 50)]}, quest=[toy.VEST])
@@ -204,11 +205,11 @@ class QuestSalesLimitTests(unittest.TestCase):
         # 10 on the AH at 475 net, 10 to a vendor at 20
         self.assertEqual(sale_value(v, v.gd, toy.VEST, 20), 10 * 475 + 10 * 20)
 
-    def test_sale_value_capped_by_listings(self):
+    def test_sale_value_not_capped_by_listings(self):
         from yap_forever.planner import sale_value
         v = self.valuer(None, depth=3)
-        # no quest limit, but only 3 listed: 3 on the AH, 17 to a vendor
-        self.assertEqual(sale_value(v, v.gd, toy.VEST, 20), 3 * 475 + 17 * 20)
+        # #62: no quest limit, and only 3 listed: all 20 on the AH (the listing count no longer caps it)
+        self.assertEqual(sale_value(v, v.gd, toy.VEST, 20), 20 * 475)
 
 
 class SmeltFromStockTests(unittest.TestCase):
@@ -280,3 +281,109 @@ class CraftOrBuyTests(unittest.TestCase):
     def test_high_skill_needs_5pct(self):
         self.assertEqual(self.take_vest(940, 300), "craft")
         self.assertEqual(self.take_vest(960, 300), "buy")
+
+
+class AhPremiumTests(unittest.TestCase):
+    """#62: a craft counts as sold on the AH only when its net AH price (lowest listing less the 5% cut) is at
+    least `ah_premium` (default 2) times its vendor price and 1s more; up to the sale limit, whatever is listed."""
+    GEAR, NO_ROW = 7777, 4242  # a made-up craft with a 1g vendor price; an item the game data doesn't know
+
+    def valuer(self, listings, sell=10000, quest=False, **stock):
+        gd = toy.gamedata([], quest_items=[self.GEAR] if quest else ())
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=sell)
+        st = dataclasses.replace(toy.stock(), **stock)
+        return Valuer(toy.market({self.GEAR: listings} if listings else {}), gd, st)
+
+    def test_dead_market_vendored(self):
+        from yap_forever.planner import sale_value
+        v = self.valuer([(13685, 50)])  # net 1.3g, vendor 1g
+        self.assertEqual(v.market.net_sell(self.GEAR), 13000)
+        self.assertIsNone(v.ah_price(self.GEAR))
+        self.assertNotIn("ah", v.output_options(self.GEAR, 0))
+        self.assertEqual(v.output_value(self.GEAR, 0), 10000)
+        self.assertEqual(sale_value(v, v.gd, self.GEAR, 8), 8 * 10000)
+
+    def test_premium_edges(self):
+        cases = [(10000, 21053, 20000, True),  # vendor 1g, net 2g: 2x and 1g more
+                 (10000, 21052, 19999, False),  # just under 2x
+                 (50, 157, 149, False),  # vendor 50c, net 1s 49c: 3x, but only 99c more
+                 (50, 158, 150, True)]  # net 1s 50c: 3x and 1s more
+        for sell, listing, net, ah in cases:
+            with self.subTest(sell=sell, listing=listing):
+                v = self.valuer([(listing, 10)], sell=sell)
+                self.assertEqual(v.market.net_sell(self.GEAR), net)
+                self.assertEqual(v.ah_price(self.GEAR), net if ah else None)
+                self.assertEqual("ah" in v.output_options(self.GEAR, 0), ah)
+
+    def test_scarce_counted_to_limit(self):
+        from yap_forever.planner import sale_value
+        v = self.valuer([(115790, 1)])  # one listed, net 11g at a 1g vendor price
+        net = v.market.net_sell(self.GEAR)
+        self.assertEqual(net, 110000)
+        self.assertIn("ah", v.output_options(self.GEAR, 4))  # the one listing doesn't cap it
+        self.assertNotIn("ah", v.output_options(self.GEAR, 5))
+        self.assertEqual(sale_value(v, v.gd, self.GEAR, 10), 5 * net + 5 * 10000)
+
+    def test_quest_item_rule(self):
+        from yap_forever.planner import sale_value
+        below = self.valuer([(13685, 50)], quest=True)  # 1.3x: vendored like any craft
+        self.assertNotIn("ah", below.output_options(self.GEAR, 0))
+        self.assertEqual(sale_value(below, below.gd, self.GEAR, 20), 20 * 10000)
+        above = self.valuer([(115790, 1)], quest=True)
+        net = above.market.net_sell(self.GEAR)
+        self.assertIn("ah", above.output_options(self.GEAR, 100))
+        self.assertEqual(sale_value(above, above.gd, self.GEAR, 20), 20 * net)  # no quest limit: all of them
+        three = self.valuer([(115790, 1)], quest=True, quest_item_sales=3)
+        self.assertIn("ah", three.output_options(self.GEAR, 2))
+        self.assertNotIn("ah", three.output_options(self.GEAR, 3))
+        self.assertEqual(sale_value(three, three.gd, self.GEAR, 20), 3 * net + 17 * 10000)
+
+    def test_owned_value_unchanged(self):
+        # what the player holds or uses is still worth its AH net when that beats the vendor (not a sale)
+        v = self.valuer([(13685, 50)])
+        self.assertIsNone(v.ah_price(self.GEAR))
+        self.assertEqual(v.owned_value(self.GEAR), 13000)
+        self.assertEqual(v.material_value(self.GEAR), 13685)
+
+    def test_vendor_price_zero(self):
+        from yap_forever.planner import sale_value
+        for item, setup in ((self.GEAR, "vendor 0"), (self.NO_ROW, "no item row")):
+            with self.subTest(setup):
+                def valuer(listing, item=item):
+                    v = self.valuer(None, sell=0)
+                    if item == self.NO_ROW:
+                        self.assertNotIn(item, v.gd.items)
+                    v.market = toy.market({item: [(listing, 3)]} if listing else {})
+                    return v
+                v = valuer(105)  # net 99c: 1s more than nothing is not reached
+                self.assertEqual(v.market.net_sell(item), 99)
+                self.assertIsNone(v.ah_price(item))
+                self.assertEqual(v.output_options(item, 0), {"vendor": 0})
+                v = valuer(106)  # net 1s
+                self.assertEqual(v.ah_price(item), 100)
+                self.assertEqual(v.output_options(item, 0)["ah"], 100)
+                self.assertEqual(sale_value(v, v.gd, item, 7), 5 * 100)
+                v = valuer(None)  # no listing: no AH price, no crash
+                self.assertIsNone(v.ah_price(item))
+                self.assertEqual(sale_value(v, v.gd, item, 7), 0)
+
+    def test_ah_premium_setting_flips_a_case(self):
+        default = self.valuer([(19685, 10)])  # net 1.87g at a 1g vendor price
+        self.assertEqual(default.market.net_sell(self.GEAR), 18700)
+        self.assertIsNone(default.ah_price(self.GEAR))
+        self.assertEqual(self.valuer([(19685, 10)], ah_premium=1.5).ah_price(self.GEAR), 18700)
+
+    def test_green_dead_market_offers_vendor_and_disenchant(self):
+        # a green at a dead market is vendored or, with Enchanting planned, kept for disenchanting as before
+        v = Valuer(toy.market({toy.BELT: [(137, 50)]}), toy.gamedata([]), toy.stock())  # net 1.3x vendor
+        self.assertEqual(set(v.output_options(toy.BELT, 0)), {"vendor", "de"})
+
+    def test_premium_boundary_is_exact(self):
+        # 2.2 x 100 is 220.00000000000003 in floating point: a net of exactly 220c still passes
+        self.assertGreater(2.2 * 100, 220)
+        v = self.valuer([(232, 10)], sell=100, ah_premium=2.2)
+        self.assertEqual(v.market.net_sell(self.GEAR), 220)
+        self.assertEqual(v.ah_price(self.GEAR), 220)
+        below = self.valuer([(231, 10)], sell=100, ah_premium=2.2)  # net 219c
+        self.assertEqual(below.market.net_sell(self.GEAR), 219)
+        self.assertIsNone(below.ah_price(self.GEAR))

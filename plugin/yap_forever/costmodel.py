@@ -7,7 +7,9 @@ from yap_forever.config import STATIC_DIR
 from yap_forever.disenchant import de_skill_needed, de_yield
 from yap_forever.profile import OVERTIME_READINGS
 
-AH_UNIT_CAP = 5  # AH sales of one crafted item counted at the lowest price; quest items exempt
+AH_UNIT_CAP = 5  # AH sales of one crafted item counted at the lowest price; quest items: quest_item_sales
+MIN_AH_MARGIN = 100  # copper: a craft counts as sold on the AH only when that pays at least this much over a vendor
+BUYOUT_RATIO = 5  # an AH-worthy craft with 1-2 listed at this many times its vendor price may be bought out
 VENDOR_TOOLS = {5956}  # Blacksmith Hammer
 
 with open(STATIC_DIR / "ore.toml", "rb") as _f:
@@ -117,12 +119,28 @@ class Valuer:
         info = self.gd.items.get(item)
         return max(self.market.net_sell(item) or 0, info.sell_price if info else 0)
 
+    def vendor_price(self, item: int) -> int:
+        """What a vendor pays for one; 0 for an item the game data doesn't know."""
+        info = self.gd.items.get(item)
+        return info.sell_price if info else 0
+
+    def ah_price(self, item: int) -> int | None:
+        """What one crafted item counts for when sold on the AH: its net price (lowest listing less the AH's
+        cut) when that is at least `ah_premium` times the vendor price and MIN_AH_MARGIN more, else None (it
+        goes to a vendor). For crafted outputs only: what the player holds or uses keeps `owned_value`."""
+        net = self.market.net_sell(item)
+        vendor = self.vendor_price(item)
+        # copper is whole: the tolerance keeps a net of exactly premium x vendor in (2.2 x 100 is 220.00000000000003)
+        if net is None or net < self.stock.ah_premium * vendor - 1e-6 or net - vendor < MIN_AH_MARGIN:
+            return None
+        return net
+
     def output_options(self, item: int, n_already: float) -> dict[str, float]:
         info = self.gd.items.get(item)
-        opts = {"vendor": info.sell_price if info else 0}
-        ns = self.market.net_sell(item)
-        if ns and n_already < min(self.sale_limit(item), self.market.depth(item)):
-            opts["ah"] = ns
+        opts = {"vendor": self.vendor_price(item)}
+        ah = self.ah_price(item)
+        if ah is not None and n_already < self.sale_limit(item):
+            opts["ah"] = ah
         if info and de_skill_needed(info.item_level) <= 225:
             dv = sum(n * self.material_value(m) for m, n in de_yield(info).items())
             if dv:
@@ -130,13 +148,23 @@ class Valuer:
         return opts
 
     def sale_limit(self, item: int) -> float:
-        """How many of a crafted item the AH takes: 5, or the quest-item setting for quest items.
-
-        Callers also cap this at what is listed today (`market.depth`): more would not sell at that price."""
+        """How many of a crafted item count as sold on the AH: 5, or the quest-item setting for quest items.
+        What is listed today doesn't cap it (#62)."""
         if item in self.gd.quest_items:
             limit = self.stock.quest_item_sales
             return math.inf if limit is None else limit
         return AH_UNIT_CAP
+
+    def supplier(self, item: int, made: float) -> bool:
+        """More of an AH-worthy craft made than the sale limit, and fewer listed than it: the player may be the
+        market's supplier (the planner still counts only the limit)."""
+        return self.ah_price(item) is not None and self.market.depth(item) < self.sale_limit(item) < made
+
+    def buyout_risk(self, item: int) -> bool:
+        """An AH-worthy craft with only 1-2 listed at BUYOUT_RATIO times its vendor price or more: those few
+        listings may be gone, or bought out and relisted, by the time the player lists."""
+        ah = self.ah_price(item)
+        return ah is not None and 1 <= self.market.depth(item) <= 2 and ah >= BUYOUT_RATIO * self.vendor_price(item)
 
     def material_value(self, item: int) -> float:
         """A material you'd otherwise buy: worth at least its AH buy price."""

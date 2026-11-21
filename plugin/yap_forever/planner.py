@@ -78,6 +78,11 @@ class Plan:
     sale_proceeds: float = 0
     leftover_value: float = 0
 
+    def sold(self, item: int) -> bool:
+        """A leftover the route sells: not held for disenchanting, not a green kept for another character's
+        Enchanting, not a disenchant material (those count at their worth, see _Route._finish)."""
+        return item not in self.held_for_de and item not in self.kept_greens and item not in self.de_materials
+
 
 def reached_lines(plan) -> list[str]:
     """One line for each target the character already has (the planner's "<Prof> already at N" events),
@@ -724,13 +729,11 @@ def _deltas(before: dict, after: dict):
 
 
 def sale_value(valuer, gd, item: int, n: float) -> float:
-    """Selling n crafted items: AH for the first few (all if a quest item), vendor after.
-
-    The AH part is also capped at what is listed today: more than that would not sell at that price."""
-    info = gd.items.get(item)
-    vendor = info.sell_price if info else 0
-    ah = valuer.market.net_sell(item) or 0
-    if ah <= vendor:
+    """Selling n crafted items: on the AH up to the sale limit when the AH pays well above a vendor
+    (`Valuer.ah_price`), the rest to a vendor. What is listed today doesn't cap it (#62)."""
+    vendor = valuer.vendor_price(item)
+    ah = valuer.ah_price(item)
+    if ah is None:
         return n * vendor
-    cap = min(n, valuer.sale_limit(item), valuer.market.depth(item))
+    cap = min(n, valuer.sale_limit(item))
     return cap * ah + (n - cap) * vendor
