@@ -414,6 +414,40 @@ class PublishableTests(unittest.TestCase):
                      '"Trips away" counts the trips outside the capital the guide starts in.'):
             self.assertIn(line, setup)
 
+    def test_docs_promise_home_capital(self):
+        """#98: list-layout.md gives the rows the guide prints for the home capital and the other one, and game-rules.md
+        where the Artisans and Masters stand (tests/test_guide.py CapitalGuideTests, test_trips.py CapitalStopTests,
+        test_trainers.py StageCapitalTests)."""
+        def read(name):
+            return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
+        layout, rules = read("list-layout.md"), read("game-rules.md")
+        for line in ("every capital has an AH, mailbox and bank, so the player starts there",
+                     "`Level <Profession> <from>–<to> in <City>: the <Rank> <Person> <name> (x, y) is there, with the "
+                     "AH, mailbox and bank.` and the city's tip",
+                     "In that capital the rank training and every visit back for recipes are stops, not trips, with no "
+                     "bring list, as needed and in one go (one go never folds them)",
+                     "`- At <skill>, in <City>: train <Profession> to <cap> at <name>.`",
+                     "`- At <skill>, in <City>: learn <recipes> at <name>`, then the skip clause and a full stop.",
+                     "`Planned without the stop at <skill> in <City> for <recipes>: the route without it costs the "
+                     "same.`",
+                     "`- At <skill>, learn <recipes> at any <Rank> <Person> in <City>.`",
+                     "Its trip rows have no bring list and end `<City> has an AH, mailbox and bank: buy as you go "
+                     "there.` and the city's tip.",
+                     "`This route's <Rank> trainers are in <City A> (<Profession A>) and <City B> (<Profession B>). "
+                     "This guide starts in <City A>; to start in <City B>, set capital = \"<key>\" for this "
+                     "character in profile.toml.`",
+                     "\"Trips away\" counts only the trips outside the home capital.",
+                     "Remote trainers (every Master, the Artisan Enchanters) stay trips with their bring lists."):
+            self.assertIn(line, layout)
+        for line in ("every Master trainer stands outside the capitals, for both factions, and so do the Artisan "
+                     "Enchanters (Elwynn Forest, Stonetalon Mountains)",
+                     "for Alliance, Alchemy and Leatherworking in Darnassus, Blacksmithing and Engineering in Ironforge, "
+                     "Tailoring in Stormwind; for Horde, Alchemy and Tailoring in Undercity, Blacksmithing and "
+                     "Engineering in Orgrimmar, Leatherworking in Thunder Bluff.",
+                     "Every capital has an AH, mailbox and bank",
+                     "Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no Engineering one."):
+            self.assertIn(line, rules)
+
 
 if __name__ == "__main__":
     unittest.main()

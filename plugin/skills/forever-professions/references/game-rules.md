@@ -7,6 +7,15 @@ say so.
 
 - Expert trainers train up to 150, Artisan to 225, Master to 300. Artisan and Master trainers
   sit in specific towns.
+- **Where the Artisans and Masters stand** (the pinned Questie Forever data): every Master trainer
+  stands outside the capitals, for both factions, and so do the Artisan Enchanters (Elwynn Forest,
+  Stonetalon Mountains). The other Artisans stand in one capital each: for Alliance, Alchemy and
+  Leatherworking in Darnassus, Blacksmithing and Engineering in Ironforge, Tailoring in Stormwind; for
+  Horde, Alchemy and Tailoring in Undercity, Blacksmithing and Engineering in Orgrimmar,
+  Leatherworking in Thunder Bluff. Every capital has an AH, mailbox and bank, so the guide levels such
+  a stage in its capital ([list-layout.md](list-layout.md), "The home capital"). Not every capital has
+  every lower trainer: Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no
+  Engineering one.
 - **A trainer teaches every recipe from 1 up to its rank's cap**: Journeyman to 75, Expert to 150,
   Artisan to 225, Master to 300. The rule is confirmed in game (2026-11-21). Expert trainers stop at 150: the
   Stormwind Expert Blacksmith doesn't teach Truesilver Rod (175), and an Artisan does. A higher
@@ -30,7 +39,7 @@ say so.
   A recipe seen learnable in play below its inferred skill keeps the Forever requirement
   (`yap_forever/data_static/seen_requirements.toml`): Truesilver Rod was learned at Blacksmithing
   184, so it needs 175, not the inferred 200. Each row is a single observation and an upper bound only.
-- Trainer places are not listed here: the guide's trainer rows come from the Questie Forever NPC
+- Trainer names and coordinates are not listed here: the guide's trainer rows come from the Questie Forever NPC
   data, for the character's faction. Facts the data lacks: Booty Bay is a neutral town, and the
   Alliance Master Enchanting trainer is inside Uldaman (Badlands), which has no map coordinates.
   Booty Bay, Gadgetzan and Everlook have a neutral auction house with its own prices and a higher
