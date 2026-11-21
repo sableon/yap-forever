@@ -754,5 +754,33 @@ class CouldAlsoMakeWiringTests(unittest.TestCase):
         self.assertNotIn("You could also make", texts["guide-gold"])
         self.assertIn("Spent 30 of 40 Favor.", texts["plan-gold"])
 
+    def test_guide_cut_report_complete(self):
+        # the guide lists at most favor_suggest.GUIDE_LIMIT of each kind (1 here), the report every suggestion
+        from unittest import mock
+
+        from tests import toy
+        from yap_forever import favor_suggest
+        from yap_forever.gamedata import ItemInfo
+        self.gd.recipes[8] = toy.recipe(8, "Helm of Ana", 164, {toy.IRON_BAR: 3}, (9002, 1), source="scroll",
+                                        scroll=toy.SCROLL)
+        self.gd.items[9002] = ItemInfo(9002, "Helm of Ana", 2, 25, 4, 100, 400, bonding=2, required_level=22)
+        from yap_forever import plan as plan_mod
+        favor = plan_mod.FavorData({7: 30, 8: 30}, {7: 25, 8: 25}, [])
+        with mock.patch.object(favor_suggest, "GUIDE_LIMIT", 1), mock.patch.object(plan_mod, "load_favor",
+                                                                                  return_value=favor):
+            from yap_forever import gamedata
+            from yap_forever.config import Goal
+            from yap_forever.shared import Group
+            with mock.patch.object(gamedata, "load_gamedata", return_value=self.gd):
+                _table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", {164: Goal(skill=40)},
+                                                       group=Group(2, "alliance", 1.0, {"Bram Ironhide": self.bram}))
+        guide, report = (files[k].read_text(encoding="utf-8") for k in ("guide-gold", "plan-gold"))
+        self.assertIn("- **Helm of Ana**", guide)  # level 22, the character's: first
+        self.assertNotIn("- **Plate of Ana**", guide)
+        self.assertIn("\n\nand 1 more.\n", guide)
+        self.assertIn("- **Helm of Ana**", report)
+        self.assertIn("- **Plate of Ana**", report)
+        self.assertNotIn("and 1 more.", report)
+
 if __name__ == "__main__":
     unittest.main()

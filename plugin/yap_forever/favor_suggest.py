@@ -20,7 +20,7 @@ from yap_forever.shared import allocate, mail_text
 LEVEL_WINDOW = 5  # levels either side of the character's level an item may need
 LATE_WINDOW = 3  # the window from character level LATE_FROM on
 LATE_FROM = 46
-LIMIT = 6  # suggestions listed; the rest are counted ("and N more.")
+GUIDE_LIMIT = 6  # items, then enchants, the guide lists of each kind; the rest are counted ("and N more.")
 INTRO = ("Merchant's Favor recipes to craft once for yourself, if you don't have the item yet. They are not part of "
          "the route, its shopping list or its gold.")
 HEADING = "## You could also make"
@@ -76,8 +76,8 @@ def _materials(r, stock, valuer, shared):
     return gold, bank, mail, tuple(k for k in ("ah", "vendor") if k in where)
 
 
-def suggest(gd, favor, stock, valuer, gold_copper, shared, goal_spells, limit=LIMIT) -> tuple[list[Suggestion], int]:
-    """(the suggestions to list, how many more there are). favor: the character's favor.FavorData; stock: its
+def suggest(gd, favor, stock, valuer, gold_copper, shared, goal_spells) -> list[Suggestion]:
+    """Every suggestion, in the order listed. favor: the character's favor.FavorData; stock: its
     config.Stock (skills, level, Favor and bank); valuer: prices (costmodel.Valuer.buy_option); gold_copper: the
     group's gold (shared.Budget.copper, else the stock's cash_gold); shared: the other characters' mailable items,
     by name; goal_spells: the craft-once goals, left out. Items nearest the character's level first, then by Favor
@@ -102,7 +102,7 @@ def suggest(gd, favor, stock, valuer, gold_copper, shared, goal_spells, limit=LI
                               *mats))
     out.sort(key=lambda s: (s.level is None, abs(stock.level - s.level) if s.level is not None else 0, s.favor,
                             s.name, s.spell))
-    return out[:limit], max(0, len(out) - limit)
+    return out
 
 
 def _and(parts: list[str]) -> str:
@@ -126,12 +126,20 @@ def _row(s: Suggestion, gd, favor_owned: int) -> str:
     return f"- **{s.name}** ({what}): {s.favor} of your {favor_owned} Favor; materials{mats}."
 
 
-def lines(shown: list[Suggestion], more: int, gd, favor_owned: int, heading: str = HEADING) -> list[str]:
-    """The "You could also make" block (the guide's section after the route; the report's, inside "Merchant's
-    Favor", under a bold heading); [] when there is nothing to suggest."""
-    if not shown:
+def lines(found: list[Suggestion], gd, favor_owned: int, heading: str = HEADING, limit: int | None = None) -> list[str]:
+    """The "You could also make" block for the suggestions `found` (suggest): the guide's section after the route, with
+    at most `limit` items, then at most `limit` enchants, each kind cut with "and N more."; the report's, inside
+    "Merchant's Favor", under a bold heading and complete (limit None). [] when there is nothing to suggest."""
+    if not found:
         return []
-    out = [heading, "", INTRO, ""] + [_row(s, gd, favor_owned) for s in shown]
-    if more:
-        out += ["", f"and {more} more."]
-    return [*out, ""]
+    out = [heading, "", INTRO, ""]
+    for kind in ([s for s in found if s.level is not None], [s for s in found if s.level is None]):
+        if not kind:
+            continue
+        shown = kind if limit is None else kind[:limit]
+        if out[-1] != "":
+            out.append("")
+        out += [_row(s, gd, favor_owned) for s in shown]
+        if len(kind) > len(shown):
+            out += ["", f"and {len(kind) - len(shown)} more.", ""]
+    return out if out[-1] == "" else [*out, ""]

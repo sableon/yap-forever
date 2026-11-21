@@ -244,11 +244,11 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     same = routes["gold"] is routes["value"]
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
     # Favor recipes to craft once, apart from the route: the group's gold before the route, and the group's mail
-    shown, more = favor_suggest.suggest(gd, favor, stock, Valuer(market, gd, stock),
-                                        budget.copper if budget is not None else stock.cash,
-                                        getattr(stock, "shared", {}), set(once.values()))
-    could_guide = favor_suggest.lines(shown, more, gd, stock.favor)
-    could_report = favor_suggest.lines(shown, more, gd, stock.favor, heading="**You could also make**")
+    found = favor_suggest.suggest(gd, favor, stock, Valuer(market, gd, stock),
+                                  budget.copper if budget is not None else stock.cash,
+                                  getattr(stock, "shared", {}), set(once.values()))
+    could_guide = favor_suggest.lines(found, gd, stock.favor, limit=favor_suggest.GUIDE_LIMIT)  # the report: all
+    could_report = favor_suggest.lines(found, gd, stock.favor, heading="**You could also make**")
     if cuts:  # once per set of caps the cuts landed on
         savings = {}
         for k in {budget_cut.key(c.planned_caps) for c in cuts.values()}:

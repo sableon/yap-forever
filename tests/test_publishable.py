@@ -347,7 +347,7 @@ class PublishableTests(unittest.TestCase):
 
     def test_docs_promise_favor_suggestions(self):
         """#95: game-rules.md says Merchant's Favor recipes never level a route and gives the level window of
-        favor_suggest (LEVEL_WINDOW, LATE_WINDOW, LATE_FROM, LIMIT); list-layout.md gives the section the guide and the
+        favor_suggest (LEVEL_WINDOW, LATE_WINDOW, LATE_FROM, GUIDE_LIMIT); list-layout.md gives the section the guide and the
         report print (tests/test_favor_suggest.py, test_guide.py CouldAlsoMakeGuideTests, test_report.py
         CouldAlsoMakeReportTests, test_cli.py CouldAlsoMakeWiringTests); coverage.md says it."""
         from yap_forever import favor_suggest as fs
@@ -372,7 +372,9 @@ class PublishableTests(unittest.TestCase):
                      "materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`",
                      "`(<Profession> <skill>)`", "`from a vendor`", "`on the AH and from a vendor`",
                      "`materials: <n> <item> from your bank`",
-                     f"At most {fs.LIMIT} rows, then `and <n> more.`",
+                     f"The guide lists at most {fs.GUIDE_LIMIT} items, then at most {fs.GUIDE_LIMIT} enchants, each "
+                     "kind followed by `and <n> more.` in a paragraph of its own when it is cut; the report lists them "
+                     "all.",
                      "`Merchant's Favor recipes are not used to level (see You could also make).`",
                      "`Item required levels are not in the game data: Merchant's Favor items are not suggested, only "
                      "enchants.`"):

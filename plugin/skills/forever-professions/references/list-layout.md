@@ -213,7 +213,9 @@ it when nothing fits, or for Horde (no Favor recipes yet):
   item (`2 Dream Dust and 1 Star Wood from your bank`), the mail part names each sender as on the
   shopping list. When nothing needs buying: `materials: <n> <item> from your bank`, then the mail.
 - Items first, the nearest to the character's level first, then by Favor price; then the enchants,
-  by Favor price. At most 6 rows, then `and <n> more.` in a paragraph of its own.
+  by Favor price, as a list of their own. The guide lists at most 6 items, then at most 6 enchants,
+  each kind followed by `and <n> more.` in a paragraph of its own when it is cut; the report lists
+  them all.
 - The report's data notes say `Merchant's Favor recipes are not used to level (see You could also make).`
   (without the parenthesis when there is no section), and, when the game data gives no item a required
   level, `Item required levels are not in the game data: Merchant's Favor items are not suggested, only enchants.`

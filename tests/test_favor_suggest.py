@@ -33,12 +33,12 @@ class Case:
         self.market = toy.market(listings if listings is not None else {DUST: [(500, 100)]})
         self.shared = shared or {}
 
-    def run(self, gold=2000, goals=(), limit=6):
+    def run(self, gold=2000, goals=()):
         return suggest(self.gd, self.favor, self.stock, Valuer(self.market, self.gd, self.stock), gold, self.shared,
-                       set(goals), limit=limit)
+                       set(goals))
 
     def spells(self, **kw):
-        return [s.spell for s in self.run(**kw)[0]]
+        return [s.spell for s in self.run(**kw)]
 
 
 class LevelWindowTests(unittest.TestCase):
@@ -56,9 +56,7 @@ class LevelWindowTests(unittest.TestCase):
 
 class SuggestTests(unittest.TestCase):
     def test_suggested(self):
-        shown, more = Case().run()
-        self.assertEqual(shown, [Suggestion(1, "Staff of Ana", ENCH, 100, 30, 50, 1000, {}, {}, ("ah",))])
-        self.assertEqual(more, 0)
+        self.assertEqual(Case().run(), [Suggestion(1, "Staff of Ana", ENCH, 100, 30, 50, 1000, {}, {}, ("ah",))])
 
     def test_skill_favor_gold_gates(self):
         self.assertEqual(Case(skill=99).spells(), [])  # the Favor skill is 100
@@ -66,12 +64,12 @@ class SuggestTests(unittest.TestCase):
         self.assertEqual(Case().spells(gold=999), [])  # 2 Strange Dust at 5s: 1c over the gold
         self.assertEqual(Case().spells(gold=1000), [1])
         banked = Case(items={DUST: 1})
-        shown, _more = banked.run(gold=999)  # over the gold, but one Strange Dust is in the bank
+        shown = banked.run(gold=999)  # over the gold, but one Strange Dust is in the bank
         self.assertEqual([(s.spell, s.gold, s.from_bank) for s in shown], [(1, 500, {DUST: 1})])
 
     def test_group_mail_after_the_bank(self):
         case = Case(items={DUST: 1}, shared={"Bram Ironhide": {DUST: 3}})
-        shown, _more = case.run(gold=0)
+        shown = case.run(gold=0)
         self.assertEqual([(s.gold, s.from_bank, s.from_mail, s.bought) for s in shown],
                          [(0, {DUST: 1}, {DUST: [("Bram Ironhide", 1)]}, ())])
 
@@ -80,7 +78,7 @@ class SuggestTests(unittest.TestCase):
         case = Case(recipes=((1, "Enchant Ring - Shine", None, 10, None), (2, "Staff of Ana", STAFF, 50, 47)),
                     level=48)
         self.assertEqual(case.spells(), [2, 1])
-        self.assertIsNone(case.run()[0][1].level)
+        self.assertIsNone(case.run()[1].level)
         self.assertEqual(Case(recipes=((1, "Enchant Ring - Shine", None, 10, None),), level=1).spells(), [1])
         self.assertEqual(Case(level=1).spells(), [])  # a stock without a level reads 1: a level-30 item is out
 
@@ -92,8 +90,7 @@ class SuggestTests(unittest.TestCase):
     def test_vendor_reagent(self):
         case = Case()
         case.gd.recipes[1].reagents = {ROD: 2}  # the toy's vendor reagent, 124c each
-        shown, _more = case.run()
-        self.assertEqual([(s.gold, s.bought) for s in shown], [(248, ("vendor",))])
+        self.assertEqual([(s.gold, s.bought) for s in case.run()], [(248, ("vendor",))])
 
     def test_goal_not_suggested(self):
         self.assertEqual(Case().spells(goals={1}), [])
@@ -101,8 +98,9 @@ class SuggestTests(unittest.TestCase):
     def test_horde_no_section(self):
         case = Case()
         self.assertEqual(suggest(case.gd, no_favor(), case.stock, Valuer(case.market, case.gd, case.stock), 2000,
-                                 {}, set()), ([], 0))
-        self.assertEqual(lines([], 0, case.gd, 150), [])
+                                 {}, set()), [])
+        self.assertEqual(lines([], case.gd, 150), [])
+        self.assertEqual(lines([], case.gd, 150, limit=favor_suggest.GUIDE_LIMIT), [])
 
     def test_order(self):
         # items nearest the character's level first, then by Favor; then the enchants by Favor
@@ -111,13 +109,25 @@ class SuggestTests(unittest.TestCase):
         self.assertEqual(Case(recipes=recipes).spells(), [3, 2, 1, 5, 4])
 
     def test_limit_and_more(self):
-        recipes = tuple((s, f"Enchant {s}", None, s, None) for s in range(1, 9))
-        shown, more = Case(recipes=recipes).run(gold=100000)
-        self.assertEqual(([s.spell for s in shown], more), ([1, 2, 3, 4, 5, 6], 2))
-        self.assertEqual(favor_suggest.LIMIT, 6)
-        text = lines(shown, more, Case(recipes=recipes).gd, 150)
-        self.assertEqual(text[-2:], ["and 2 more.", ""])
-        self.assertEqual(Case(recipes=recipes).run(gold=100000, limit=8)[1], 0)
+        # the guide: at most GUIDE_LIMIT items, then at most GUIDE_LIMIT enchants, each kind with its own "and N more."
+        # when cut; the report: all of them
+        items = tuple((s, f"Item {s}", 9000 + s, s, 30) for s in range(1, 8))
+        enchants = tuple((s, f"Enchant {s}", None, s, None) for s in range(11, 18))
+        case = Case(recipes=items + enchants)
+        found = case.run(gold=100000)
+        self.assertEqual([s.spell for s in found], list(range(1, 8)) + list(range(11, 18)))
+        self.assertEqual(favor_suggest.GUIDE_LIMIT, 6)
+        guide = lines(found, case.gd, 150, limit=favor_suggest.GUIDE_LIMIT)
+        rows = [line for line in guide if line.startswith("- **")]
+        self.assertEqual([r.split("**")[1] for r in rows],
+                         [f"Item {s}" for s in range(1, 7)] + [f"Enchant {s}" for s in range(11, 17)])
+        self.assertEqual(guide.count("and 1 more."), 2)
+        cut = guide.index("and 1 more.")
+        self.assertEqual(guide[cut - 2:cut + 3], [rows[5], "", "and 1 more.", "", rows[6]])  # after the items
+        self.assertEqual(guide[-3:], ["", "and 1 more.", ""])  # after the enchants
+        report = lines(found, case.gd, 150, heading="**You could also make**")
+        self.assertEqual(len([line for line in report if line.startswith("- **")]), 14)
+        self.assertNotIn("more.", " ".join(report))
 
     def test_not_a_favor_recipe(self):
         case = Case()
@@ -139,21 +149,21 @@ class LinesTests(unittest.TestCase):
                            ("ah", "vendor")),
                 Suggestion(2, "Enchant Ring - Shine", ENCH, 100, None, 10, 0, {DUST: 1}, {ODD: [("Bram Ironhide", 1)]},
                            ())]
-        self.assertEqual(lines(rows, 3, gd, 150), [
+        self.assertEqual(lines(rows, gd, 150), [
             "## You could also make", "", self.INTRO, "",
             "- **Staff of Ana** (Enchanting 100, for level 30): 50 of your 150 Favor; materials about 6.1g on the AH, "
             "2 Strange Dust from your bank, 1 Odd Thing (mail from Bram Ironhide).",
+            "",  # the enchants are a list of their own
             "- **Enchant Ring - Shine** (Enchanting 100): 10 of your 150 Favor; materials about 2s from a vendor.",
             "- **Enchant Ring - Shine** (Enchanting 100): 10 of your 150 Favor; materials about 3s on the AH and from a "
             "vendor, 2 Odd Thing and 1 Strange Dust from your bank.",
             "- **Enchant Ring - Shine** (Enchanting 100): 10 of your 150 Favor; materials: 1 Strange Dust from your "
-            "bank, 1 Odd Thing (mail from Bram Ironhide).",
-            "", "and 3 more.", ""])  # a paragraph of its own, not part of the last row
+            "bank, 1 Odd Thing (mail from Bram Ironhide).", ""])
 
     def test_report_heading(self):
         gd = Case().gd
         rows = [Suggestion(1, "Staff of Ana", ENCH, 100, 30, 50, 1000, {}, {}, ("ah",))]
-        self.assertEqual(lines(rows, 0, gd, 150, heading="**You could also make**")[:2],
+        self.assertEqual(lines(rows, gd, 150, heading="**You could also make**")[:2],
                          ["**You could also make**", ""])
 
     def test_levels_known(self):
