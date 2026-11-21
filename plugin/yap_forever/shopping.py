@@ -175,6 +175,14 @@ def merged_steps(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None
     return out
 
 
+def makers(plan, gd) -> dict:
+    """item -> the recipe that makes it: the one the route crafted it with when that is a profession the route doesn't
+    plan (Plan.other_crafts, #96), else one of the game data's."""
+    out = {r.output[0]: r for r in gd.recipes.values() if r.output}
+    out.update({i: gd.recipes[s] for i, s in getattr(plan, "other_crafts", {}).items() if s in gd.recipes})
+    return out
+
+
 def route_rows(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None = None) -> list[dict]:
     """Rows in whole crafts: n crafts (buffer included) take n times what one craft takes, so no count
     leaves a remainder too small for another craft. Your own crafts from earlier rows are used first;
@@ -184,7 +192,7 @@ def route_rows(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None =
     split: see merged_steps."""
     merged = merged_steps(plan, gd, split)
     steps = [st for st, _parts in merged]
-    makes = {r.output[0]: r for r in gd.recipes.values() if r.output}
+    makes = makers(plan, gd)
     craftable = set(plan.crafted) | {gd.recipes[st.spell_id].output[0] for st in steps if gd.recipes[st.spell_id].output}
     pool: dict[int, float] = {}  # your own crafts on hand
     rows, missing = [], {}  # missing: intermediate -> [count, index of the first row needing it]
@@ -452,7 +460,7 @@ def _own_sources(plan, gd, every, at, rows, trip) -> tuple[dict[int, int], dict[
     for what that profession's greens disenchant to later). The route's rows are
     walked in order with what each makes; a trip row takes its own profession's crafts first, then what was made
     before the trip, then the other profession's; any other row takes what was made before the trip first."""
-    makes = {r.output[0]: r for r in gd.recipes.values() if r.output}
+    makes = makers(plan, gd)
     mine = {id(r) for r in rows}
     de = _de_supply(plan, gd, every, at, trip)
     pools: dict[str | int, dict[int, float]] = {"own": {}, "pre": {}}
@@ -713,6 +721,13 @@ def _bill(plan, gd, market, stock, rows) -> list[tuple[str, int | str, str, floa
     if fees := _fees(plan, gd):
         out.append(("Trainer: ranks and recipes", "", "trainer", fees))
     return out
+
+
+def ah_buys(plan, gd, market, stock) -> dict[int, tuple[int, float]]:
+    """item -> (count, cost in copper) of what the shopping list buys on the AH (its lines, as _bill counts them)."""
+    owned = {i: float(n) for i, n in stock.items.items()}
+    split = _bought(_split(route_rows(plan, gd), plan, gd, owned, _mail(plan, whole_pool=True)))
+    return {i: (n, _cost(gd, market, i, src, n)) for (i, src), n in split.items() if src != "vendor"}
 
 
 def gold_to_bring(plan, gd, market, stock) -> float:

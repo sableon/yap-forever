@@ -214,7 +214,8 @@ class PublishableTests(unittest.TestCase):
 
     def test_docs_promise_budget(self):
         """#50: the skill offers a budget as a goal and asks how to share it; the references give the keys
-        and the lines the guide prints (tests/test_budget.py and test_guide.py check them)."""
+        and the lines the guide prints (tests/test_budget.py and test_guide.py check them). #96: a budget covers a
+        recipe goal; "not applied" is gone."""
         def read(name):
             return " ".join((SKILL / name).read_text(encoding="utf-8").split())
         setup, skill = read("references/setup.md"), read("SKILL.md")
@@ -234,12 +235,32 @@ class PublishableTests(unittest.TestCase):
                      "; the route stops there: <why>.",
                      "<Profession> gets none of it: <why>.",
                      "Level one profession at a time: <first> first, then <second>.",
-                     "The <budget> budget is not applied: a recipe target is planned in full."):
+                     # #96: a budget covers a recipe goal (tests/test_budget.py RecipeGoalTests, RecipeGoalReportsTests)
+                     "<budget> covers <Profession> to <skill> and one <recipe> (<gold>).",
+                     "The goal, <Profession> <skill> and one <recipe>, costs about <gold> more.",
+                     "<Profession> is not planned with this budget: it goes to the <Profession> goal.",
+                     "Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; "
+                     "the gold to bring doesn't count that.",
+                     "first craft <n> <item> (your <Profession>)",
+                     "<budget> covers one <recipe> (<gold>); your <Profession> <skill> already meets its "
+                     "<recipe skill>.",
+                     "the goal stop's line ends `; the route stops there: <why>.`"):
             self.assertIn(line, layout)
-        self.assertIn("The <budget> budget is not applied: a recipe target is planned in full.", setup)
-        from yap_forever.budget import not_applied
-        from yap_forever.config import Budget
-        self.assertEqual(not_applied(Budget(12.5)), "The 12.5g budget is not applied: a recipe target is planned in full.")
+        for text in (setup, layout, skill):
+            self.assertNotIn("not applied", text)
+        for promise in ("covers that profession's goal", "is not planned with the budget", "is one stop, the craft",
+                        "first craft <n> <item> (your <Profession>)",
+                        "Two recipe targets are cut like two skill targets", "not counted in \"Gold to bring\""):
+            self.assertIn(promise, setup)
+        self.assertIn("A budget covers a recipe goal too", step3)
+        self.assertIn("the other profession's skill target isn't planned while the budget goes to the recipe goal "
+                      "(say so)", step3)
+        self.assertNotIn("waits (say so)", step3)
+        self.assertIn("`[skills]`", step3)
+        from yap_forever import budget
+        from yap_forever.gamedata import BS, ENCH
+        self.assertEqual(budget.not_planned(ENCH, BS),
+                         "Enchanting is not planned with this budget: it goes to the Blacksmithing goal.")
 
     def test_docs_promise_trainer_ranks(self):
         """#82: game-rules.md gives the rank caps trips.recipe_rank_cap uses and the Truesilver Rod sighting of

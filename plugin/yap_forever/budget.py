@@ -1,6 +1,7 @@
 """A budget as a goal: each route ends at the last stop its gold reaches.
 
-Stops are the rank caps (75, 150, 225, 300) and each profession's own target. The gold a route needs is, with
+Stops are the rank caps (75, 150, 225, 300) and each profession's own target; a recipe goal's last stop is its skill
+and the recipe crafted once (#96). The gold a route needs is, with
 Budget.pay "upfront" (the default), the shopping list's "Gold to bring" (whole crafts with the buffer, patterns and
 fees, everything bought before you start), so the cut route always fits the list the player shops from; with
 "as_you_go", the gold enough up front when crafts are sold to a vendor as you go (shopping.gold_as_you_go, the line
@@ -35,7 +36,10 @@ class BudgetCut:
     planned_caps: the caps the plan was made with (a stalled profession keeps its target, so the plan says
     why it stops); start: the skills the route starts from; stops_early: profession -> (the skill its route
     stalls at below the target, why), when it does. credited: the plan is the mode's route planned with the vendor
-    price of the crafts sold (False: the one planned without it, which fit the budget where that one didn't)."""
+    price of the crafts sold (False: the one planned without it, which fit the budget where that one didn't).
+    planned_once: profession -> the goal recipe the plan crafts once (only at the goal stop, #96); recipes: profession
+    -> (skill, name) of each recipe goal; goal_extra: a recipe-goal profession the cut stops below -> what its goal
+    costs on top, when the route reaches it."""
     caps: dict[int, int]
     plan: Plan
     spent: float
@@ -45,6 +49,14 @@ class BudgetCut:
     start: dict[int, int] = field(default_factory=dict)
     stops_early: dict[int, tuple[int, str]] = field(default_factory=dict)
     credited: bool = True
+    planned_once: dict[int, int] = field(default_factory=dict)
+    recipes: dict[int, tuple[int, str]] = field(default_factory=dict)
+    goal_extra: dict[int, float] = field(default_factory=dict)
+
+    @property
+    def covered(self) -> set[int]:
+        """The recipe-goal professions whose goal recipe the route crafts."""
+        return {p for p, spell in self.planned_once.items() if p in self.recipes and crafted(self.plan, p, spell)}
 
     @property
     def below_first_stop(self) -> bool:
@@ -53,9 +65,16 @@ class BudgetCut:
         return bool(self.next_stop) and all(self.caps[p] <= self.start.get(p, self.caps[p]) for p in self.caps)
 
 
-def key(caps: dict[int, int]) -> tuple:
-    """The cache key of a set of caps (see cut's `cache`)."""
-    return tuple(sorted(caps.items()))
+def key(caps: dict[int, int], once: dict[int, int] | None = None) -> tuple:
+    """The cache key of a set of caps and the goal recipes crafted once there (see cut's `cache`)."""
+    k = tuple(sorted(caps.items()))
+    return (k, tuple(sorted(once.items()))) if once else k
+
+
+def crafted(plan: Plan, prof: int, spell: int) -> bool:
+    """The plan crafts `spell`, the goal recipe of `prof`, once (planner's craft-once step): its skill is not enough,
+    since the craft itself can fail (Favor, a tool, materials)."""
+    return any(s.profession == prof and s.spell_id == spell and s.skill_from == s.skill_to for s in plan.steps)
 
 
 def copper(budget: Budget) -> int:
@@ -63,23 +82,27 @@ def copper(budget: Budget) -> int:
     return round(budget.gold * COPPER_PER_GOLD)  # 1.13g is 11299.999... copper in floating point
 
 
-def _held(caps: dict[int, int], start: dict[int, int], below) -> set[str]:
+def _held(caps: dict[int, int], start: dict[int, int], below, crafts=()) -> set[str]:
     """The planner's "<Prof> already at N" events of the professions the budget holds at their start skill (caps:
     the caps planned to; below: the professions whose target is above their start): their target isn't reached,
-    so the guide mustn't say there is nothing to plan."""
-    return {f"{PROFESSIONS[x]} already at {start[x]}" for x in below if caps.get(x) == start.get(x)}
+    so the guide mustn't say there is nothing to plan. crafts: the professions whose goal recipe the route crafts
+    once (#96): one already at its skill has that craft to plan."""
+    return ({f"{PROFESSIONS[x]} already at {start[x]}" for x in below if caps.get(x) == start.get(x)}
+            | {f"{PROFESSIONS[x]} already at {start[x]}" for x in crafts if x in start})
 
 
 def adopt(c: BudgetCut, plan: Plan, spent: float) -> BudgetCut:
     """The cut with `plan`, the route planned to the same caps without some trips (plan.take_free_skips), as its
-    route, and spent its gold to bring: each next stop costs what it did, so its extra is counted from the new
-    gold; the professions the budget holds at their start keep no "already at" event (in a copy of `plan` when it
-    has one, else `plan` itself)."""
-    held = _held(c.planned_caps, c.start, c.next_stop)  # held at the start: a next stop and its start as the cap
+    route, and spent its gold to bring: each next stop, and each recipe goal it stops below, costs what it did, so its
+    extra is counted from the new gold; the professions the budget holds at their start keep no "already at" event
+    (in a copy of `plan` when it has one, else `plan` itself)."""
+    held = _held(c.planned_caps, c.start, c.next_stop, c.planned_once)  # held at the start (a next stop and its start
+    # as the cap), or crafting its goal recipe
     if held & set(plan.events):  # a copy: the plan given may be a cached one
         plan = dataclasses.replace(plan, events=[e for e in plan.events if e not in held])
     return dataclasses.replace(c, plan=plan, spent=spent,
-                               next_stop={p: (s, extra + c.spent - spent) for p, (s, extra) in c.next_stop.items()})
+                               next_stop={p: (s, extra + c.spent - spent) for p, (s, extra) in c.next_stop.items()},
+                               goal_extra={p: extra + c.spent - spent for p, extra in c.goal_extra.items()})
 
 
 def gold_measure(budget: Budget | None, gd, market, stock) -> Callable[[Plan], float]:
@@ -106,9 +129,11 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
     when it gets each profession as far as the credited one does.
     gold_of: the gold a route needs (default gold_measure: "Gold to bring", or the as-you-go figure with budget.pay
     "as_you_go"); every comparison here uses it, the fallback's included.
-    inputs: plan.PlanInputs with the targets as caps (a recipe goal is not cut: the caller plans it in full).
-    cache: caps key -> (routes, same, the routes without the vendor credit or None) from compare.settle_routes, and
-    ("gold", mode, caps key, credited, budget.pay) -> that route's gold,
+    inputs: plan.PlanInputs with the targets as caps; a recipe goal (inputs.craft_once, #96) is cut like a skill target
+    whose last stop is its recipe's skill with the recipe crafted once: only that stop's route crafts it, so a lower
+    stop has no "did not reach" stall. A recipe whose skill the character already has is one stop, the craft.
+    cache: key(caps, goal recipes crafted once) -> (routes, same, the routes without the vendor credit or None) from
+    compare.settle_routes, and ("gold", mode, that key, credited, budget.pay) -> that route's gold,
     shared by both modes' cuts (planning a set of caps takes seconds); give it the routes to the targets when the
     caller has them. The routes without the credit are planned only when a credited route misses the budget."""
     from yap_forever.plan import candidates  # plan imports this module
@@ -118,26 +143,28 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
     limit = copper(budget)
     target = dict(inputs.caps)
     start = {p: max(1, inputs.stock.skills.get(p, 1)) for p in target}
+    once = {p: s for p, s in inputs.craft_once.items() if p in target}  # the recipe goals, crafted at their goal stop
+    names = {p: (target[p], inputs.gd.recipes[s].name) for p, s in once.items() if s in inputs.gd.recipes}
 
-    def routes(caps, credited=True):
-        """mode -> the route to caps, planned with the vendor credit or without it (filled in when first asked)."""
-        k = key(caps)
+    def routes(caps, crafts, credited=True):
+        """mode -> the route to caps crafting the goal recipes `crafts` once, planned with the vendor credit or without
+        it (filled in when first asked)."""
+        k = key(caps, crafts)
+        sub = dataclasses.replace(inputs, caps=dict(caps), craft_once=dict(crafts))
         if k not in cache:
-            sub = dataclasses.replace(inputs, caps=dict(caps))
             cache[k] = (*settle_routes(candidates(sub), sub.caps), None)
         settled, same, bare = cache[k]
         if credited:
             return settled
         if bare is None:
-            sub = dataclasses.replace(inputs, caps=dict(caps))
             bare = settle_routes(candidates(sub, vendor_credit=False), sub.caps)[0]
             cache[k] = (settled, same, bare)
         return bare
 
-    def gold_at(caps, credited):
-        k = ("gold", mode, key(caps), credited, budget.pay)  # the figure the budget is compared with
+    def gold_at(caps, crafts, credited):
+        k = ("gold", mode, key(caps, crafts), credited, budget.pay)  # the figure the budget is compared with
         if k not in cache:
-            cache[k] = gold_of(routes(caps, credited)[mode])
+            cache[k] = gold_of(routes(caps, crafts, credited)[mode])
         return cache[k]
 
     def ends(full):
@@ -147,13 +174,15 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
         for p, t in target.items():
             end = full.final_skill.get(p, start[p])
             stops[p] = stops_for(start[p], min(t, end))
+            if p in once and start[p] >= t:  # the recipe's skill is already there: one stop, the craft
+                stops[p] = [t]
             if not stops[p] and start[p] < t and p in full.stall_reasons:
                 stalled[p] = full.stall_reasons[p]
             elif stops[p] and end < t and p in full.stall_reasons:
                 early[p] = (end, full.stall_reasons[p])
         return stops, stalled, early
 
-    stops, stalled, early = ends(routes(target)[mode])
+    stops, stalled, early = ends(routes(target, once)[mode])
 
     def caps_at(level):
         """level: profession -> stops taken. With all of them the cap is the target, so a profession the
@@ -161,14 +190,32 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
         return {p: target[p] if n == len(stops[p]) else stops[p][n - 1] if n else start[p]
                 for p, n in level.items()}
 
+    def crafts_at(level):
+        """The goal recipes crafted once at `level`: those whose profession takes all its stops."""
+        return {p: s for p, s in once.items() if level[p] == len(stops[p])}
+
     def plan_at(level):
-        caps = caps_at(level)
-        credited = (gold_at(caps, True) <= limit or gold_at(caps, False) >= gold_at(caps, True)
-                    or not _as_far(routes(caps, False)[mode], routes(caps)[mode], caps))
-        p = routes(caps, credited)[mode]
-        held = _held(caps, start, [x for x in caps if start[x] < target[x]])
+        caps, crafts = caps_at(level), crafts_at(level)
+        credited = (gold_at(caps, crafts, True) <= limit or gold_at(caps, crafts, False) >= gold_at(caps, crafts, True)
+                    or not _as_far(routes(caps, crafts, False)[mode], routes(caps, crafts)[mode], caps, crafts))
+        p = routes(caps, crafts, credited)[mode]
+        held = _held(caps, start, [x for x in caps if start[x] < target[x] or x in once], crafts)
         p.events = [e for e in p.events if e not in held]  # held at the start by the budget: not a target reached
-        return p, gold_at(caps, credited)
+        return p, gold_at(caps, crafts, credited)
+
+    def made(level, plan, spent, next_stop):
+        """The cut at `level`, with what each recipe goal it stops below costs on top when its route crafts it, else
+        why that route doesn't (too little Favor, a tool, materials): a stop no more gold reaches (stops_early)."""
+        extra, failed = {}, {}
+        for p, spell in once.items():
+            if level[p] < len(stops[p]) and p not in stalled and p not in early:
+                goal, gold = plan_at({**level, p: len(stops[p])})
+                if crafted(goal, p, spell):
+                    extra[p] = gold - spent
+                elif p in goal.stall_reasons:
+                    failed[p] = (target[p], goal.stall_reasons[p])
+        return BudgetCut(reached(level), plan, spent, next_stop, stalled, caps_at(level), start, {**early, **failed},
+                         plan.vendor_credit, crafts_at(level), names, extra)
 
     def reached(level):
         return {p: stops[p][n - 1] if n else start[p] for p, n in level.items()}
@@ -179,7 +226,7 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
         if not plan.vendor_credit:  # the route without the credit may get further than the one the stops came from
             stops, stalled, early = ends(plan)
             level = {p: len(stops[p]) for p in target}
-        return BudgetCut(reached(level), plan, spent, {}, stalled, caps_at(level), start, early, plan.vendor_credit)
+        return made(level, plan, spent, {})
 
     level = {p: 0 for p in target}
     plan, spent = plan_at(level)
@@ -210,12 +257,14 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
             if not took:
                 break
     next_stop = {p: (stops[p][level[p]], plan_at(more(p))[1] - spent) for p in target if left(p)}
-    return BudgetCut(reached(level), plan, spent, next_stop, stalled, caps_at(level), start, early, plan.vendor_credit)
+    return made(level, plan, spent, next_stop)
 
 
-def _as_far(p: Plan, than: Plan, caps: dict[int, int]) -> bool:
-    """p gets every profession in caps at least as far as `than` does."""
-    return all(p.final_skill.get(x, 0) >= than.final_skill.get(x, 0) for x in caps)
+def _as_far(p: Plan, than: Plan, caps: dict[int, int], crafts: dict[int, int] | None = None) -> bool:
+    """p gets every profession in caps at least as far as `than` does, and crafts each goal recipe in `crafts` that
+    `than` crafts."""
+    return (all(p.final_skill.get(x, 0) >= than.final_skill.get(x, 0) for x in caps)
+            and all(crafted(p, x, s) or not crafted(than, x, s) for x, s in (crafts or {}).items()))
 
 
 def amount(budget: Budget) -> str:
@@ -223,27 +272,43 @@ def amount(budget: Budget) -> str:
     return f"{budget.gold:.2f}".rstrip("0").rstrip(".") + "g"
 
 
-def not_applied(budget: Budget) -> str:
-    """Said when a recipe target wins over the budget: the recipe goal is planned in full, and so is the other
-    profession's skill target."""
-    return f"The {amount(budget)} budget is not applied: a recipe target is planned in full."
+def not_planned(other: int, goal: int) -> str:
+    """Said when a budget with a recipe goal on `goal` leaves the other profession unplanned (#96)."""
+    return f"{PROFESSIONS[other]} is not planned with this budget: it goes to the {PROFESSIONS[goal]} goal."
 
 
 def lines(c: BudgetCut, budget: Budget) -> list[str]:
     """What the budget reaches, why a profession gets none of it, and what each next stop costs on top (and,
-    when the route stalls at that stop, why). With every target reached and no stall, nothing to say."""
+    when the route stalls at that stop, why). With every target reached and no stall, nothing to say.
+    A recipe goal (#96) the route crafts: "<budget> covers <Prof> to <skill> and one <recipe> (<gold>)." when every
+    goal is covered, or "<budget> covers one <recipe> (<gold>); your <Prof> <skill> already meets its <recipe
+    skill>." when the character has that skill already; one the cut stops below: "The goal, <Prof> <skill> and one
+    <recipe>, costs about <gold> more.", instead of its next stop's line when that stop is the goal. A goal whose
+    route can't craft it (too little Favor, a tool, materials) gets that stop's line with the route's reason."""
     b = amount(budget)
-    moved = [p for p in c.caps if c.caps[p] > c.start.get(p, c.caps[p])]
+    covered = c.covered
+    moved = [p for p in c.caps if c.caps[p] > c.start.get(p, c.caps[p]) or p in covered]
     out = []
     if moved:
         how = ", selling crafts to a vendor as you go" if budget.pay == "as_you_go" else ""  # c.spent's figure
-        out.append(f"{b} takes " + " and ".join(f"{PROFESSIONS[p]} to {c.caps[p]}" for p in moved)
-                   + f" ({gold(c.spent)}{how}).")
+        verb = "covers" if all(p in covered for p in c.caps) else "takes"
+        met = [p for p in moved if p in covered and c.start.get(p, 1) >= c.recipes[p][0]]  # the skill is there
+        parts = [f"one {c.recipes[p][1]}" if p in met else
+                 f"{PROFESSIONS[p]} to {c.caps[p]}" + (f" and one {c.recipes[p][1]}" if p in covered else "")
+                 for p in moved]
+        joint = ", and " if covered and len(parts) > 1 else " and "
+        tails = "".join(f"; your {PROFESSIONS[p]} {c.start[p]} already meets its {c.recipes[p][0]}" for p in met)
+        out.append(f"{b} {verb} " + joint.join(parts) + f" ({gold(c.spent)}{how}){tails}.")
     elif c.below_first_stop:
         out.append(f"{b} doesn't reach the first stop: nothing is planned yet.")
+    for p, extra in c.goal_extra.items():
+        skill, name = c.recipes[p]
+        out.append(f"The goal, {PROFESSIONS[p]} {skill} and one {name}, costs about {gold(extra)} more.")
     for p, why in c.stalled.items():
         out.append(f"{PROFESSIONS[p]} gets none of it: {_reason(p, why)}.")
     for p, (s, extra) in c.next_stop.items():
+        if p in c.goal_extra and s == c.recipes[p][0]:  # the goal is the next stop: said above
+            continue
         end, why = c.stops_early.get(p, (None, ""))
         tail = f"; the route stops there: {_reason(p, why)}" if s == end else ""
         out.append(f"The next stop, {PROFESSIONS[p]} {s}, costs about {gold(extra)} more{tail}.")

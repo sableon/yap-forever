@@ -2,6 +2,7 @@
 import dataclasses
 import math
 import re
+from collections import ChainMap
 from dataclasses import dataclass, field
 
 from yap_forever.costmodel import VENDOR_TOOLS, Cost, Pools, bars_to_ore, money, skillup_chance
@@ -79,6 +80,8 @@ class Plan:
     leftover_value: float = 0
     vendor_back: float = 0  # the leftovers sold, every one at its vendor price, whatever the AH pays (#97)
     vendor_credit: bool = True  # planned with the vendor price of the crafts sold in the score (False: see plan())
+    other_crafts: dict[int, int] = field(default_factory=dict)  # intermediates crafted with a profession the route
+    # doesn't plan (plan()'s `fixed`, #96): item -> the recipe
 
     @property
     def ah_extra(self) -> float:
@@ -155,7 +158,8 @@ def plan(gd, valuer, stock, favor, caps: dict[int, int], quests: dict | None = N
          reuse: dict[int, tuple[float, float]] | None = None,
          craft_once: dict[int, int] | None = None, exclude: frozenset[int] = frozenset(),
          one_time_in_full: bool = False, overtime: int = 0, reading: str = "relative",
-         order: tuple[int, ...] | None = None, vendor_credit: bool = True) -> Plan:
+         order: tuple[int, ...] | None = None, vendor_credit: bool = True,
+         fixed: dict[int, int] | None = None) -> Plan:
     """caps: profession -> target skill (one or two professions; see resolve_goals).
     order: None raises the professions side by side (always the lower one); skill lines raise them one
     at a time, the first in the order until it reaches its cap or stalls, then the next.
@@ -167,16 +171,20 @@ def plan(gd, valuer, stock, favor, caps: dict[int, int], quests: dict | None = N
     it raises the chance of every skill-up, disenchanting included.
     vendor_credit: False plans without the vendor price of the crafts sold in the score (a budget's fallback route,
     which may need less of the gold the budget is compared with; see budget.cut). The totals count what vendors pay back either way, and the
-    plan says how it was planned (Plan.vendor_credit), so a route planned again from it is planned the same way."""
+    plan says how it was planned (Plan.vendor_credit), so a route planned again from it is planned the same way.
+    fixed: profession -> skill of a profession the route doesn't plan (a budget with a recipe goal on the other one,
+    #96): no steps or skill-ups, but its trainer and starter recipes up to that skill count as known and may craft
+    the route's reagents when that beats buying by the craft margin (costmodel.Valuer._take), at no fee. It is never
+    in final_skill; what it crafts is in Plan.other_crafts."""
     return _Route(gd, valuer, stock, favor, caps, quests, reuse, craft_once, exclude, one_time_in_full,
-                  overtime, reading, order, vendor_credit).run()
+                  overtime, reading, order, vendor_credit, fixed).run()
 
 
 class _Route:
     """The state one plan() call shares between its steps."""
 
     def __init__(self, gd, valuer, stock, favor, caps, quests, reuse, craft_once, exclude,
-                 one_time_in_full, overtime, reading, order=None, vendor_credit=True):
+                 one_time_in_full, overtime, reading, order=None, vendor_credit=True, fixed=None):
         self.gd, self.valuer, self.stock, self.favor = gd, valuer, stock, favor
         self.vendor_credit = vendor_credit
         self.order = tuple(order) if order else None
@@ -199,10 +207,15 @@ class _Route:
         self.p = Plan(vendor_credit=vendor_credit)
         skill = {x: max(1, stock.skills.get(x, 1)) for x in self.profs}
         self.skill = skill
+        # #96: the professions not planned, at their fixed skill, for the Valuer only (C43): never in profs or
+        # final_skill; their trainer recipes up to it are known (in learned, below)
+        self.fixed = {x: s for x, s in (fixed or {}).items() if x not in self.caps}
+        self.known = ChainMap(skill, self.fixed) if self.fixed else skill  # the skills the Valuer crafts with
         # Ranks up to the current skill are already trained; at exactly a cap the next one is not.
         self.rank_cap = {x: min([c for c in [START_CAP] + [r.cap for r in gd.trainer_ranks.get(x, [])]
                                  if c >= skill[x]], default=START_CAP) for x in self.profs}
-        self.learned: set[int] = set()
+        self.learned: set[int] = {r.spell_id for r in recipes.values() if r.skill_line in self.fixed
+                                  and r.source == "trainer" and r.required_skill <= self.fixed[r.skill_line]}
         self.produced: dict[int, float] = {}
         self.held: dict[int, float] = {}
         self.skipped: dict[int, str] = {}
@@ -288,7 +301,7 @@ class _Route:
             if self.stock.level < self.quests[r.spell_id].level:
                 return f"quest needs character level {self.quests[r.spell_id].level}"
             reqs = list(self.quests[r.spell_id].items.items())
-            c = self.valuer.take_many(reqs, self.pools, self.skill, commit=False, learned=self.learned)
+            c = self.valuer.take_many(reqs, self.pools, self.known, commit=False, learned=self.learned)
             if c is None:
                 return "quest items not available: " + ", ".join(self.gd.name(i) for i, _ in reqs)
             return c, 0, None, reqs  # hand-ins are taken together with the first crafts
@@ -321,7 +334,7 @@ class _Route:
             if isinstance(lo, str):
                 continue
             reqs = [(i, q / r.output[1]) for i, q in r.reagents.items()]
-            c = self.valuer.take_many(reqs, self.pools, self.skill, commit=False, learned=self.learned)
+            c = self.valuer.take_many(reqs, self.pools, self.known, commit=False, learned=self.learned)
             if c is not None:
                 opts.append({"how": "craft", "item": item, "cost": lo[0], "requests": reqs,
                              "recipe": r, "peek": c})
@@ -528,7 +541,7 @@ class _Route:
             self.p.stall_reasons[prof] = f"{name}: {r.name} needs a tool that can't be bought or made"
             return
         requests = [rq for t in tools for rq in t["requests"]] + lo[3] + list(r.reagents.items())
-        if self.valuer.take_many(requests, self.pools, self.skill, commit=False, learned=self.learned) is None:
+        if self.valuer.take_many(requests, self.pools, self.known, commit=False, learned=self.learned) is None:
             self.p.stall_reasons[prof] = f"{name}: materials for {r.name} not available"
             return
         step_cost = Cost()
@@ -539,7 +552,7 @@ class _Route:
         for i, q in lo[3]:
             extra[i] = extra.get(i, 0) + q
         before = _snapshot(self.pools)
-        step_cost += self.valuer.take_many(requests, self.pools, self.skill, commit=True, learned=self.learned)
+        step_cost += self.valuer.take_many(requests, self.pools, self.known, commit=True, learned=self.learned)
         mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(self.pools))
         if r.output:
             self.pools.made[r.output[0]] = self.pools.made.get(r.output[0], 0) + r.output[1]
@@ -594,14 +607,14 @@ class _Route:
                 continue
             requests = [rq for t in tools for rq in t["requests"]] + \
                 [(item, q * crafts) for item, q in r.reagents.items()]
-            c = self.valuer.take_many(requests, self.pools, self.skill, commit=False, learned=self.learned)
-            if c is not None and lo[3] and self.valuer.take_many(lo[3] + requests, self.pools, self.skill,
+            c = self.valuer.take_many(requests, self.pools, self.known, commit=False, learned=self.learned)
+            if c is not None and lo[3] and self.valuer.take_many(lo[3] + requests, self.pools, self.known,
                                                                  commit=False, learned=self.learned) is None:
                 self.skipped[r.spell_id] = "not enough materials for quest and reagents"
                 continue
             if c is None:
                 bad = next((i for i, q in requests
-                            if self.valuer.take(i, q, self.pools, self.skill, commit=False,
+                            if self.valuer.take(i, q, self.pools, self.known, commit=False,
                                                 learned=self.learned) is None), None)
                 self.skipped[r.spell_id] = (f"unpriceable: {self.gd.name(bad)}" if bad is not None
                                             else "not enough materials for tool and reagents")
@@ -657,7 +670,7 @@ class _Route:
         for i, q in tool_extra.items():
             extra[i] = extra.get(i, 0) + q
         before = _snapshot(self.pools)
-        c = self.valuer.take_many(requests, self.pools, self.skill, commit=True, learned=self.learned)
+        c = self.valuer.take_many(requests, self.pools, self.known, commit=True, learned=self.learned)
         if c is None:  # cannot happen: same requests, same order as the check above
             self.p.stalled[prof], self.p.stall_reasons[prof] = s, f"{name}: materials ran out at {s}"
             return None
@@ -716,6 +729,8 @@ class _Route:
         p.final_skill = dict(self.skill)
         p.skipped = sorted((k, v) for k, v in self.skipped.items() if k not in self.learned)
         p.crafted = dict(self.pools.crafted)
+        p.other_crafts = {i: spell for (i, spell), n in self.pools.crafted_by.items()
+                          if n > 1e-9 and (r := self.recipes.get(spell)) is not None and r.skill_line in self.fixed}
         p.held_for_de = {i: (n, de_skill_needed(self.gd.items[i].item_level)) for i, n in self.held.items()}
         p.bought, p.vendor_bought, p.farmed_bars = self.pools.bought, self.pools.vendor, self.pools.farmed
         p.farm = bars_to_ore(self.pools.farmed)

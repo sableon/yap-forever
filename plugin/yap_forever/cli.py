@@ -278,11 +278,8 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None, budge
     except ValueError as e:  # a recipe goal the data doesn't know or can't learn
         print(e)
         return 1
-    print(table)
+    print(table)  # with a budget and a recipe goal, it ends with what the budget covers (#96)
     print()
-    if dropped := plan.budget_dropped(goals, target):
-        print(dropped)
-        print()
     for key, path in files.items():
         print(f"{key}: {path}")
     return 0

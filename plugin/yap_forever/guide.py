@@ -610,7 +610,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
             groups.setdefault(stage(p, s.skill_from, False), []).append(s)
         for k, group in groups.items():
             for r in _ranges(group, gd, whole):
-                line = _range_line(r, gd, used_by, for_de, plan.kept_greens, sales, on_ah)
+                line = _range_line(r, gd, used_by, for_de, plan.kept_greens, sales, on_ah, plan.other_crafts)
                 lines.setdefault((k, p), []).append((r["from"], 1, line + (hint.note(p, r) if hint else "")))
         for s in plan.steps:
             if s.profession == p and s.skill_from == s.skill_to:  # the goal recipe, crafted once
@@ -757,9 +757,11 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
     return out
 
 
-def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None) -> str:
+def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None, others=None) -> str:
     """One route row. sales: the render's costmodel.Valuer, whose rule says where its crafts are sold (None: no
-    prices, so to a vendor). on_ah: see _vendor_back (None: a row on its own)."""
+    prices, so to a vendor). on_ah: see _vendor_back (None: a row on its own). others: Plan.other_crafts, an
+    intermediate crafted with a profession the route doesn't plan -> the recipe, whose profession the row names
+    (#96)."""
     # Disenchants are an expected count of greens you already have, not a buffered shopping count.
     n = max(1, round(r["crafts"]) if r["spell"] == DE_SPELL else math.ceil(r["crafts"] - 1e-6))
     mats = [f"{count(q)} {gd.name(i)}" for i, q in r["mats"].items()] + \
@@ -768,7 +770,10 @@ def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None
     if mats:
         line += " — " + ", ".join(mats)
     if r.get("here"):  # intermediates still missing, crafted on the spot from the materials listed
-        line += "; first craft " + ", ".join(f"{count(q)} {gd.name(i)}" for i, q in r["here"].items())
+        line += "; first craft " + ", ".join(
+            f"{count(q)} {gd.name(i)}" + (f" (your {PROFESSIONS[gd.recipes[others[i]].skill_line]})"
+                                          if i in (others or {}) and others[i] in gd.recipes else "")
+            for i, q in r["here"].items())
     return line + _sold(r, gd, used_by, for_de, kept, sales, {} if on_ah is None else on_ah)[0]
 
 
@@ -827,6 +832,52 @@ def _money(out, plan, stock) -> None:
             f"{'cost' if plan.economic_total > 0 else 'profit'} (vendor sales only), counting your bank "
             "and mined bars at what they would sell for.",
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
+
+
+def alt_suggestions(plan, gd, market, stock, others, known=None) -> list[str]:
+    """#96: one line for each item the route buys on the AH that another of your characters can make for less, at
+    today's prices, by more than the craft margin at its skill (costmodel.craft_margin): "Your <Person> <Name> can make
+    the <n> <item> for about <gold> less than the AH and mail them; the gold to bring doesn't count that." Not a step,
+    and not in "Gold to bring". others: name -> the other character's config.Stock; only its [skills] count, each
+    profession's trainer and starter recipes up to that skill, from `known` (game data holding those professions;
+    default gd, the route's). A recipe's reagents are priced at the lowest of a vendor and the AH; one with a reagent
+    priced by neither is left out. The largest saving per item is named, a tie in name order."""
+    from yap_forever.costmodel import craft_margin
+    from yap_forever.shopping import ah_buys  # shopping imports this module
+    known = gd if known is None else known
+
+    def made_for(r, n):  # what n of the item cost to craft with recipe r at today's prices, or None
+        crafts = math.ceil(n / r.output[1] - 1e-9)
+        total = 0.0
+        for i, q in r.reagents.items():
+            need = q * crafts
+            opts = [p * need for p in (known.vendor_prices.get(i),) if p]
+            if (ah := market.buy_cost(i, math.ceil(need - 1e-9))) is not None:
+                opts.append(ah)
+            if not opts:
+                return None
+            total += min(opts)
+        return total
+
+    out = []
+    for item, (n, ah) in sorted(ah_buys(plan, gd, market, stock).items(), key=lambda x: gd.name(x[0])):
+        best = None  # (saving, name, profession)
+        for name in sorted(others):
+            for line, skill in others[name].skills.items():
+                for r in known.recipes.values():
+                    if (r.skill_line != line or not r.output or r.output[0] != item
+                            or r.source not in ("trainer", "starter") or r.required_skill > skill):
+                        continue
+                    cost = made_for(r, n)
+                    if cost is not None and cost < craft_margin(skill) * ah - 1e-9 and (best is None
+                                                                                        or ah - cost > best[0]):
+                        best = (ah - cost, name, line)
+        if best:
+            saving, name, line = best
+            person = trainer_text.PERSON.get(line, PROFESSIONS.get(line, str(line)))
+            out.append(f"Your {person} {name} can make the {n} {gd.name(item)} for about {gold(saving)} less than the "
+                       "AH and mail them; the gold to bring doesn't count that.")
+    return out
 
 
 def vendor_counted(plan) -> str:
