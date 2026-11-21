@@ -14,9 +14,10 @@ say so.
   Horde, Alchemy and Tailoring in Undercity, Blacksmithing and Engineering in Orgrimmar,
   Leatherworking in Thunder Bluff. Every capital has an AH, mailbox and bank, so the guide levels the
   stage of the capital it starts in (the home capital) there; a stage in the other capital follows
-  `trainer_trips` ([list-layout.md](list-layout.md), "The home capital"). Not every capital has
-  every lower trainer: Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no
-  Engineering one.
+  `trainer_trips` ([list-layout.md](list-layout.md), "The home capital"). One `trainer_trips` answer
+  covers both kinds of trip: the stage in the other capital and the remote trainers
+  ([setup.md](setup.md), step 2). Not every capital has every lower trainer: Darnassus has no
+  Blacksmithing or Engineering trainer, Thunder Bluff no Engineering one.
 - **A trainer teaches every recipe from 1 up to its rank's cap**: Journeyman to 75, Expert to 150,
   Artisan to 225, Master to 300. The rule is confirmed in game (2026-11-21). Expert trainers stop at 150: the
   Stormwind Expert Blacksmith doesn't teach Truesilver Rod (175), and an Artisan does. A higher
@@ -50,6 +51,11 @@ say so.
   (Stormwind City: Tailoring, Alchemy and Enchanting; Blacksmithing and Engineering; Leatherworking
   alone) were noted in play (2026-11-19) and live in `yap_forever/data_static/trainer_notes.toml`; the guide's
   trainer rows say them. They are tips only and never change the route.
+- **Capital tips** (`[cities]` in `trainer_notes.toml`, from play): Darnassus: "Most trainers are close
+  together, but the bank and the AH are far apart."; Undercity: "The bank and the AH are in different
+  parts of the city; there is a mailbox at the inn, a few steps from the bank." The guide's stage line
+  and trips to the other capital say them, and the skill gives them when it asks where to start
+  (SKILL.md, step 3).
 
 ## Bags, bank and mail
 

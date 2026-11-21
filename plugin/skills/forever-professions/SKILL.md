@@ -60,6 +60,17 @@ when a question or answer needs it.
    if the player wants it kept. If Enchanting isn't in the plan, ask whether green crafts should be
    kept to disenchant on another character or sold, and set `keep_greens`
    ([setup.md](references/setup.md), step 2, "Green crafts").
+   When the goal takes two professions into Artisan stages whose trainers stand in two capitals
+   ([game-rules.md](references/game-rules.md), "Trainers and ranks"; the guide also says so under its
+   intro) and the character has no `capital` yet, ask **Start in <City A>
+   (<Profession A>'s <Rank>) or <City B> (<Profession B>'s <Rank>)?** (for example: **Start in
+   Ironforge (Engineering's Artisan) or Darnassus (Alchemy's Artisan)?**) with each capital's tip
+   ([game-rules.md](references/game-rules.md), "Trainers and ranks"), then, for the other one, **level that
+   stage there in one go, or go as needed?** Save the answers as `capital` and `trainer_trips` under
+   `[characters."Name"]` in `profile.toml` ([setup.md](references/setup.md), step 2). One
+   `trainer_trips` answer covers both kinds of trip: the other capital and the remote trainers (every
+   Master, the Artisan Enchanters), so step 5 doesn't ask again. With one capital, say where the guide
+   starts and ask nothing.
 4. **Refresh prices** with `<planner> prices`. If the API can't be reached, use a fallback and
    tell the player what it can't give ([setup.md](references/setup.md), step 5):
    `<planner> prices --remote` or `<planner> prices --auctionator PATH`.
@@ -70,7 +81,7 @@ when a question or answer needs it.
    on the AH. When both are the same route, say so. Ask which guide they want to follow (the report
    files: [setup.md](references/setup.md), "Report names").
    When the route has a remote trainer (a `**Trip:**` row for a rank to 225 or 300) and the character has
-   no `trainer_trips` yet, ask once per character: **level there in one go, or come back as needed?**
+   no `trainer_trips` yet (step 3's answer counts), ask once per character: **level there in one go, or come back as needed?**
    (one go: bring everything to the next rank or the target and learn the recipes at the trainer; as
    needed: come back for each later recipe). Save the answer as `trainer_trips` under
    `[characters."Name"]` in `profile.toml` (`"one_go"` or `"as_needed"`,
