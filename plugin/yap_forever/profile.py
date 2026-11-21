@@ -18,6 +18,10 @@ FACTIONS = ("alliance", "horde")
 OVERTIME_READINGS = ("relative", "points")
 MAX_OVERTIME = 5
 TRAINER_TRIPS = ("as_needed", "one_go")  # how a route uses a remote trainer: come back as needed, or level there in one go
+# The capitals a character's `capital` key can name, with their AreaTable zone IDs (Alliance, then Horde): where the
+# guide starts and levels a stage whose trainers stand in that capital (trainer_text.stage_capitals, plan.home_capital).
+CAPITAL_NAMES = {"stormwind": 1519, "ironforge": 1537, "darnassus": 1657,
+                 "orgrimmar": 1637, "thunder_bluff": 1638, "undercity": 1497}
 
 
 @dataclass

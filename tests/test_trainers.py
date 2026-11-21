@@ -1005,5 +1005,61 @@ class RecipeRankTests(unittest.TestCase):
                 self.assertEqual(recipe_rank_cap(required), cap)
 
 
+ENG = 202
+DARNASSUS, IRONFORGE, STORMWIND, ELWYNN, EXODAR = 1657, 1537, 1519, 12, 3557
+
+
+def capital_info(extra=(), faction="alliance"):
+    """A TrainerInfo with made-up Alliance trainers: Artisan Alchemy only in Darnassus, Artisan Engineering only in
+    Ironforge, Artisan Enchanting in Elwynn Forest, Master Alchemy outside the capitals, Expert Alchemy in two capitals."""
+    ts = [Trainer(1, "Lira Moonleaf", ALCH, "Artisan", "A", DARNASSUS, (55, 24), True),
+          Trainer(2, "Bolt Cogsworth", ENG, "Artisan", "A", IRONFORGE, (68.5, 43.5), True),
+          Trainer(3, "Mara Runebright", ENCH, "Artisan", "A", ELWYNN, (40, 50), True),
+          Trainer(4, "Dorn Deepdelver", ALCH, "Master", "AH", 33, (30, 70), True),
+          Trainer(5, "Tess Stillwater", ALCH, "Expert", "A", DARNASSUS, (50, 20), True),
+          Trainer(6, "Hobb Kettleford", ALCH, "Expert", "A", IRONFORGE, (60, 40), True), *extra]
+    zones = {DARNASSUS: "Darnassus", IRONFORGE: "Ironforge", STORMWIND: "Stormwind City", ELWYNN: "Elwynn Forest",
+             33: "Stranglethorn Vale", EXODAR: "The Exodar"}
+    return trainer_text.TrainerInfo(faction, trainers.TrainerData(ts, {}, [], zones))
+
+
+class StageCapitalTests(unittest.TestCase):
+    """#98: the capital each (profession, rank) is trained in, when all its confirmed trainers stand in one capital."""
+
+    def test_stage_capitals_alliance(self):
+        self.assertEqual(trainer_text.stage_capitals(capital_info()), {(ALCH, 225): DARNASSUS, (ENG, 225): IRONFORGE})
+
+    def test_split_rank_has_no_capital(self):
+        extra = (Trainer(7, "Pell Sparkwhistle", ENG, "Artisan", "A", STORMWIND, (60, 30), True),)
+        self.assertEqual(trainer_text.stage_capitals(capital_info(extra)), {(ALCH, 225): DARNASSUS})
+
+    def test_stage_capitals_only_in_named_capitals(self):
+        # C19: a trainer in a capital the `capital` key can't name (the Exodar, later data) gives no entry
+        extra = (Trainer(7, "Vel Starforge", BS, "Artisan", "A", EXODAR, (40, 40), True),)
+        self.assertNotIn((BS, 225), trainer_text.stage_capitals(capital_info(extra)))
+
+    def test_stage_capitals_need_a_confirmed_trainer(self):
+        # an unconfirmed title alone gives no entry, and doesn't split a confirmed one
+        extra = (Trainer(7, "Odd Smith", BS, "Artisan", "A", IRONFORGE, (40, 40), False),
+                 Trainer(8, "Odd Engineer", ENG, "Artisan", "A", STORMWIND, (40, 40), False))
+        got = trainer_text.stage_capitals(capital_info(extra))
+        self.assertNotIn((BS, 225), got)
+        self.assertEqual(got[(ENG, 225)], IRONFORGE)
+
+    def test_stage_capitals_without_data_or_faction(self):  # RF2
+        self.assertEqual(trainer_text.stage_capitals(None), {})
+        self.assertEqual(trainer_text.stage_capitals(capital_info(faction="")), {})
+        self.assertEqual(trainer_text.stage_capitals(trainer_text.TrainerInfo("alliance", None)), {})
+
+    def test_has_trainer(self):
+        info = capital_info()
+        self.assertTrue(trainer_text.has_trainer(info, IRONFORGE, ALCH, 150))
+        self.assertFalse(trainer_text.has_trainer(info, STORMWIND, ALCH, 150))
+        self.assertTrue(trainer_text.has_trainer(info, DARNASSUS, ALCH, 225))
+        self.assertFalse(trainer_text.has_trainer(info, DARNASSUS, ENG, 225))
+        self.assertFalse(trainer_text.has_trainer(None, IRONFORGE, ALCH, 150))
+        self.assertFalse(trainer_text.has_trainer(capital_info(faction=""), IRONFORGE, ALCH, 150))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from yap_forever import gamedata, trainer_notes, trainers
 from yap_forever.gamedata import PROFESSIONS
+from yap_forever.profile import CAPITAL_NAMES
 from yap_forever.trainers import CAPITALS, RANK_BY_CAP, Services, Trainer, TrainerData
 
 PERSON = {171: "Alchemist", 164: "Blacksmith", 333: "Enchanter", 202: "Engineer",
@@ -200,6 +201,32 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int, planned: tuple
             parts.append(apart)
             said.add(z)
     return " ".join(parts)
+
+
+def stage_capitals(info: TrainerInfo | None) -> dict[tuple[int, int], int]:
+    """(profession, rank cap) -> the capital's zone ID, for each rank whose confirmed trainers for the faction all stand
+    in one capital the `capital` key can name (profile.CAPITAL_NAMES): Artisan Alchemy in Darnassus, say. {} without
+    trainer data or a faction (RF2). A rank with no confirmed trainer, or trainers in two places, has no entry."""
+    if not (info and info.data and info.faction in CAPITALS):
+        return {}
+    named = set(CAPITAL_NAMES.values()) & set(CAPITALS[info.faction])
+    out = {}
+    for profession in PERSON:
+        for cap, rank in RANK_BY_CAP.items():
+            zones = {t.zone for t in trainers.trainers_for(info.data.trainers, profession, rank, info.faction)
+                     if t.title_confirmed and t.rank == rank}
+            if len(zones) == 1 and zones <= named:
+                out[(profession, cap)] = next(iter(zones))
+    return out
+
+
+def has_trainer(info: TrainerInfo | None, zone: int, profession: int, cap: int) -> bool:
+    """Whether a trainer of `cap`'s rank for `profession` stands in `zone`, for the faction (the trainers city_row
+    counts as a capital's); False without trainer data or a faction."""
+    if not _usable(info, cap):
+        return False
+    return any(t.zone == zone for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap],
+                                                             info.faction))
 
 
 def person(profession: int) -> str:
