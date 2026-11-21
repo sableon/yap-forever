@@ -335,8 +335,12 @@ and the report in its verdict, what the gold reaches, in one paragraph:
   the recipe crafted once. When the route covers it: `<budget> covers <Profession> to <skill> and one <recipe>
   (<gold>).` (with `as_you_go`, `(<gold>, selling crafts to a vendor as you go).`; two recipe goals joined with
   ", and "). When the cut stops below it, after the "takes" line: `The goal, <Profession> <skill> and one
-  <recipe>, costs about <gold> more.`, which replaces the next stop's line when that stop is the goal. A skill
-  target next to it: `<Profession> is not planned with this budget: it goes to the <Profession> goal.`
+  <recipe>, costs about <gold> more.`, which replaces the next stop's line when that stop is the goal. When the
+  character already has the recipe's skill: `<budget> covers one <recipe> (<gold>); your <Profession> <skill>
+  already meets its <recipe skill>.` (in a line with two goals, that goal's part reads `one <recipe>` and the
+  `; your ... already meets its ...` clause comes after the gold). When the goal's route can't craft it for a
+  reason gold doesn't change (too little Favor, a tool, materials), the goal stop's line ends `; the route stops
+  there: <why>.` A skill target next to it: `<Profession> is not planned with this budget: it goes to the <Profession> goal.`
   Another of your characters who can make an item the route buys on the AH for less, by the craft margin:
   `Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; the gold to
   bring doesn't count that.` (after the budget lines). With a recipe target the plan command prints these

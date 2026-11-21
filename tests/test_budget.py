@@ -544,8 +544,8 @@ def goal_inputs(req=100, skills=None, recipes=(), listings=None, fixed=None, gea
 
 
 def dye_inputs(shard):
-    """goal_inputs where "BS dyed" (spell 3, one Test Dye a point, orange) levels instead of the bar, the AH selling Test
-    Dye at 90c; Enchanting, not planned, at 50 knows "Ench dye" (spell 4, trainer, required 40,
+    """goal_inputs where "BS dyed" (spell 3, one Test Dye a point, orange) levels instead of the bar, the AH selling
+    Test Dye at 90c; Enchanting, not planned, at 50 knows "Ench dye" (spell 4, trainer, required 40,
     a 5s fee) making one Test Dye from a Small Glimmering Shard at `shard` copper, and not "Ench dye later" (required
     60, from Strange Dust at 1c). The craft margin at Enchanting 50 is 0.908: a shard below 81.7c makes the dye."""
     dyes = [toy.recipe(3, "BS dyed", BS, {DYE: 1}),
@@ -567,11 +567,12 @@ class RecipeGoalTests(unittest.TestCase):
         c = cut(i, 2)
         self.assertEqual((c.caps, c.spent, c.next_stop, c.goal_extra), ({BS: 100}, TO_GOAL, {}, {}))
         self.assertEqual((c.planned_once, c.covered), ({BS: GOAL}, {BS}))
-        self.assertEqual(budget.lines(c, Budget(2)), [f"2g covers Blacksmithing to 100 and one BS goal ({gold(TO_GOAL)})."])
+        self.assertEqual(budget.lines(c, Budget(2)),
+                         [f"2g covers Blacksmithing to 100 and one BS goal ({gold(TO_GOAL)})."])
         go = budget.cut(i, "gold", Budget(2, pay="as_you_go"))  # the same gold as you go: nothing sells to a vendor
         self.assertEqual(budget.lines(go, Budget(2, pay="as_you_go")),
-                         [f"2g covers Blacksmithing to 100 and one BS goal ({gold(TO_GOAL)}, selling crafts to a vendor "
-                          "as you go)."])
+                         [f"2g covers Blacksmithing to 100 and one BS goal ({gold(TO_GOAL)}, selling crafts to a "
+                          "vendor as you go)."])
 
     def test_recipe_goal_lower_stop(self):
         i = goal_inputs()
@@ -602,8 +603,8 @@ class RecipeGoalTests(unittest.TestCase):
                     self.assertEqual((c.caps, c.spent, c.plan.steps, c.covered), ({BS: 1}, 0, [], set()))
                     self.assertFalse(any("did not reach" in why for why in c.plan.stall_reasons.values()))
                     said = budget.lines(c, Budget(limit))
-                    self.assertEqual(said[0], f"{budget.amount(Budget(limit))} doesn't reach the first stop: nothing is "
-                                              "planned yet.")
+                    self.assertEqual(said[0], f"{budget.amount(Budget(limit))} doesn't reach the first stop: "
+                                              "nothing is planned yet.")
                     self.assertIn("The next stop, Blacksmithing 75, costs about", " ".join(said))
                     self.assertTrue(said[1].startswith("The goal, Blacksmithing 100 and one BS goal, costs about "))
                     # the credited route misses the budget: the one without the credit is planned too
@@ -615,19 +616,26 @@ class RecipeGoalTests(unittest.TestCase):
         c = cut(i, 0)
         self.assertTrue(c.below_first_stop)
         self.assertEqual((c.plan.steps, c.plan.events, c.next_stop), ([], [], {BS: (100, 100)}))
-        self.assertEqual(budget.lines(c, Budget(0)), ["0g doesn't reach the first stop: nothing is planned yet.",
-                                                      "The goal, Blacksmithing 100 and one BS goal, costs about 1s more."])
+        self.assertEqual(budget.lines(c, Budget(0)),
+                         ["0g doesn't reach the first stop: nothing is planned yet.",
+                          "The goal, Blacksmithing 100 and one BS goal, costs about 1s more."])
         c = cut(i, 1)
         self.assertEqual((c.spent, c.covered), (100, {BS}))
-        self.assertEqual(budget.lines(c, Budget(1)), ["1g covers Blacksmithing to 100 and one BS goal (1s)."])
+        self.assertEqual(budget.lines(c, Budget(1)),  # the owner's wording: the skill is there, only the craft
+                         ["1g covers one BS goal (1s); your Blacksmithing 120 already meets its 100."])
+        go = budget.cut(i, "gold", Budget(1, pay="as_you_go"))
+        self.assertEqual(budget.lines(go, Budget(1, pay="as_you_go")),
+                         ["1g covers one BS goal (1s, selling crafts to a vendor as you go); your Blacksmithing 120 "
+                          "already meets its 100."])
         self.assertNotIn("Blacksmithing already at 120", c.plan.events)  # the craft is planned: not "nothing to plan"
         from yap_forever.planner import Plan
         replanned = budget.adopt(c, Plan(events=["Blacksmithing already at 120"]), 100)  # a free skip's route too
         self.assertEqual(replanned.plan.events, [])
 
     def test_other_profession_craft_used_past_margin(self):
-        # a shard at 50c makes the dye for less than the AH's 90c by more than the margin: Enchanting's trainer recipe crafts it, with no fee, no
-        # Enchanting step or skill-up, and the row names it; the recipe above its skill is not used
+        # a shard at 50c makes the dye for less than the AH's 90c by more than the margin: Enchanting's trainer recipe
+        # crafts it, with no fee, no Enchanting step or skill-up, and the row names it; the recipe above its skill is
+        # not used
         from yap_forever.guide import render_guide
         i = dye_inputs(50)
         c = cut(i, 3)
@@ -641,8 +649,8 @@ class RecipeGoalTests(unittest.TestCase):
         self.assertNotIn(toy.DUST, p.bought)
         guide = render_guide(p, i.gd, i.market, i.stock, c.planned_caps)
         rows = [line for line in guide.splitlines() if "Test Dye (your Enchanting)" in line]
-        self.assertEqual(rows, ["- **1–75** · 74× BS dyed — 99 Small Glimmering Shard, 74 Test Dye (yours); first craft "
-                                "99 Test Dye (your Enchanting)"])  # the route's dyes, made at the first row
+        self.assertEqual(rows, ["- **1–75** · 74× BS dyed — 99 Small Glimmering Shard, 74 Test Dye (yours); first "
+                                "craft 99 Test Dye (your Enchanting)"])  # the route's dyes, made at the first row
         self.assertIn("| Small Glimmering Shard | 99 | AH |", guide)
         self.assertNotIn("| Test Dye |", guide)
 
@@ -673,14 +681,36 @@ class RecipeGoalTests(unittest.TestCase):
         self.assertEqual(c.spent, TO_GOAL + TO_75)
         self.assertEqual(c.goal_extra, {ENCH: 500 + 2500 + 100})  # Enchanting's rank is 5s
         self.assertEqual(budget.lines(c, Budget(1.8, (BS, ENCH))),
-                         [f"1.8g takes Blacksmithing to 100 and one BS goal, and Enchanting to 75 ({gold(TO_GOAL + TO_75)}).",
+                         [f"1.8g takes Blacksmithing to 100 and one BS goal, and Enchanting to 75 "
+                          f"({gold(TO_GOAL + TO_75)}).",
                           f"The goal, Enchanting 100 and one Ench goal, costs about {gold(3100)} more."])
         both_goals = cut(i, 3, order=(BS, ENCH))
         self.assertEqual(both_goals.covered, {BS, ENCH})
         self.assertEqual(budget.lines(both_goals, Budget(3, (BS, ENCH))),
                          [f"3g covers Blacksmithing to 100 and one BS goal, and Enchanting to 100 and one Ench goal "
                           f"({gold(TO_GOAL + TO_GOAL + 50)})."])
+        # Enchanting at 120 already has its goal's skill: that part names only the craft, and the line says why
+        i = dataclasses.replace(inputs(rs, {BS: 100, ENCH: 100}, skills={ENCH: 120}), craft_once={BS: GOAL, ENCH: 91})
+        met = cut(i, 3, order=(BS, ENCH))
+        self.assertEqual(budget.lines(met, Budget(3, (BS, ENCH))),
+                         [f"3g covers Blacksmithing to 100 and one BS goal, and one Ench goal ({gold(TO_GOAL + 100)}); "
+                          "your Enchanting 120 already meets its 100."])
 
+    def test_goal_craft_that_gold_does_not_reach(self):
+        # Minor 4: "BS goal" is a Merchant's Favor recipe for 500 Favor and the character has none: the goal stop's
+        # route reaches 100 but can't craft it, so its line says why instead of what more gold would buy
+        import dataclasses
+
+        from yap_forever.favor import FavorData
+        i = goal_inputs()
+        i.gd.recipes[GOAL] = dataclasses.replace(i.gd.recipes[GOAL], source="scroll", scroll_item=toy.SCROLL)
+        i = dataclasses.replace(i, favor=FavorData({GOAL: 500}, {GOAL: 100}))
+        c = cut(i, 1)
+        self.assertEqual((c.caps, c.goal_extra, c.covered), ({BS: 75}, {}, set()))
+        self.assertEqual(budget.lines(c, Budget(1)),
+                         [f"1g takes Blacksmithing to 75 ({gold(TO_75)}).",
+                          f"The next stop, Blacksmithing 100, costs about {gold(TO_GOAL - 100 - TO_75)} more; the "
+                          "route stops there: can't learn BS goal: not enough Favor (500)."])
 
 
 class RecipeGoalReportsTests(unittest.TestCase):
@@ -704,14 +734,14 @@ class RecipeGoalReportsTests(unittest.TestCase):
         listings = {str(toy.COPPER_BAR): [[100, 100000]], str(toy.SHARD): [[100, 100000]]}
         self.paths.prices.write_text(json.dumps({"snapshot_time": "t", "listings": listings}), encoding="utf-8")
         self.gd = goal_inputs(recipes=[toy.recipe(2, "Ench shard", ENCH, {toy.SHARD: 1})]).gd
-        self.stock = self.paths.character("Ana Brightforge") / "stock.toml"
+        self.stock = self.paths.character("Bram Ironhide") / "stock.toml"  # planned; Ana is the group mate
         self.stock.parent.mkdir(parents=True)
         self.stock.write_text("level = 60\n[items]\n\n[skills]\nenchanting = 50\n", encoding="utf-8")
 
     def tearDown(self):
         self._tmp.cleanup()
 
-    def reports(self, target, goals, group=None, name="Ana Brightforge"):
+    def reports(self, target, goals, group=None, name="Bram Ironhide"):
         from unittest import mock
 
         from yap_forever import gamedata, plan as plan_mod, profile
@@ -734,7 +764,7 @@ class RecipeGoalReportsTests(unittest.TestCase):
         listings = {str(DYE): [[90, 100000]], str(toy.SHARD): [[shard, 100000]], str(toy.COPPER_BAR): [[100, 100000]]}
         self.paths.prices.write_text(json.dumps({"snapshot_time": "t", "listings": listings}), encoding="utf-8")
         group = Group(2, "alliance", others={"Ana Brightforge": toy.stock(skills=skills)})
-        return self.reports(Budget(3), {BS: Goal(recipe="BS goal")}, group, "Bram Ironhide")
+        return self.reports(Budget(3), {BS: Goal(recipe="BS goal")}, group)
 
     def test_alt_suggestion_with_skills(self):
         # Ana's Alchemy 150 makes the route's 99 dyes for 49s 50c against 89s 10c on the AH: 39s 60c less
@@ -760,7 +790,7 @@ class RecipeGoalReportsTests(unittest.TestCase):
         self.dyes({ALCH: 150})  # the dye data and prices
         group = Group(2, "alliance", others={"Ana Brightforge": toy.stock(skills={ALCH: 150})})
         for target, goals in ((None, {BS: Goal(recipe="BS goal")}), (Budget(3), {BS: Goal(skill=100)})):
-            table, texts = self.reports(target, goals, group, "Bram Ironhide")
+            table, texts = self.reports(target, goals, group)
             self.assertNotIn("can make the", table + "".join(texts.values()))
 
     def test_gold_to_bring_unchanged_by_suggestion(self):
@@ -771,7 +801,6 @@ class RecipeGoalReportsTests(unittest.TestCase):
                 for text in (texts["guide-gold"], texts["guide-value"]):
                     self.assertIn("**Gold to bring: 94s**", text)
 
-
     def test_other_profession_line(self):
         from yap_forever.config import Goal
         goals = {BS: Goal(recipe="BS goal"), ENCH: Goal(skill=150)}
@@ -779,6 +808,8 @@ class RecipeGoalReportsTests(unittest.TestCase):
         covers = f"2g covers Blacksmithing to 100 and one BS goal ({gold(TO_GOAL)})."
         aside = "Enchanting is not planned with this budget: it goes to the Blacksmithing goal."
         self.assertTrue(table.endswith(f"\n\n{covers} {aside}"), table[-200:])  # once: both routes say the same
+        ordered, _texts = self.reports(Budget(2, (ENCH, BS)), goals)  # an order naming the profession left out
+        self.assertTrue(ordered.endswith(f"\n\n{covers} {aside}"), ordered[-200:])
         self.assertNotIn("Enchanting", table[:table.index(covers)])  # nothing planned or reached for it
         for m in ("gold", "value"):
             guide, report = texts[f"guide-{m}"], texts[f"plan-{m}"]
@@ -799,8 +830,8 @@ class RecipeGoalReportsTests(unittest.TestCase):
         self.assertNotIn("covers", table)
 
     def test_replans_keep_the_stops_goal_craft(self):
-        # P23: the skip alternatives, free skips and the listed saving replan each route with the craft its stop has: none
-        # at a lower stop (no "did not reach" there), the goal recipe at the goal
+        # P23: the skip alternatives, free skips and the listed saving replan each route with the craft its stop has:
+        # none at a lower stop (no "did not reach" there), the goal recipe at the goal
         from unittest import mock
 
         from yap_forever import plan as plan_mod
@@ -815,6 +846,22 @@ class RecipeGoalReportsTests(unittest.TestCase):
                     crafts = [c.args[at].craft_once for c in made.call_args_list]
                     self.assertEqual(crafts, [once] * len(crafts))
                     self.assertTrue(crafts)
+
+    def test_other_profession_without_a_skill_is_not_held(self):
+        # Minor 5: with no [skills] entry the other profession is not held at a skill (it knows no recipes), but it is
+        # still named as not planned
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Goal
+        goals = {BS: Goal(recipe="BS goal"), ENCH: Goal(skill=150)}
+        for stock, fixed in (("", {}), ("[skills]\nenchanting = 50\n", {ENCH: 50})):
+            self.stock.write_text(f"level = 60\n[items]\n\n{stock}", encoding="utf-8")
+            with self.subTest(fixed=fixed), \
+                    mock.patch.object(plan_mod, "candidates", wraps=plan_mod.candidates) as made:
+                table, _texts = self.reports(Budget(2), goals)
+                self.assertEqual({tuple(c.args[0].fixed.items()) for c in made.call_args_list}, {tuple(fixed.items())})
+                self.assertIn("Enchanting is not planned with this budget", table)
 
     def test_said_once_labels_routes_that_differ(self):
         from yap_forever.plan import _said_once

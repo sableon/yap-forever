@@ -241,15 +241,21 @@ class PublishableTests(unittest.TestCase):
                      "<Profession> is not planned with this budget: it goes to the <Profession> goal.",
                      "Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; "
                      "the gold to bring doesn't count that.",
-                     "first craft <n> <item> (your <Profession>)"):
+                     "first craft <n> <item> (your <Profession>)",
+                     "<budget> covers one <recipe> (<gold>); your <Profession> <skill> already meets its "
+                     "<recipe skill>.",
+                     "the goal stop's line ends `; the route stops there: <why>.`"):
             self.assertIn(line, layout)
         for text in (setup, layout, skill):
             self.assertNotIn("not applied", text)
-        for promise in ("covers that profession's goal", "is not planned with the budget",
-                        "first craft <n> <item> (your <Profession>)", "Two recipe targets are cut like two skill targets",
-                        "not counted in \"Gold to bring\""):
+        for promise in ("covers that profession's goal", "is not planned with the budget", "is one stop, the craft",
+                        "first craft <n> <item> (your <Profession>)",
+                        "Two recipe targets are cut like two skill targets", "not counted in \"Gold to bring\""):
             self.assertIn(promise, setup)
         self.assertIn("A budget covers a recipe goal too", step3)
+        self.assertIn("the other profession's skill target isn't planned while the budget goes to the recipe goal "
+                      "(say so)", step3)
+        self.assertNotIn("waits (say so)", step3)
         self.assertIn("`[skills]`", step3)
         from yap_forever import budget
         from yap_forever.gamedata import BS, ENCH

@@ -57,8 +57,8 @@ when a question or answer needs it.
    With a budget and two crafting professions, ask: **raise both evenly or one at a time?** and, for
    one at a time, which first (`--order NAME,NAME`)
    ([setup.md](references/setup.md), "A budget as a goal"). A budget covers a recipe goal too: the
-   other profession's skill target waits (say so), and if the player wants crafts from their other
-   characters suggested, ask those characters' skills and save them under `[skills]` in each one's
+   other profession's skill target isn't planned while the budget goes to the recipe goal (say so),
+   and if the player wants crafts from their other characters suggested, ask those characters' skills and save them under `[skills]` in each one's
    `stock.toml`. With a budget, first plan to the
    targets without it (no `--budget`, before a budget is saved under `[goals]`) and read Z: the
    "(Z less)" of that plan's shopping-list line `If you sell crafts to a vendor as you go ...` under

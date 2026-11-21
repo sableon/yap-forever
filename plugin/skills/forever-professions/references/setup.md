@@ -171,8 +171,9 @@ on top ([list-layout.md](list-layout.md), "Budget"); the report's budget line ad
 
 A budget with a recipe target (craft once) covers that profession's goal: its stops are the rank caps
 below the recipe's skill, then the goal, that skill with the recipe crafted once (only the goal's
-route crafts it). The plan output, the guide header and the report verdict say what it covers or
-how far it gets, and what the goal costs on top. A second profession with a skill target is not
+route crafts it); a recipe whose skill the character already has is one stop, the craft. The plan
+output, the guide header and the report verdict say what it covers or how far it gets, and what the
+goal costs on top (or why the route can't craft it, for example too little Favor). A second profession with a skill target is not
 planned with the budget: the gold goes to the recipe goal. It stays at its skill in `[skills]`, and
 its trainer recipes up to that skill (assumed known) may make one of the goal's reagents when that
 costs less than buying by the craft margin ("Craft or buy" in [list-layout.md](list-layout.md)): the

@@ -244,8 +244,9 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     fixed: dict[int, int] = {}
     aside: list[str] = []  # the budget lines' word on a profession left out
     if target is not None and once:  # #96: the budget covers the recipe goals; a skill target next to one waits
-        fixed = {q: max(1, stock.skills.get(q, 1)) for q in caps if q not in once}
-        aside = [budget_cut.not_planned(q, next(iter(once))) for q in fixed]
+        aside = [budget_cut.not_planned(q, next(iter(once))) for q in caps if q not in once]
+        # held at its skill only when the stock file gives one: an untrained profession knows no recipes
+        fixed = {q: max(1, stock.skills[q]) for q in caps if q not in once and q in stock.skills}
         caps = {p: s for p, s in caps.items() if p in once}
     # and the other characters' crafts they could mail, by the skills their stock files give (#96)
     mates = {n: s for n, s in group.others.items() if s.skills} if group is not None and target and once else {}

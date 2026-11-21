@@ -1008,3 +1008,12 @@ class FixedProfessionTests(unittest.TestCase):
         self.assertEqual((low.other_crafts, low.bought), ({}, {dye: 19}))  # below the recipe's skill: bought
         bare = plan(gd, Valuer(m, gd, st, mode="gold"), st, toy.NO_FAVOR, caps={BS: 20})
         self.assertEqual((bare.other_crafts, bare.bought), ({}, {dye: 19}))
+
+    def test_fixed_profession_never_crafts_a_tool(self):
+        # C43: the Runed Copper Rod a recipe needs is bought, never made with the fixed Enchanting's known recipe
+        gd = toy.gamedata([toy.recipe(3, "BS rod", BS, {toy.COPPER_BAR: 1}, tools=[373]),
+                           toy.recipe(4, "Ench rod", ENCH, {toy.SHARD: 1}, (toy.ROD_TOOL, 1), req=1)])
+        m = toy.market({toy.COPPER_BAR: [(10, 100000)], toy.SHARD: [(1, 100000)], toy.ROD_TOOL: [(5000, 10)]})
+        st = toy.stock(skills={ENCH: 50})
+        p = plan(gd, Valuer(m, gd, st, mode="gold"), st, toy.NO_FAVOR, caps={BS: 20}, fixed={ENCH: 50})
+        self.assertEqual(p.steps[0].tools_bought, {toy.ROD_TOOL: 1})

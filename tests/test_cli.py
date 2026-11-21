@@ -507,7 +507,8 @@ class CliTests(unittest.TestCase):
         me = ["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:2660"]
         for budget, line in (("0", "0g doesn't reach the first stop: nothing is planned yet. The goal, Blacksmithing 1 "
                                    "and one Rough Sharpening Stone, costs about 20c more."),
-                             ("1000", "1000g covers Blacksmithing to 1 and one Rough Sharpening Stone (20c).")):
+                             ("1000", "1000g covers one Rough Sharpening Stone (20c); your Blacksmithing 1 already "
+                                      "meets its 1.")):
             code, out = run(me + ["--budget", budget], self.paths)
             self.assertEqual(code, 0, out)
             self.assertEqual(out.count(line), 1, out)
@@ -526,8 +527,8 @@ class CliTests(unittest.TestCase):
                          encoding="utf-8")
         code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
         self.assertEqual(code, 0, out)
-        line = ("12.5g covers Blacksmithing to 1 and one Rough Sharpening Stone (20c). Enchanting is not planned with "
-                "this budget: it goes to the Blacksmithing goal.")
+        line = ("12.5g covers one Rough Sharpening Stone (20c); your Blacksmithing 1 already meets its 1. Enchanting "
+                "is not planned with this budget: it goes to the Blacksmithing goal.")
         self.assertEqual(out.count(line), 1, out)
         self.assertNotIn("Enchanting gets none of it", out)
         code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20",

@@ -94,8 +94,8 @@ def _held(caps: dict[int, int], start: dict[int, int], below, crafts=()) -> set[
 def adopt(c: BudgetCut, plan: Plan, spent: float) -> BudgetCut:
     """The cut with `plan`, the route planned to the same caps without some trips (plan.take_free_skips), as its
     route, and spent its gold to bring: each next stop, and each recipe goal it stops below, costs what it did, so its
-    extra is counted from the new gold; the professions the budget holds at their start keep no "already at" event (in a copy of `plan` when it
-    has one, else `plan` itself)."""
+    extra is counted from the new gold; the professions the budget holds at their start keep no "already at" event
+    (in a copy of `plan` when it has one, else `plan` itself)."""
     held = _held(c.planned_caps, c.start, c.next_stop, c.planned_once)  # held at the start (a next stop and its start
     # as the cap), or crafting its goal recipe
     if held & set(plan.events):  # a copy: the plan given may be a cached one
@@ -204,14 +204,17 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
         return p, gold_at(caps, crafts, credited)
 
     def made(level, plan, spent, next_stop):
-        """The cut at `level`, with what each recipe goal it stops below costs on top (when its route crafts it)."""
-        extra = {}
+        """The cut at `level`, with what each recipe goal it stops below costs on top when its route crafts it, else
+        why that route doesn't (too little Favor, a tool, materials): a stop no more gold reaches (stops_early)."""
+        extra, failed = {}, {}
         for p, spell in once.items():
             if level[p] < len(stops[p]) and p not in stalled and p not in early:
                 goal, gold = plan_at({**level, p: len(stops[p])})
                 if crafted(goal, p, spell):
                     extra[p] = gold - spent
-        return BudgetCut(reached(level), plan, spent, next_stop, stalled, caps_at(level), start, early,
+                elif p in goal.stall_reasons:
+                    failed[p] = (target[p], goal.stall_reasons[p])
+        return BudgetCut(reached(level), plan, spent, next_stop, stalled, caps_at(level), start, {**early, **failed},
                          plan.vendor_credit, crafts_at(level), names, extra)
 
     def reached(level):
@@ -278,8 +281,10 @@ def lines(c: BudgetCut, budget: Budget) -> list[str]:
     """What the budget reaches, why a profession gets none of it, and what each next stop costs on top (and,
     when the route stalls at that stop, why). With every target reached and no stall, nothing to say.
     A recipe goal (#96) the route crafts: "<budget> covers <Prof> to <skill> and one <recipe> (<gold>)." when every
-    goal is covered; one the cut stops below: "The goal, <Prof> <skill> and one <recipe>, costs about <gold> more.",
-    instead of its next stop's line when that stop is the goal."""
+    goal is covered, or "<budget> covers one <recipe> (<gold>); your <Prof> <skill> already meets its <recipe
+    skill>." when the character has that skill already; one the cut stops below: "The goal, <Prof> <skill> and one
+    <recipe>, costs about <gold> more.", instead of its next stop's line when that stop is the goal. A goal whose
+    route can't craft it (too little Favor, a tool, materials) gets that stop's line with the route's reason."""
     b = amount(budget)
     covered = c.covered
     moved = [p for p in c.caps if c.caps[p] > c.start.get(p, c.caps[p]) or p in covered]
@@ -287,10 +292,13 @@ def lines(c: BudgetCut, budget: Budget) -> list[str]:
     if moved:
         how = ", selling crafts to a vendor as you go" if budget.pay == "as_you_go" else ""  # c.spent's figure
         verb = "covers" if all(p in covered for p in c.caps) else "takes"
-        parts = [f"{PROFESSIONS[p]} to {c.caps[p]}" + (f" and one {c.recipes[p][1]}" if p in covered else "")
+        met = [p for p in moved if p in covered and c.start.get(p, 1) >= c.recipes[p][0]]  # the skill is there
+        parts = [f"one {c.recipes[p][1]}" if p in met else
+                 f"{PROFESSIONS[p]} to {c.caps[p]}" + (f" and one {c.recipes[p][1]}" if p in covered else "")
                  for p in moved]
         joint = ", and " if covered and len(parts) > 1 else " and "
-        out.append(f"{b} {verb} " + joint.join(parts) + f" ({gold(c.spent)}{how}).")
+        tails = "".join(f"; your {PROFESSIONS[p]} {c.start[p]} already meets its {c.recipes[p][0]}" for p in met)
+        out.append(f"{b} {verb} " + joint.join(parts) + f" ({gold(c.spent)}{how}){tails}.")
     elif c.below_first_stop:
         out.append(f"{b} doesn't reach the first stop: nothing is planned yet.")
     for p, extra in c.goal_extra.items():

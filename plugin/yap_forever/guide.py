@@ -760,7 +760,8 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
 def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None, others=None) -> str:
     """One route row. sales: the render's costmodel.Valuer, whose rule says where its crafts are sold (None: no
     prices, so to a vendor). on_ah: see _vendor_back (None: a row on its own). others: Plan.other_crafts, an
-    intermediate crafted with a profession the route doesn't plan -> the recipe, whose profession the row names (#96)."""
+    intermediate crafted with a profession the route doesn't plan -> the recipe, whose profession the row names
+    (#96)."""
     # Disenchants are an expected count of greens you already have, not a buffered shopping count.
     n = max(1, round(r["crafts"]) if r["spell"] == DE_SPELL else math.ceil(r["crafts"] - 1e-6))
     mats = [f"{count(q)} {gd.name(i)}" for i, q in r["mats"].items()] + \
@@ -838,9 +839,9 @@ def alt_suggestions(plan, gd, market, stock, others, known=None) -> list[str]:
     today's prices, by more than the craft margin at its skill (costmodel.craft_margin): "Your <Person> <Name> can make
     the <n> <item> for about <gold> less than the AH and mail them; the gold to bring doesn't count that." Not a step,
     and not in "Gold to bring". others: name -> the other character's config.Stock; only its [skills] count, each
-    profession's trainer and starter recipes up to that skill, from `known` (game data holding those professions; default
-    gd, the route's). A recipe's reagents are priced at the lowest of a vendor and the AH; one with a reagent priced by
-    neither is left out. The largest saving per item is named, a tie in name order."""
+    profession's trainer and starter recipes up to that skill, from `known` (game data holding those professions;
+    default gd, the route's). A recipe's reagents are priced at the lowest of a vendor and the AH; one with a reagent
+    priced by neither is left out. The largest saving per item is named, a tie in name order."""
     from yap_forever.costmodel import craft_margin
     from yap_forever.shopping import ah_buys  # shopping imports this module
     known = gd if known is None else known
