@@ -114,6 +114,25 @@ def measure(mode: str):
     return (lambda p: p.net_gold) if mode == "gold" else (lambda p: p.economic_total)
 
 
+def crafted(plan, prof: int, spell: int) -> bool:
+    """The plan crafts `spell`, the goal recipe of `prof`, once (the craft-once step): its skill is not enough, since
+    the craft itself can fail (Favor, a tool, materials)."""
+    return any(s.profession == prof and s.spell_id == spell and s.skill_from == s.skill_to for s in plan.steps)
+
+
+def does_what_was_asked(plan, caps: dict[int, int], once: dict[int, int] | None = None, than=None) -> bool:
+    """The route does what was asked: every profession in `caps` reaches its skill there and every goal recipe in
+    `once` (profession -> recipe crafted once) is crafted. With `than`, another route of the same targets: as far as
+    that one gets instead, each profession in `caps` at least at its final skill and each goal recipe it crafts
+    crafted too. Settling the routes, the skip alternatives (so free skips), a budget's fallback route and the listed
+    saving all ask it."""
+    if than is not None:
+        caps = {x: than.final_skill.get(x, 0) for x in caps}
+        once = {x: s for x, s in (once or {}).items() if crafted(than, x, s)}
+    return (all(plan.final_skill.get(x, 0) >= c for x, c in caps.items())
+            and all(crafted(plan, x, s) for x, s in (once or {}).items()))
+
+
 def resolve_goals(goals: dict, gd, favor=None, quests: dict | None = None) -> tuple[dict[int, int], dict[int, int]]:
     """Goals (config.Goal per profession) -> (target skill per profession, recipe to craft once)."""
     caps: dict[int, int] = {}
@@ -218,6 +237,7 @@ class _Route:
                                   and r.source == "trainer" and r.required_skill <= self.fixed[r.skill_line]}
         self.produced: dict[int, float] = {}
         self.held: dict[int, float] = {}
+        self.goal_out: dict[int, float] = {}  # what the craft-once goals make: the player's, never sold (_finish)
         self.skipped: dict[int, str] = {}
         self.soft_stalls: set[int] = set()  # stalled for lack of materials; retried when new ones appear
         self.spent = Cost()
@@ -556,6 +576,7 @@ class _Route:
         mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(self.pools))
         if r.output:
             self.pools.made[r.output[0]] = self.pools.made.get(r.output[0], 0) + r.output[1]
+            self.goal_out[r.output[0]] = self.goal_out.get(r.output[0], 0) + r.output[1]
         self.spent += step_cost
         self.p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
                                  mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
@@ -739,7 +760,10 @@ class _Route:
         p.shared = {name: dict(items) for name, items in self.stock.shared.items()}
         p.used_mail = mail_used(p.shared, self.pools.mail)
         de_mats = set(p.de_materials)
-        for item, n in list(self.pools.made.items()) + list(self.held.items()):
+        # the goal crafts are what the player set out to make: no leftover, never sold (by count: the route may make
+        # the same item to level)
+        made = [(item, n - self.goal_out.get(item, 0)) for item, n in self.pools.made.items()]
+        for item, n in made + list(self.held.items()):
             if n < 1e-9:
                 continue
             p.leftovers[item] = p.leftovers.get(item, 0) + n

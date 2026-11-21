@@ -141,6 +141,18 @@ class SettleRoutesTests(unittest.TestCase):
         routes, _ = settle_routes([a, b], {BS: 20})
         self.assertEqual(routes["gold"], b)
 
+    def test_a_route_that_crafts_the_goal_wins(self):
+        # final review, Important 1: a cheaper candidate that reaches the skill but not the goal craft is not chosen
+        from yap_forever.compare import settle_routes
+        from yap_forever.planner import Step
+        goal = Step(BS, 20, 20, 7, "Goal", 1, 500, 500)
+        cheap = Plan(cash_total=100, economic_total=100, final_skill={BS: 20})
+        made = Plan(steps=[goal], cash_total=600, economic_total=600, final_skill={BS: 20})
+        routes, same = settle_routes([cheap, made], {BS: 20}, {BS: 7})
+        self.assertEqual((routes["gold"], routes["value"], same), (made, made, True))
+        self.assertIs(settle_routes([cheap, made], {BS: 20})[0]["gold"], cheap)  # without a goal, as before
+        self.assertIs(settle_routes([cheap], {BS: 20}, {BS: 7})[0]["gold"], cheap)  # none crafts it: reaching counts
+
     def test_settle_by_net_gold(self):
         # #97: least gold is the gold out of pocket less what vendors pay back for the crafts
         from yap_forever.compare import settle_routes

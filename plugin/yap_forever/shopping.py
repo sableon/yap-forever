@@ -16,6 +16,7 @@ from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.shared import allocate
 from yap_forever.trips import (AS_NEEDED, ONE_GO, capital_trip, step_at, step_place, stretch_end, stretch_patterns,
                                visits)
+from yap_forever.trips import trips as route_trips
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
 AS_YOU_GO_LINE = ("If you sell crafts to a vendor as you go and buy each row's reagents when you reach it, about {} is "
@@ -668,6 +669,16 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
     return (f"{lead} to craft to {reach} at the trainer "
             f"({slots_text(split)}{'; ' + note if note else ''}); "
             f"{town}buy and collect before you go.{_made_later_text(gd, items, market)}{warn}")
+
+
+def has_bring_list(plan, gd, stock, trainer_trips: str = AS_NEEDED, capitals: dict | None = None,
+                   home: int | None = None) -> bool:
+    """The route has a trip whose guide row carries a bring list (bring_text, with the guide's arguments): a remote
+    rank trip with something to bring. capitals, home: see trips.visits."""
+    return any(t.kind == "rank" and t.profession in plan.final_skill
+               and bring_text(plan, gd, t, stock.bag_slots, stock.items, stock.reagent_slots, False, stock.skills,
+                              trainer_trips, None, home)
+               for t in route_trips(plan, gd, stock.skills, trainer_trips, capitals, home))
 
 
 def _pattern_cost(gd, market, spell, how) -> float | None:

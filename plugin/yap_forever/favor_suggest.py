@@ -5,7 +5,8 @@ guide and the report suggest the ones the character could make now for itself. A
 - it crafts an item whose required level is near the character's (`level_ok`); an item with required level 0
   (no requirement) and an enchant (no crafted item) have no level test; with no `level` in the stock file, only
   those are suggested;
-- the character's skill is at least the recipe's Favor skill, and its Favor at least the price;
+- the character's skill is at least the recipe's Favor skill, and its Favor at least the price (the Favor left after
+  the route's own Favor goal, when it has one);
 - its materials, taken from the bank, then mailed by the group's other characters, the rest bought at today's
   AH or vendor price, cost at most the group's gold (before the route);
 - it is not the profession's craft-once goal (the route plans that one).
@@ -78,18 +79,20 @@ def _materials(r, stock, valuer, shared):
     return gold, bank, mail, tuple(k for k in ("ah", "vendor") if k in where)
 
 
-def suggest(gd, favor, stock, valuer, gold_copper, shared, goal_spells) -> list[Suggestion]:
+def suggest(gd, favor, stock, valuer, gold_copper, shared, goal_spells, favor_left: int | None = None) -> list[Suggestion]:
     """Every suggestion, in the order listed. favor: the character's favor.FavorData; stock: its
     config.Stock (skills, level, Favor and bank); valuer: prices (costmodel.Valuer.buy_option); gold_copper: the
     group's gold (shared.Budget.copper, else the stock's cash_gold); shared: the other characters' mailable items,
-    by name; goal_spells: the craft-once goals, left out. Items nearest the character's level first, then by Favor
+    by name; goal_spells: the craft-once goals, left out; favor_left: the Favor a price is checked against (None: the
+    stock's), the Favor left after the route's own Favor goal. Items nearest the character's level first, then by Favor
     price, then the items with no level requirement, by Favor price; then the enchants, by Favor price."""
+    owned = stock.favor if favor_left is None else favor_left
     out = []
     for spell, r in apply_favor(gd.recipes, favor).items():
         if r.source != "favor" or spell not in favor.recipes or spell in goal_spells:
             continue
         price = favor.recipes[spell]
-        if stock.skills.get(r.skill_line, 0) < r.required_skill or price > stock.favor:
+        if stock.skills.get(r.skill_line, 0) < r.required_skill or price > owned:
             continue
         level = None
         if r.output:
@@ -111,7 +114,7 @@ def _and(parts: list[str]) -> str:
     return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
 
 
-def _row(s: Suggestion, gd, favor_owned: int) -> str:
+def _row(s: Suggestion, gd, favor_owned: int, left: bool = False) -> str:
     what = PROFESSIONS.get(s.profession, str(s.profession)) + f" {s.skill}"
     if s.level is not None:
         what += f", for level {s.level}" if s.level else ", any level"
@@ -125,13 +128,16 @@ def _row(s: Suggestion, gd, favor_owned: int) -> str:
         mats = "; materials " + ", ".join([f"about {gold_text(s.gold)} {WHERE[s.bought]}", *held])
     else:
         mats = "; materials: " + ", ".join(held) if held else ""  # a recipe with no reagents says none
-    return f"- **{s.name}** ({what}): {s.favor} of your {favor_owned} Favor{mats}."
+    return f"- **{s.name}** ({what}): {s.favor} of your {favor_owned} Favor{' left' if left else ''}{mats}."
 
 
-def lines(found: list[Suggestion], gd, favor_owned: int, heading: str = HEADING, limit: int | None = None) -> list[str]:
+def lines(found: list[Suggestion], gd, favor_owned: int, heading: str = HEADING, limit: int | None = None,
+          left: bool = False) -> list[str]:
     """The "You could also make" block for the suggestions `found` (suggest): the guide's section after the route, with
     at most `limit` items, then at most `limit` enchants, each kind cut with "and N more."; the report's, inside
-    "Merchant's Favor", under a bold heading and complete (limit None). [] when there is nothing to suggest."""
+    "Merchant's Favor", under a bold heading and complete (limit None). [] when there is nothing to suggest.
+    left: favor_owned is what is left after the route's own Favor goal: each row says "<price> of your <left> Favor
+    left"."""
     if not found:
         return []
     out = [heading, "", INTRO, ""]
@@ -141,7 +147,7 @@ def lines(found: list[Suggestion], gd, favor_owned: int, heading: str = HEADING,
         shown = kind if limit is None else kind[:limit]
         if out[-1] != "":
             out.append("")
-        out += [_row(s, gd, favor_owned) for s in shown]
+        out += [_row(s, gd, favor_owned, left) for s in shown]
         if len(kind) > len(shown):
             out += ["", f"and {len(kind) - len(shown)} more.", ""]
     return out if out[-1] == "" else [*out, ""]

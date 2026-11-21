@@ -51,8 +51,10 @@ Write it for that.
 
 ## Crafted items
 
-- Green crafts are not sold when the player (or another of their characters) can disenchant:
-  mark them for disenchanting and leave their value out of "leftovers sell for".
+- Green crafts the route's Enchanting can disenchant are held for disenchanting or sold to a vendor,
+  whichever is worth more (held too while disenchanting still gives Enchanting skill); with no
+  Enchanting planned, `keep_greens` keeps them for another character's ([setup.md](setup.md), "Green
+  crafts"). A green held or kept is marked for disenchanting and left out of what the crafts sell for.
 - Whites are vendored or parked in the mail (send and return) until there's time to sell.
 - A route row whose crafts go to a vendor ends `→ sell to a vendor: about <gold> back`, or
   `→ sell up to <n> on the AH (about <price> each), the rest to a vendor: about <gold> back`:
@@ -61,6 +63,8 @@ Write it for that.
   rows. A row the AH takes whole, one whose craft a vendor pays nothing for and the AH-only quest
   form (`→ sell on the AH (quest item, about <price> each)`) get no amount. For a craft the route
   only sells, its rows add up to what vendors pay back for it within about a craft each.
+- The goal recipe crafted once is the player's: it is no leftover, and neither its row nor `Back from a
+  vendor`, the guide's Money, the report's Totals or the least-gold measure count it as sold.
 - The comparison table gives `Gold out of pocket`, `Back from a vendor`, `Total value` (vendor sales
   only) and `AH sales on top` (`—` when there are none), and ends with `Least gold is the gold out of
   pocket less what vendors pay back for the crafts. AH sales of crafts are not counted in choosing a
@@ -155,8 +159,9 @@ Write it for that.
   way to reach the target without it`, and a full stop. As with vendor trips, which keep their own
   three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip for the
   goal recipe always says there is no other way, and a Favor trip, always a target's, gets no clause.
-  A trip whose route-without costs at most 0.5c more (or less), reaches the same skills and
-  makes fewer trainer visits and pattern trips is left out of the route (trainer visits: rank
+  A trip whose route-without costs at most 0.5c more (or less), reaches the same skills, still crafts
+  the goal recipe (a trip for the recipe of a tool or reagent the goal needs stays) and makes fewer
+  trainer visits and pattern trips is left out of the route (trainer visits: rank
   trainings, trips back and capital stops; pattern trips: vendor and Favor trips). The route is
   planned again without it, at most three rounds, the recipes left out adding up, never the goal
   recipe, and under a budget only when its gold ("Budget") still fits; the trips left out cost
@@ -293,7 +298,8 @@ it when nothing fits, or for Horde (no Favor recipes yet):
   `Merchant's Favor recipes to craft once for yourself, if you don't have the item yet. They are not part of the route, its shopping list or its gold.`
 - A row per recipe: `- **<name>** (<Profession> <skill>, for level <level>): <favor> of your <Favor> Favor; materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`
   `<skill>` is the recipe's Favor skill, `<level>` the crafted item's required level, `<gold>` what the
-  materials not held cost at today's prices. An enchant crafts no item: `(<Profession> <skill>)`;
+  materials not held cost at today's prices. When the route spends Favor on its own goal, only what the
+  Favor left pays for is listed, and each row reads `<favor> of your <left> Favor left`. An enchant crafts no item: `(<Profession> <skill>)`;
   an item with no level requirement reads `(<Profession> <skill>, any level)`. What is bought is
   `on the AH`, `from a vendor` or `on the AH and from a vendor`; the bank part lists each item
   (`2 Dream Dust and 1 Star Wood from your bank`), the mail part names each sender as on the
@@ -317,7 +323,10 @@ and the report in its verdict, what the gold reaches, in one paragraph:
 - `<budget> takes <Profession> to <stop> (<gold>).`, the professions that advance joined with "and";
   `<gold>` is the cut route's "Gold to bring". With `pay = "as_you_go"` it is the gold enough up front
   selling crafts as you go ([setup.md](setup.md)), and the line reads `<budget> takes <Profession> to
-  <stop> (<gold>, selling crafts to a vendor as you go).` When no profession advances but one would
+  <stop> (<gold>, selling crafts to a vendor as you go).` When the route has a trip with a bring list
+  (a remote trainer's), that line ends `; a trip's bring list is bought before the trip and can need
+  more.` instead of the full stop (after `; the route stops there: <why>` when both are said). When no
+  profession advances but one would
   with more gold: `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route section
   (guide and report) says `Nothing to craft within this budget.`, and the report's verdict gives only
   the budget paragraph, with no "Ready to level". When nothing advances because every target is
@@ -340,11 +349,16 @@ and the report in its verdict, what the gold reaches, in one paragraph:
   already meets its <recipe skill>.` (in a line with two goals, that goal's part reads `one <recipe>` and the
   `; your ... already meets its ...` clause comes after the gold). When the goal's route can't craft it for a
   reason gold doesn't change (too little Favor, a tool, materials), the goal stop's line ends `; the route stops
-  there: <why>.` A skill target next to it: `<Profession> is not planned with this budget: it goes to the <Profession> goal.`
-  Another of your characters who can make an item the route buys on the AH for less, by the craft margin:
-  `Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; the gold to
-  bring doesn't count that.` (after the budget lines). With a recipe target the plan command prints these
-  lines after the comparison too (once, or after `Least gold:` and `Least total value:` when the routes
-  differ).
+  there: <why>.`: the next stop's line when the goal is the next stop, the `takes` line when the cut takes the
+  goal stop. When the character already has the recipe's skill: `<budget> doesn't cover one <recipe>; your
+  <Profession> <skill> already meets its <recipe skill>; the route stops there: <why>.` When the goal is two or
+  more stops above the cut, after the next stop's line: `The route stops at <Profession> <skill>: <why>.`
+  A skill target next to it: `<Profession> is not planned with this budget: it goes to the <Profession>
+  goal.` Another of your characters who can make an item the route buys on the AH for less, by the craft
+  margin: `Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; the
+  gold to bring doesn't count that.` (after the budget lines).
+- The plan command prints the budget lines after the comparison too, for every budget (once, or after
+  `Least gold:` and `Least total value:` when the routes differ), so a budget below the first stop says so
+  there and not only in the files.
 - Two professions one at a time: the intro says `Level one profession at a time: <first> first, then <second>.`
   instead of "Level both professions side by side".

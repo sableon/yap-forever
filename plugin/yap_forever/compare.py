@@ -4,7 +4,7 @@ import math
 from yap_forever.costmodel import Valuer
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import gold
-from yap_forever.planner import measure
+from yap_forever.planner import does_what_was_asked, measure
 from yap_forever.trips import trips
 
 ROUTE_NAMES = {"gold": "Least gold", "value": "Least total value"}
@@ -42,19 +42,20 @@ def _thin(plan, gd, market, sales) -> str:
     return "; ".join(names) or "none"
 
 
-def reaches(plan, caps: dict) -> bool:
-    return all(plan.final_skill.get(x, 0) >= c for x, c in caps.items())
-
-
-def settle_routes(candidates: list, caps: dict) -> tuple[dict, bool]:
-    """Among candidate routes that reach every target (or, if none does, those that get furthest):
+def settle_routes(candidates: list, caps: dict, once: dict | None = None) -> tuple[dict, bool]:
+    """Among candidate routes that do what was asked (planner.does_what_was_asked: every target reached and every goal
+    recipe in `once` crafted), else those that reach every target, else those that get furthest (then craft the most
+    goal recipes):
     least gold is the lowest gold out of pocket less what vendors pay back for the crafts, least total value the
     lowest total value (crafts sold at their vendor price: AH resale never chooses), by planner.measure. The
     planner chooses one skill point at a time, so no single mode is sure to win its own measure."""
-    pool = [p for p in candidates if reaches(p, caps)]
+    pool = ([p for p in candidates if does_what_was_asked(p, caps, once)]
+            or [p for p in candidates if does_what_was_asked(p, caps)])
     if not pool:
-        best = max(sum(p.final_skill.values()) for p in candidates)
-        pool = [p for p in candidates if sum(p.final_skill.values()) == best]
+        def far(p):
+            return sum(p.final_skill.values()), sum(does_what_was_asked(p, {}, {x: s}) for x, s in (once or {}).items())
+        best = max(far(p) for p in candidates)
+        pool = [p for p in candidates if far(p) == best]
     cash, value = measure("gold"), measure("value")
     g = min(pool, key=lambda p: (cash(p), value(p)))
     v = min(pool, key=lambda p: (value(p), cash(p)))

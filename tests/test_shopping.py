@@ -832,6 +832,29 @@ class AsYouGoTests(unittest.TestCase):
         self.assertEqual(gold_as_you_go(p, gd, m, st), 120000)
 
 
+class HasBringListTests(unittest.TestCase):
+    """Final review, Minor 7: shopping.has_bring_list says whether the guide shows a trip with a bring list, for the
+    as-you-go budget line (budget.lines' bring)."""
+
+    def test_remote_rank_trip(self):
+        from yap_forever.shopping import has_bring_list
+        p, gd, _m, st = toy.master_route_data(cap=225)  # the Artisan rank, trained at 150, is a trip to a set town
+        self.assertTrue(has_bring_list(p, gd, st))
+        p, gd, _m, st = toy.master_route_data(cap=150)  # Journeyman and Expert are trained in the cities
+        self.assertFalse(has_bring_list(p, gd, st))
+
+    def test_trip_to_the_other_capital(self):
+        # #98: a rank trip to a capital's trainer while the guide starts in another capital has no bring list (the AH,
+        # mailbox and bank are there): the trip is on the route, the clause is not said
+        from yap_forever.shopping import has_bring_list
+        from yap_forever.trips import trips
+        p, gd, _m, st = toy.master_route_data(cap=225)
+        capitals = {(164, 225): 1537}  # the Artisan Blacksmith in Ironforge; the guide starts in Stormwind (1519)
+        self.assertEqual([t.kind for t in trips(p, gd, st.skills, capitals=capitals, home=1519)], ["rank"])
+        self.assertFalse(has_bring_list(p, gd, st, capitals=capitals, home=1519))
+        self.assertTrue(has_bring_list(p, gd, st, capitals=capitals))  # no home capital: a trip with its list
+
+
 if __name__ == "__main__":
     unittest.main()
 

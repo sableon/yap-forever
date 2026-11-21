@@ -244,13 +244,25 @@ class PublishableTests(unittest.TestCase):
                      "first craft <n> <item> (your <Profession>)",
                      "<budget> covers one <recipe> (<gold>); your <Profession> <skill> already meets its "
                      "<recipe skill>.",
-                     "the goal stop's line ends `; the route stops there: <why>.`"):
+                     "the goal stop's line ends `; the route stops there: <why>.`",
+                     # final review, Important 2, Minors 7 and 9 (tests/test_budget.py GoalCraftFailsTests,
+                     # RecipeGoalReportsTests; tests/test_cli.py test_cli_prints_budget_lines)
+                     "the `takes` line when the cut takes the goal stop",
+                     "`<budget> doesn't cover one <recipe>; your <Profession> <skill> already meets its <recipe "
+                     "skill>; the route stops there: <why>.`",
+                     "`The route stops at <Profession> <skill>: <why>.`",
+                     "that line ends `; a trip's bring list is bought before the trip and can need more.` instead of "
+                     "the full stop (after `; the route stops there: <why>` when both are said)",
+                     "The plan command prints the budget lines after the comparison too, for every budget"):
             self.assertIn(line, layout)
+        self.assertNotIn("With a recipe target the plan command prints", layout)
         for text in (setup, layout, skill):
             self.assertNotIn("not applied", text)
         for promise in ("covers that profession's goal", "is not planned with the budget", "is one stop, the craft",
                         "first craft <n> <item> (your <Profession>)",
-                        "Two recipe targets are cut like two skill targets", "not counted in \"Gold to bring\""):
+                        "Two recipe targets are cut like two skill targets", "not counted in \"Gold to bring\"",
+                        "(or why the route can't craft it, for example too little Favor, also when the skill is "
+                        "already there)", "The plan output, the guide and the report say what the budget reaches"):
             self.assertIn(promise, setup)
         self.assertIn("A budget covers a recipe goal too", step3)
         self.assertIn("the other profession's skill target isn't planned while the budget goes to the recipe goal "
@@ -352,8 +364,9 @@ class PublishableTests(unittest.TestCase):
             return " ".join((SKILL / name).read_text(encoding="utf-8").split())
         layout, setup, coverage = (read(f"references/{n}.md") for n in ("list-layout", "setup", "coverage"))
         self.assertEqual((FREE_SKIP, MAX_TRIP_ALTS), (0.5, 3))
-        for line in ("A trip whose route-without costs at most 0.5c more (or less), reaches the same skills and makes "
-                     "fewer trainer visits and pattern trips is left out of the route",
+        for line in ("A trip whose route-without costs at most 0.5c more (or less), reaches the same skills, still "
+                     "crafts the goal recipe (a trip for the recipe of a tool or reagent the goal needs stays) and "
+                     "makes fewer trainer visits and pattern trips is left out of the route",
                      "at most three rounds, the recipes left out adding up",
                      "the trips left out cost at most 0.5c more together, against the route as first planned",
                      "each skip is also within 0.5c of the route it starts from",
@@ -389,12 +402,17 @@ class PublishableTests(unittest.TestCase):
                      "suggested",
                      "the bank first, then by mail from the group's other characters, and the rest is bought at "
                      "today's AH or vendor price",
-                     "A reagent with no price that nobody holds rules the recipe out."):
+                     "A reagent with no price that nobody holds rules the recipe out.",
+                     # final review, Important 3 (tests/test_cli.py CouldAlsoMakeWiringTests)
+                     "and its Favor the price (the Favor left after the route's own Favor goal, when the route has "
+                     "one)."):
             self.assertIn(line, rules)
         self.assertEqual(fs.HEADING, "## You could also make")
         for line in (f"`{fs.HEADING}`", f"`{fs.INTRO}`", "`**You could also make**`",
                      "`- **<name>** (<Profession> <skill>, for level <level>): <favor> of your <Favor> Favor; "
                      "materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`",
+                     "When the route spends Favor on its own goal, only what the Favor left pays for is listed, and "
+                     "each row reads `<favor> of your <left> Favor left`.",
                      "`(<Profession> <skill>)`", "`(<Profession> <skill>, any level)`", f"`{fs.NO_LEVEL_NOTE}`",
                      "a recipe with no reagents ends after `Favor`", "`from a vendor`", "`on the AH and from a vendor`",
                      "`materials: <n> <item> from your bank`",
@@ -569,10 +587,32 @@ class PublishableTests(unittest.TestCase):
                      "`AH sales on top: <gold> (not counted).`",
                      "(left out in choosing this route, to fit the budget)"):
             self.assertIn(line, layout)
+        # final review, Important 4: SKILL.md explains least gold the 0.2.2 way
+        skill = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
+        step5 = skill[skill.index("5. **Run the planner"):]
+        self.assertIn("**least gold** counts what the player owns as free and is the route with the least net gold, the "
+                      "gold out of pocket less what vendors pay back for its crafts (counted in choosing the route), so "
+                      "its \"Gold out of pocket\" and \"Gold to bring\" can be higher than the other route's (the line "
+                      "under \"Gold to bring\" says what selling crafts as you go needs up front)", step5)
         self.assertIn("each stop takes the route planned with what vendors pay back when its gold fits, else the route "
                       "planned without it when that one fits and gets each profession as far; the stop is reached when "
                       "either fits.", setup)
 
+
+    def test_docs_final_review_wording(self):
+        """Final review, Minors 10 and 11: list-layout.md's greens bullet follows the rule (held or vendored, whichever
+        is worth more: planner._Route._should_hold), and coverage.md's budget bullet names a recipe goal and `pay`."""
+        def read(name):
+            return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
+        layout, coverage = read("list-layout.md"), read("coverage.md")
+        self.assertIn("Green crafts the route's Enchanting can disenchant are held for disenchanting or sold to a "
+                      "vendor, whichever is worth more", layout)
+        self.assertNotIn("Green crafts are not sold when", layout)
+        bullet = coverage[coverage.index("- A budget as a goal"):coverage.index("Not yet")]
+        for clause in ("a recipe target under a budget too, whose last stop is the recipe crafted once",
+                       "`pay` says whether the budget is the gold to buy everything up front or the gold enough "
+                       "selling crafts to a vendor as you go"):
+            self.assertIn(clause, bullet)
 
     def test_docs_promise_two_ways_to_pay(self):
         """#97 part 3: game-rules.md says what "Gold to bring" is and that selling crafts as you go needs less up front;
@@ -604,6 +644,9 @@ class PublishableTests(unittest.TestCase):
                      "the chosen `--pay`."):
             self.assertIn(rule, step3)
         self.assertNotIn("after a first plan with that budget", step3)
+        # final review, Minor 8: a saved budget's pay was asked when it was saved
+        self.assertIn("A budget saved under `[goals]` had its `pay` asked when it was saved: don't ask it again, and "
+                      "don't plan without the budget to read Z. With a new budget, first plan", step3)
         self.assertIn("`<budget> takes <Profession> to <stop> (<gold>, selling crafts to a vendor as you go).`", layout)
         self.assertIn("A remote trip's bring list buys its stretch before the trip", layout)
         self.assertIn("[--pay upfront|as_you_go]", skill)

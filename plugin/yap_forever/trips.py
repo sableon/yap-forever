@@ -15,7 +15,7 @@ import dataclasses
 from dataclasses import dataclass, field
 
 from yap_forever.gamedata import PROFESSIONS
-from yap_forever.planner import measure
+from yap_forever.planner import does_what_was_asked, measure
 from yap_forever.profile import CAPITAL_NAMES
 from yap_forever.trainers import RANK_BY_CAP
 
@@ -384,7 +384,7 @@ def alternatives(base, inputs, mode, cache: dict | None = None, trainer_trips: s
         if k not in cache:
             cache[k] = plan_route(inputs, mode, exclude=left, vendor_credit=credit)
         alt = cache[k]
-        reached = all(alt.final_skill.get(p, 0) >= base.final_skill.get(p, 0) for p in inputs.caps)
+        reached = does_what_was_asked(alt, inputs.caps, inputs.craft_once, than=base)  # as far, its goal crafted
         out.append((t, alt, cost(alt) - cost(base)) if reached else (t, None, None))
     return out
 

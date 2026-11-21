@@ -27,6 +27,10 @@ git worktree add ../yap-prev <previous tag>
 - **Must happen:** the new `plan` runs with no step by hand, downloads the new game data once and
   removes the old copy, and ends with no traceback. Its guide and report match the previous tag's,
   unless a pull request since then says what changes.
+- Also plan a character whose `stock.toml` saves a `[goals]` budget next to a recipe target (and a
+  skill target for the other profession), with no flags, on both versions: the saved setup whose
+  behaviour 0.2.2 changes. 0.2.1 said the budget was not applied and planned both targets in full;
+  0.2.2 covers the recipe goal with the budget and says the other profession is not planned.
 - Every "Outside the repo" section in the pull requests since the previous tag is checked here too:
   for the price command on a server, the folder it runs in still holds the package.
 - Afterwards: `git worktree remove ../yap-prev` and `rm -rf "$YAP_FOREVER_HOME"`.

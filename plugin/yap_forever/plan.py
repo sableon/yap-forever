@@ -6,18 +6,18 @@ from pathlib import Path
 
 from yap_forever import budget as budget_cut
 from yap_forever import favor_suggest, gamedata, trainer_text
-from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
+from yap_forever.compare import ROUTE_NAMES, compare, settle_routes
 from yap_forever.config import Stock, load_stock
 from yap_forever.costmodel import Valuer
 from yap_forever.favor import FavorData, load_favor, no_favor
 from yap_forever.guide import alt_suggestions, free_skip_line, gold, render_guide
-from yap_forever.planner import DISENCHANT, measure, plan, resolve_goals
+from yap_forever.planner import DISENCHANT, does_what_was_asked, measure, plan, resolve_goals
 from yap_forever.prices import Market
 from yap_forever.profile import CAPITAL_NAMES, report_name
 from yap_forever.quests import QuestPlan, load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
-from yap_forever.shopping import render_shopping
+from yap_forever.shopping import has_bring_list, render_shopping
 from yap_forever.trips import (AS_NEEDED, FREE_SKIP, MAX_TRIP_ALTS, Trip, alternatives, route_capitals,
                                trip_alternatives, visit_count)
 
@@ -102,7 +102,7 @@ def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full, vendor_credit=T
 def plan_route(inputs: PlanInputs, mode, exclude=frozenset(), one_time_in_full=False, vendor_credit=True):
     """The best reuse round of one mode, by that mode's own measure. vendor_credit: see planner.plan."""
     rounds = _rounds(inputs, mode, exclude, one_time_in_full, vendor_credit)
-    routes, _ = settle_routes(rounds, inputs.caps)
+    routes, _ = settle_routes(rounds, inputs.caps, inputs.craft_once)
     return routes[mode]
 
 
@@ -124,7 +124,7 @@ def listed_savings(inputs: PlanInputs, routes) -> dict[str, float]:
     inputs.gd: the game data the routes were planned on (see gamedata.safe_requirements); routes: their
     settled routes. The listed routes are settled the same way, from the same candidates, planned with the same
     vendor credit as the route (Plan.vendor_credit)."""
-    gd, caps = inputs.gd, inputs.caps
+    gd, caps, once = inputs.gd, inputs.caps, inputs.craft_once
     if not any(r.listed_skill is not None for r in gd.recipes.values()):
         return {}
     at_listing = dataclasses.replace(inputs, gd=gamedata.listed_requirements(gd))
@@ -133,11 +133,12 @@ def listed_savings(inputs: PlanInputs, routes) -> dict[str, float]:
     for mode, safe in routes.items():
         credit = safe.vendor_credit
         if credit not in settled:
-            settled[credit] = settle_routes(candidates(at_listing, vendor_credit=credit), caps)[0]
+            settled[credit] = settle_routes(candidates(at_listing, vendor_credit=credit), caps, once)[0]
         listed = settled[credit]
         cost = measure(mode)
         saving = cost(safe) - cost(listed[mode])
-        if saving >= MIN_SAVING and (reaches(listed[mode], caps) or not reaches(safe, caps)):
+        if saving >= MIN_SAVING and (does_what_was_asked(listed[mode], caps, once)
+                                     or not does_what_was_asked(safe, caps, once)):
             out[mode] = saving
     return out
 
@@ -152,7 +153,8 @@ def take_free_skips(route, inputs: PlanInputs, mode, cache: dict, trainer_trips:
     - costs at most FREE_SKIP more (or less) than the round's route and than `route` as given (the route as first
       settled, so the rounds together stay within FREE_SKIP), in the route's measure and in that of each mode in
       `also` (the other mode of a route the gold and value guides share);
-    - reaches every profession's final skill;
+    - reaches every profession's final skill and crafts each goal recipe the round's route crafts
+      (trips.alternatives, planner.does_what_was_asked);
     - makes fewer trainer visits and pattern trips than the round's route (trips.visit_count);
     - and, when fits is given (a budget: its gold to bring within the budget), fits.
     The cheapest such route is taken (on a tie the first in trip_alternatives' order: pattern trips, then recipe
@@ -255,7 +257,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     inputs = PlanInputs(gd=gd, market=market, stock=stock, favor=favor, caps=caps, craft_once=once,
                         quests=quests, overtime=overtime, reading=reading, order=target.order if target else None,
                         fixed=fixed)
-    routes, same = settle_routes(candidates(inputs), caps)
+    routes, same = settle_routes(candidates(inputs), caps, once)
     per_mode = {m: inputs for m in routes}  # each route's own targets: a budget cuts each at its own stops
     cuts: dict[str, budget_cut.BudgetCut] = {}
 
@@ -284,12 +286,16 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         routes[m] = route
     same = routes["gold"] is routes["value"]
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
-    # Favor recipes to craft once, apart from the route: the group's gold before the route, and the group's mail
+    # Favor recipes to craft once, apart from the route: the group's gold before the route, the group's mail, and the
+    # Favor left after the route's own Favor goal (the most a route spends)
+    spent = max(r.favor_spent for r in routes.values())
+    favor_left = max(0, stock.favor - spent)
     found = favor_suggest.suggest(gd, favor, stock, Valuer(market, gd, stock),
                                   budget.copper if budget is not None else stock.cash,
-                                  stock.shared, set(once.values()))
-    could_guide = favor_suggest.lines(found, gd, stock.favor, limit=favor_suggest.GUIDE_LIMIT)  # the report: all
-    could_report = favor_suggest.lines(found, gd, stock.favor, heading="**You could also make**")
+                                  stock.shared, set(once.values()), favor_left)
+    could_guide = favor_suggest.lines(found, gd, favor_left, limit=favor_suggest.GUIDE_LIMIT,  # the report: all
+                                      left=spent > 0)
+    could_report = favor_suggest.lines(found, gd, favor_left, heading="**You could also make**", left=spent > 0)
     level_note = [favor_suggest.NO_LEVEL_NOTE] if favor.recipes and not stock.level_set else []
     if cuts:  # once per set of caps the cuts landed on
         savings = {}
@@ -319,7 +325,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         skips = [free_skip_line(t, gd, trainer_info, homes[m]) for t in left]
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
-        said = ([*budget_cut.lines(cuts[m], target), *aside,
+        bring = has_bring_list(route, gd, stock, trainer_trips, capitals, homes[m]) if m in cuts else False
+        said = ([*budget_cut.lines(cuts[m], target, bring), *aside,
                   *(alt_suggestions(route, gd, market, stock, mates, known) if mates else ())] if m in cuts else [])
         said_of[m] = said
         empty = m in cuts and cuts[m].below_first_stop
@@ -341,8 +348,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                                     *level_note]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
-    if once and cuts and (told := _said_once(said_of)):  # #96: the plan command prints what the budget covers, after
-        table += "\n\n" + told  # the guides have the table
+    if cuts and (told := _said_once(said_of)):  # the plan command prints what the budget reaches or covers (#96),
+        table += "\n\n" + told  # after the guides have the table
     return table, files
 
 

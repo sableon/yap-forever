@@ -759,6 +759,38 @@ class AhPremiumPlanTests(unittest.TestCase):
         self.assertIsNone(Valuer(m, gd, st).ah_price(toy.BELT))
 
 
+class GoalNotSoldTests(unittest.TestCase):
+    """Final review, Minor 6: the craft-once goal's output is the player's: no leftover, never counted as sold to a
+    vendor (vendor_back, so the net gold and the table's "Back from a vendor") or on the AH."""
+
+    def plan(self, levelling_output):
+        gd = toy.gamedata([toy.recipe(1, "BS level", BS, {toy.COPPER_BAR: 1}, (levelling_output, 1)),
+                           toy.recipe(5, "BS goal", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1), req=20)])
+        st = toy.stock()
+        return plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 20}, craft_once={BS: 5})
+
+    def test_documented(self):
+        from tests.test_publishable import SKILL
+        layout = " ".join((SKILL / "references" / "list-layout.md").read_text(encoding="utf-8").split())
+        self.assertIn("The goal recipe crafted once is the player's: it is no leftover, and neither its row nor `Back "
+                      "from a vendor`, the guide's Money, the report's Totals or the least-gold measure count it as "
+                      "sold.", layout)
+
+    def test_goal_output_is_not_sold(self):
+        p = self.plan(toy.STONE)
+        self.assertTrue(any(s.spell_id == 5 for s in p.steps))
+        self.assertNotIn(toy.BELT, p.leftovers)
+        stones = p.leftovers[toy.STONE]
+        self.assertAlmostEqual(p.vendor_back, stones * 2)  # the levelling crafts only (Rough Sharpening Stone, 2c)
+        self.assertAlmostEqual(p.net_gold, p.cash_total - stones * 2)
+
+    def test_the_same_item_made_to_level_is_still_sold(self):
+        p = self.plan(toy.BELT)  # the levelling craft makes the goal's item too: only the goal's one is kept
+        levelled = sum(s.crafts for s in p.steps if s.spell_id == 1)
+        self.assertAlmostEqual(p.leftovers[toy.BELT], levelled)
+        self.assertAlmostEqual(p.vendor_back, levelled * 100)  # Runed Copper Belt, 1s
+
+
 class VendorCashbackTests(unittest.TestCase):
     """#97: a craft's vendor price counts in choosing the route. Each output unit is credited once: reused, else kept
     (held for this route's disenchanting, or a keep_greens green), else sold at its vendor price; the vendor credit

@@ -532,9 +532,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(out.count(line), 1, out)
         self.assertNotIn("Enchanting gets none of it", out)
         code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20",
-                         "--prof", "enchanting:20"], self.paths)  # skill targets only: the comparison as before
+                         "--prof", "enchanting:20"], self.paths)  # skill targets: the budget lines too (Minor 9)
         self.assertEqual(code, 0, out)
-        self.assertNotIn("12.5g", out)
+        line = "12.5g takes Blacksmithing to 20 (4s). Enchanting gets none of it: no usable recipe at 1."
+        self.assertEqual(out.count(line), 1, out)
+        self.assertLess(out.index("both guides are the same route."), out.index(line))
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20", "--budget", "0"],
+                        self.paths)  # below the first stop: stdout is no longer a bare table of zeros
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.count("0g doesn't reach the first stop: nothing is planned yet. The next stop, "
+                                   "Blacksmithing 20, costs about "), 1, out)
         stock.write_text("level = 20\n[items]\n", encoding="utf-8")
         code, out = run(me, self.paths)  # no budget, nothing to say
         self.assertEqual(code, 0, out)
@@ -705,8 +712,8 @@ class FreeSkipReportTests(unittest.TestCase):
                               encoding="utf-8")
         real = plan_mod.settle_routes
 
-        def apart(candidates, caps):  # the value route its own plan, so only the gold measure decides
-            routes, _same = real(candidates, caps)
+        def apart(candidates, caps, once=None):  # the value route its own plan, so only the gold measure decides
+            routes, _same = real(candidates, caps, once)
             return {"gold": routes["gold"], "value": dataclasses.replace(routes["value"])}, False
         with mock.patch.object(plan_mod, "settle_routes", side_effect=apart):
             _table, free = self.reports()
@@ -821,6 +828,33 @@ class CouldAlsoMakeWiringTests(unittest.TestCase):
         texts = self.reports(goal=Goal(recipe="Plate of Ana"))
         self.assertNotIn("You could also make", texts["guide-gold"])
         self.assertIn("Spent 30 of 40 Favor.", texts["plan-gold"])
+
+    def test_favor_left_after_the_goal(self):
+        # final review, Important 3: the goal "Plate of Ana" spends 30 Favor; "Helm of Ana" (20 Favor) is offered
+        # against what is left: not with 40 Favor (10 left), with 60 (30 left, said so); without the goal as before
+        from yap_forever.config import Goal
+        from yap_forever.favor import FavorData
+        from yap_forever.gamedata import ItemInfo
+        from tests import toy
+        self.gd.recipes[8] = toy.recipe(8, "Helm of Ana", 164, {toy.IRON_BAR: 1}, (9002, 1), source="scroll",
+                                        scroll=toy.SCROLL)
+        self.gd.items[9002] = ItemInfo(9002, "Helm of Ana", 2, 25, 4, 100, 400, bonding=2, required_level=20)
+        favor = FavorData({7: 30, 8: 20}, {7: 25, 8: 25}, [])
+        helm = "- **Helm of Ana** (Blacksmithing 25, for level 20): 20 of your {} Favor{}; materials"
+        for owned, goal, row in ((40, None, helm.format(40, "")), (40, Goal(recipe="Plate of Ana"), None),
+                                 (60, Goal(recipe="Plate of Ana"), helm.format(30, " left"))):
+            with self.subTest(owned=owned, goal=goal):
+                self.stock.write_text(f"level = 22\nfavor = {owned}\ncash_gold = 5\n[skills]\nblacksmithing = 30\n"
+                                      "[items]\n", encoding="utf-8")
+                texts = self.reports(goal=goal, favor=favor)
+                for m in ("gold", "value"):
+                    for text in (texts[f"guide-{m}"], texts[f"plan-{m}"]):
+                        if row is None:
+                            self.assertNotIn("Helm of Ana", text)
+                        else:
+                            self.assertIn(row, text)
+                if goal is not None:
+                    self.assertIn(f"Spent 30 of {owned} Favor.", texts["plan-gold"])
 
     def test_level_not_set_says_so(self):
         # a stock file without `level`: no item is suggested, and the guide's notes and the report's data notes say why

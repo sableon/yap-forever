@@ -37,7 +37,10 @@ says what is there.
 - Two price fallbacks when the API can't be reached: `prices --remote` and
   `prices --auctionator PATH` ([setup.md](setup.md), step 5).
 - A budget as a goal: the route ends at the last stop (rank cap or target) the gold reaches, two
-  professions shared evenly or one at a time, with what the next stop costs on top
+  professions shared evenly or one at a time, with what the next stop costs on top; a recipe target
+  under a budget too, whose last stop is the recipe crafted once (a skill target next to it is not
+  planned); and `pay` says whether the budget is the gold to buy everything up front or the gold
+  enough selling crafts to a vendor as you go
   ([setup.md](setup.md), "A budget as a goal"; [list-layout.md](list-layout.md), "Budget").
 
 Not yet: gathering while levelling, keep-or-sell advice, gear. Say so when asked,

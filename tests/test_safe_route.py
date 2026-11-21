@@ -417,8 +417,8 @@ class WriteReportsTests(unittest.TestCase):
         from yap_forever import compare, plan as plan_mod
         real = compare.settle_routes
 
-        def same(candidates, caps):
-            routes, _same = real(candidates, caps)
+        def same(candidates, caps, once=None):
+            routes, _same = real(candidates, caps, once)
             return {"gold": routes["gold"], "value": routes["gold"]}, True
         with mock.patch.object(plan_mod, "settle_routes", side_effect=same), \
                 mock.patch.object(plan_mod, "trip_alternatives", wraps=plan_mod.trip_alternatives) as alts:
