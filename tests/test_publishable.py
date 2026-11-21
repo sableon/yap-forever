@@ -402,12 +402,17 @@ class PublishableTests(unittest.TestCase):
                      "suggested",
                      "the bank first, then by mail from the group's other characters, and the rest is bought at "
                      "today's AH or vendor price",
-                     "A reagent with no price that nobody holds rules the recipe out."):
+                     "A reagent with no price that nobody holds rules the recipe out.",
+                     # final review, Important 3 (tests/test_cli.py CouldAlsoMakeWiringTests)
+                     "and its Favor the price (the Favor left after the route's own Favor goal, when the route has "
+                     "one)."):
             self.assertIn(line, rules)
         self.assertEqual(fs.HEADING, "## You could also make")
         for line in (f"`{fs.HEADING}`", f"`{fs.INTRO}`", "`**You could also make**`",
                      "`- **<name>** (<Profession> <skill>, for level <level>): <favor> of your <Favor> Favor; "
                      "materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`",
+                     "When the route spends Favor on its own goal, only what the Favor left pays for is listed, and "
+                     "each row reads `<favor> of your <left> Favor left`.",
                      "`(<Profession> <skill>)`", "`(<Profession> <skill>, any level)`", f"`{fs.NO_LEVEL_NOTE}`",
                      "a recipe with no reagents ends after `Favor`", "`from a vendor`", "`on the AH and from a vendor`",
                      "`materials: <n> <item> from your bank`",

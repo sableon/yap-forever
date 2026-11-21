@@ -296,7 +296,8 @@ it when nothing fits, or for Horde (no Favor recipes yet):
   `Merchant's Favor recipes to craft once for yourself, if you don't have the item yet. They are not part of the route, its shopping list or its gold.`
 - A row per recipe: `- **<name>** (<Profession> <skill>, for level <level>): <favor> of your <Favor> Favor; materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`
   `<skill>` is the recipe's Favor skill, `<level>` the crafted item's required level, `<gold>` what the
-  materials not held cost at today's prices. An enchant crafts no item: `(<Profession> <skill>)`;
+  materials not held cost at today's prices. When the route spends Favor on its own goal, only what the
+  Favor left pays for is listed, and each row reads `<favor> of your <left> Favor left`. An enchant crafts no item: `(<Profession> <skill>)`;
   an item with no level requirement reads `(<Profession> <skill>, any level)`. What is bought is
   `on the AH`, `from a vendor` or `on the AH and from a vendor`; the bank part lists each item
   (`2 Dream Dust and 1 Star Wood from your bank`), the mail part names each sender as on the

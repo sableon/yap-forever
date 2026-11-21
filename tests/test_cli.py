@@ -829,6 +829,33 @@ class CouldAlsoMakeWiringTests(unittest.TestCase):
         self.assertNotIn("You could also make", texts["guide-gold"])
         self.assertIn("Spent 30 of 40 Favor.", texts["plan-gold"])
 
+    def test_favor_left_after_the_goal(self):
+        # final review, Important 3: the goal "Plate of Ana" spends 30 Favor; "Helm of Ana" (20 Favor) is offered
+        # against what is left: not with 40 Favor (10 left), with 60 (30 left, said so); without the goal as before
+        from yap_forever.config import Goal
+        from yap_forever.favor import FavorData
+        from yap_forever.gamedata import ItemInfo
+        from tests import toy
+        self.gd.recipes[8] = toy.recipe(8, "Helm of Ana", 164, {toy.IRON_BAR: 1}, (9002, 1), source="scroll",
+                                        scroll=toy.SCROLL)
+        self.gd.items[9002] = ItemInfo(9002, "Helm of Ana", 2, 25, 4, 100, 400, bonding=2, required_level=20)
+        favor = FavorData({7: 30, 8: 20}, {7: 25, 8: 25}, [])
+        helm = "- **Helm of Ana** (Blacksmithing 25, for level 20): 20 of your {} Favor{}; materials"
+        for owned, goal, row in ((40, None, helm.format(40, "")), (40, Goal(recipe="Plate of Ana"), None),
+                                 (60, Goal(recipe="Plate of Ana"), helm.format(30, " left"))):
+            with self.subTest(owned=owned, goal=goal):
+                self.stock.write_text(f"level = 22\nfavor = {owned}\ncash_gold = 5\n[skills]\nblacksmithing = 30\n"
+                                      "[items]\n", encoding="utf-8")
+                texts = self.reports(goal=goal, favor=favor)
+                for m in ("gold", "value"):
+                    for text in (texts[f"guide-{m}"], texts[f"plan-{m}"]):
+                        if row is None:
+                            self.assertNotIn("Helm of Ana", text)
+                        else:
+                            self.assertIn(row, text)
+                if goal is not None:
+                    self.assertIn(f"Spent 30 of {owned} Favor.", texts["plan-gold"])
+
     def test_level_not_set_says_so(self):
         # a stock file without `level`: no item is suggested, and the guide's notes and the report's data notes say why
         line = "- Set level in stock.toml to get Merchant's Favor item suggestions."

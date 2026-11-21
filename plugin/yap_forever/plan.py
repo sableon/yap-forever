@@ -286,12 +286,16 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         routes[m] = route
     same = routes["gold"] is routes["value"]
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
-    # Favor recipes to craft once, apart from the route: the group's gold before the route, and the group's mail
+    # Favor recipes to craft once, apart from the route: the group's gold before the route, the group's mail, and the
+    # Favor left after the route's own Favor goal (the most a route spends)
+    spent = max(r.favor_spent for r in routes.values())
+    favor_left = max(0, stock.favor - spent)
     found = favor_suggest.suggest(gd, favor, stock, Valuer(market, gd, stock),
                                   budget.copper if budget is not None else stock.cash,
-                                  stock.shared, set(once.values()))
-    could_guide = favor_suggest.lines(found, gd, stock.favor, limit=favor_suggest.GUIDE_LIMIT)  # the report: all
-    could_report = favor_suggest.lines(found, gd, stock.favor, heading="**You could also make**")
+                                  stock.shared, set(once.values()), favor_left)
+    could_guide = favor_suggest.lines(found, gd, favor_left, limit=favor_suggest.GUIDE_LIMIT,  # the report: all
+                                      left=spent > 0)
+    could_report = favor_suggest.lines(found, gd, favor_left, heading="**You could also make**", left=spent > 0)
     level_note = [favor_suggest.NO_LEVEL_NOTE] if favor.recipes and not stock.level_set else []
     if cuts:  # once per set of caps the cuts landed on
         savings = {}
