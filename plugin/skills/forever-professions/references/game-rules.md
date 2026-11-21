@@ -102,8 +102,8 @@ say so.
 - What a route sells are its leftover crafts: the ones no later step uses and none kept for
   disenchanting. AH resale of crafts never chooses the route: it shows in the totals ("AH sales on
   top" in the comparison and the report, "Back from selling crafts" in the guide) and in the
-  sell-or-keep choice for greens. A craft's vendor price counts in choosing the route; AH resale of
-  crafts never does.
+  sell-or-keep choice for greens.
+- A craft's vendor price counts in choosing the route; AH resale of crafts never does.
 - A craft counts as sold on the AH only when the AH pays, after its 5% cut (the lowest listing less
   the cut), at least 2× its vendor price and 1s more; otherwise it goes to a vendor, or, with
   Enchanting planned, a green may be kept for disenchanting. A craft without a vendor price needs

@@ -6,7 +6,7 @@ import tomllib
 from dataclasses import dataclass
 
 from yap_forever.config import STATIC_DIR
-from yap_forever.costmodel import BARS, ORES, STONES, Valuer, money
+from yap_forever.costmodel import BARS, ORES, STONES, Valuer, money, vendor_price
 from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, reached_lines, step_factor
 from yap_forever import trainer_text
@@ -775,8 +775,7 @@ def _vendor_back(r, recipe, gd, sales, on_ah) -> str:
         on_ah[item] = sales.sale_limit(item) if ah is not None else 0
     to_ah = min(made, on_ah[item])
     on_ah[item] -= to_ah
-    info = gd.items.get(item)
-    back = (made - to_ah) * (info.sell_price if info else 0)
+    back = (made - to_ah) * vendor_price(gd, item)  # what Plan.vendor_back counts a unit at
     return f": about {gold(back)} back" if round(back) >= 1 else ""
 
 

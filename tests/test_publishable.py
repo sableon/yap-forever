@@ -548,7 +548,8 @@ class PublishableTests(unittest.TestCase):
                      "`AH sales on top: <gold> (not counted).`"):
             self.assertIn(line, layout)
         self.assertIn("each stop takes the route planned with what vendors pay back when its gold fits, else the route "
-                      "planned without it when that one fits; the stop is reached when either fits.", setup)
+                      "planned without it when that one fits and gets each profession as far; the stop is reached when "
+                      "either fits.", setup)
 
 
 if __name__ == "__main__":
