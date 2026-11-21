@@ -678,7 +678,7 @@ class _Route:
         p.farm = bars_to_ore(self.pools.farmed)
         p.used_stock = {i: n - self.pools.stock.get(i, 0) for i, n in self.stock.items.items()
                         if n - self.pools.stock.get(i, 0) > 1e-9}
-        p.shared = {name: dict(items) for name, items in getattr(self.stock, "shared", {}).items()}
+        p.shared = {name: dict(items) for name, items in self.stock.shared.items()}
         p.used_mail = mail_used(p.shared, self.pools.mail)
         de_mats = set(p.de_materials)
         keep_greens = getattr(self.stock, "keep_greens", False) and not self.has_ench
