@@ -705,8 +705,8 @@ class FreeSkipReportTests(unittest.TestCase):
                               encoding="utf-8")
         real = plan_mod.settle_routes
 
-        def apart(candidates, caps):  # the value route its own plan, so only the gold measure decides
-            routes, _same = real(candidates, caps)
+        def apart(candidates, caps, once=None):  # the value route its own plan, so only the gold measure decides
+            routes, _same = real(candidates, caps, once)
             return {"gold": routes["gold"], "value": dataclasses.replace(routes["value"])}, False
         with mock.patch.object(plan_mod, "settle_routes", side_effect=apart):
             _table, free = self.reports()

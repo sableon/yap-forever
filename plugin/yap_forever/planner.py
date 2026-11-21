@@ -114,6 +114,25 @@ def measure(mode: str):
     return (lambda p: p.net_gold) if mode == "gold" else (lambda p: p.economic_total)
 
 
+def crafted(plan, prof: int, spell: int) -> bool:
+    """The plan crafts `spell`, the goal recipe of `prof`, once (the craft-once step): its skill is not enough, since
+    the craft itself can fail (Favor, a tool, materials)."""
+    return any(s.profession == prof and s.spell_id == spell and s.skill_from == s.skill_to for s in plan.steps)
+
+
+def does_what_was_asked(plan, caps: dict[int, int], once: dict[int, int] | None = None, than=None) -> bool:
+    """The route does what was asked: every profession in `caps` reaches its skill there and every goal recipe in
+    `once` (profession -> recipe crafted once) is crafted. With `than`, another route of the same targets: as far as
+    that one gets instead, each profession in `caps` at least at its final skill and each goal recipe it crafts
+    crafted too. Settling the routes, the skip alternatives (so free skips), a budget's fallback route and the listed
+    saving all ask it."""
+    if than is not None:
+        caps = {x: than.final_skill.get(x, 0) for x in caps}
+        once = {x: s for x, s in (once or {}).items() if crafted(than, x, s)}
+    return (all(plan.final_skill.get(x, 0) >= c for x, c in caps.items())
+            and all(crafted(plan, x, s) for x, s in (once or {}).items()))
+
+
 def resolve_goals(goals: dict, gd, favor=None, quests: dict | None = None) -> tuple[dict[int, int], dict[int, int]]:
     """Goals (config.Goal per profession) -> (target skill per profession, recipe to craft once)."""
     caps: dict[int, int] = {}

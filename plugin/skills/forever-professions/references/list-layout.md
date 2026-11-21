@@ -155,8 +155,9 @@ Write it for that.
   way to reach the target without it`, and a full stop. As with vendor trips, which keep their own
   three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip for the
   goal recipe always says there is no other way, and a Favor trip, always a target's, gets no clause.
-  A trip whose route-without costs at most 0.5c more (or less), reaches the same skills and
-  makes fewer trainer visits and pattern trips is left out of the route (trainer visits: rank
+  A trip whose route-without costs at most 0.5c more (or less), reaches the same skills, still crafts
+  the goal recipe (a trip for the recipe of a tool or reagent the goal needs stays) and makes fewer
+  trainer visits and pattern trips is left out of the route (trainer visits: rank
   trainings, trips back and capital stops; pattern trips: vendor and Favor trips). The route is
   planned again without it, at most three rounds, the recipes left out adding up, never the goal
   recipe, and under a budget only when its gold ("Budget") still fits; the trips left out cost

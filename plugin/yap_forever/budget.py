@@ -16,7 +16,7 @@ from yap_forever.compare import settle_routes
 from yap_forever.config import Budget
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import gold
-from yap_forever.planner import Plan
+from yap_forever.planner import Plan, crafted, does_what_was_asked  # crafted: BudgetCut.covered and callers
 from yap_forever.shopping import gold_as_you_go, gold_to_bring
 
 STOPS = (75, 150, 225, 300)
@@ -69,12 +69,6 @@ def key(caps: dict[int, int], once: dict[int, int] | None = None) -> tuple:
     """The cache key of a set of caps and the goal recipes crafted once there (see cut's `cache`)."""
     k = tuple(sorted(caps.items()))
     return (k, tuple(sorted(once.items()))) if once else k
-
-
-def crafted(plan: Plan, prof: int, spell: int) -> bool:
-    """The plan crafts `spell`, the goal recipe of `prof`, once (planner's craft-once step): its skill is not enough,
-    since the craft itself can fail (Favor, a tool, materials)."""
-    return any(s.profession == prof and s.spell_id == spell and s.skill_from == s.skill_to for s in plan.steps)
 
 
 def copper(budget: Budget) -> int:
@@ -152,12 +146,12 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
         k = key(caps, crafts)
         sub = dataclasses.replace(inputs, caps=dict(caps), craft_once=dict(crafts))
         if k not in cache:
-            cache[k] = (*settle_routes(candidates(sub), sub.caps), None)
+            cache[k] = (*settle_routes(candidates(sub), sub.caps, sub.craft_once), None)
         settled, same, bare = cache[k]
         if credited:
             return settled
         if bare is None:
-            bare = settle_routes(candidates(sub, vendor_credit=False), sub.caps)[0]
+            bare = settle_routes(candidates(sub, vendor_credit=False), sub.caps, sub.craft_once)[0]
             cache[k] = (settled, same, bare)
         return bare
 
@@ -262,9 +256,8 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
 
 def _as_far(p: Plan, than: Plan, caps: dict[int, int], crafts: dict[int, int] | None = None) -> bool:
     """p gets every profession in caps at least as far as `than` does, and crafts each goal recipe in `crafts` that
-    `than` crafts."""
-    return (all(p.final_skill.get(x, 0) >= than.final_skill.get(x, 0) for x in caps)
-            and all(crafted(p, x, s) or not crafted(than, x, s) for x, s in (crafts or {}).items()))
+    `than` crafts (planner.does_what_was_asked)."""
+    return does_what_was_asked(p, caps, crafts, than=than)
 
 
 def amount(budget: Budget) -> str:

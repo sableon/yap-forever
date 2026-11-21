@@ -749,5 +749,55 @@ class JoinStopTests(unittest.TestCase):
         self.assertEqual(joins(join_stops(found, p, gd, IRONFORGE, self.hosts())), [(ALCH, 91, []), (ENG, 91, [])])
 
 
+class GoalCraftSkipTests(unittest.TestCase):
+    """Final review, Important 1: a trip the goal craft depends on (here the recipe of the tool it needs, a Master
+    recipe on its own trip back) is never skipped, though the route without it reaches the same skill for less: that
+    route doesn't craft the goal (planner.does_what_was_asked)."""
+
+    def setup(self):
+        import dataclasses
+        from tests.test_budget import inputs
+        from yap_forever.gamedata import Rank
+        rs = [toy.recipe(10, "Ench level", ENCH, {toy.SHARD: 1}),
+              toy.recipe(11, "Runed rod", ENCH, {toy.COPPER_BAR: 1}, (toy.ROD_TOOL, 1), t=(1, 1, 1, 1), req=230,
+                         fee=100),
+              toy.recipe(12, "Ench goal", ENCH, {toy.SHARD: 1}, req=240, source="scroll", scroll=toy.SCROLL,
+                         tools=[373])]
+        i = inputs(rs, {ENCH: 240}, skills={ENCH: 226}, ranks={ENCH: [Rank(300, 50000, 200, 35)]})
+        i.gd.vendor_prices[toy.SCROLL] = 1000
+        return dataclasses.replace(i, craft_once={ENCH: 12})
+
+    def test_tool_recipe_trip_stays(self):
+        from yap_forever.guide import _skip
+        from yap_forever.plan import plan_route, take_free_skips
+        from yap_forever.planner import crafted
+        from yap_forever.trips import trip_alternatives
+        i = self.setup()
+        base = plan_route(i, "gold")
+        self.assertTrue(crafted(base, ENCH, 12))
+        self.assertEqual(recipe_trips(base, i), [(240, (11,))])  # the rod's recipe, learned when the goal needs it
+        alts = trip_alternatives(base, i, "gold")
+        self.assertEqual(alts, {(11,): None})  # the route without it costs less, but crafts no goal
+        self.assertEqual(_skip((11,), alts), "; there is no other way to reach the target without it")
+        route, left = take_free_skips(base, i, "gold", {})
+        self.assertIs(route, base)
+        self.assertEqual(left, [])
+
+    def test_route_without_it_reaches_the_skill_only(self):
+        # what the guard turns down: the same skill, cheaper, one trip less, and no goal craft
+        from yap_forever.plan import plan_route
+        from yap_forever.planner import crafted, does_what_was_asked
+        i = self.setup()
+        base, alt = plan_route(i, "gold"), plan_route(i, "gold", exclude=frozenset({11}))
+        self.assertEqual(alt.final_skill, base.final_skill)
+        self.assertLess(alt.net_gold, base.net_gold)
+        self.assertFalse(crafted(alt, ENCH, 12))
+        self.assertIn("needs a tool", alt.stall_reasons[ENCH])
+        self.assertTrue(does_what_was_asked(alt, i.caps))
+        self.assertFalse(does_what_was_asked(alt, i.caps, i.craft_once))
+        self.assertFalse(does_what_was_asked(alt, i.caps, i.craft_once, than=base))
+        self.assertTrue(does_what_was_asked(base, i.caps, i.craft_once, than=alt))
+
+
 if __name__ == "__main__":
     unittest.main()

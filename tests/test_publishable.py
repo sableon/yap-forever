@@ -352,8 +352,9 @@ class PublishableTests(unittest.TestCase):
             return " ".join((SKILL / name).read_text(encoding="utf-8").split())
         layout, setup, coverage = (read(f"references/{n}.md") for n in ("list-layout", "setup", "coverage"))
         self.assertEqual((FREE_SKIP, MAX_TRIP_ALTS), (0.5, 3))
-        for line in ("A trip whose route-without costs at most 0.5c more (or less), reaches the same skills and makes "
-                     "fewer trainer visits and pattern trips is left out of the route",
+        for line in ("A trip whose route-without costs at most 0.5c more (or less), reaches the same skills, still "
+                     "crafts the goal recipe (a trip for the recipe of a tool or reagent the goal needs stays) and "
+                     "makes fewer trainer visits and pattern trips is left out of the route",
                      "at most three rounds, the recipes left out adding up",
                      "the trips left out cost at most 0.5c more together, against the route as first planned",
                      "each skip is also within 0.5c of the route it starts from",
