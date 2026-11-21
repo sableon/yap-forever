@@ -97,6 +97,24 @@ say so.
 - Essences pack 3 lesser into 1 greater of the same kind and back (Magic, Astral, Mystic, Nether,
   Eternal), so carried essences take fewer bag slots.
 
+## Selling crafts
+
+- What a route sells are its leftover crafts: the ones no later step uses and none kept for
+  disenchanting. AH resale of crafts never chooses the route: it shows in the totals ("Expected
+  sales of crafted leftovers", "Back from selling crafts") and in the sell-or-keep choice for greens.
+- A craft counts as sold on the AH only when the AH pays, after its 5% cut (the lowest listing less
+  the cut), at least 2× its vendor price and 1s more; otherwise it goes to a vendor, or, with
+  Enchanting planned, a green may be kept for disenchanting. A craft without a vendor price needs
+  only the 1s, and one with no listing goes to a vendor. Quest items follow the same rule. The 2× is
+  `ah_premium` in `stock.toml` (a number, 1 or more; default 2).
+- At most 5 of each craft count as sold on the AH, the rest at the vendor price; quest items count
+  up to `quest_item_sales` (no limit when it is left out). How many are listed today doesn't change
+  that count.
+- When fewer are listed than that limit and the route makes more, the report's "Crafted along the
+  way" says the player may be the supplier and may list more if the market takes them. With only 1
+  or 2 listed at 5× the vendor price or more, that line and the comparison's "Thin markets" entry add
+  "check the AH before listing": so few listings may be gone by then.
+
 ## Merchant's Favor
 
 - Merchant's Favor recipes are personal-use rewards: the planner never uses them to level, as

@@ -274,7 +274,7 @@ class QuestItemNoteTests(unittest.TestCase):
         from yap_forever.planner import plan
         p = plan(gd, Valuer(toy.market(listings), gd, st), st, toy.NO_FAVOR, caps={BS: 60, ENCH: 60})
         text = render_guide(p, gd, toy.market(listings), st, {BS: 225, ENCH: 225})
-        self.assertIn("sell up to 20 on the AH (quest item), the rest to a vendor", text)
+        self.assertIn("sell up to 20 on the AH (quest item, about 47s each), the rest to a vendor", text)
 
 
 LW = 165
@@ -1468,3 +1468,33 @@ class JoinedStopGuideTests(unittest.TestCase):
         self.assertIn("- **Capital stop** at Engineering 140 (in Ironforge): train Engineering to 225 and learn Eng frame "
                       "(5s 40c) at an Artisan Engineer, and Alch tonic (9s 0c) at an Expert Alchemist (you use it from "
                       "Alchemy 145).\n", text(True))
+
+
+class SellClauseGuideTests(unittest.TestCase):
+    """#62: a route row says where its crafts are sold, by the one rule (`Valuer.ah_price`): on the AH up to the sale
+    limit only when the AH pays well above a vendor. Pinned as the start of the clause (7b adds a vendor-back suffix)."""
+    GEAR = 7777  # a made-up craft with a 1g vendor price
+
+    def line(self, listing, quest=False, **stock):
+        from yap_forever.costmodel import Valuer
+        from yap_forever.planner import plan
+        gd = toy.gamedata([toy.recipe(1, "BS gear", 164, {toy.COPPER_BAR: 1}, (self.GEAR, 1))],
+                          quest_items=[self.GEAR] if quest else ())
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=10000)
+        st = dataclasses.replace(toy.stock(), **stock)
+        m = toy.market({**BARS, self.GEAR: [listing]})
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 20})
+        text = render_guide(p, gd, m, st, {164: 20})
+        return next(line for line in text.splitlines() if "× BS gear" in line)
+
+    def test_route_row_sell_clauses(self):
+        scarce, dead = (115790, 1), (13685, 50)  # net 11g and 1.3g at a 1g vendor price
+        self.assertIn(" → sell up to 5 on the AH (about 11.0g each), the rest to a vendor", self.line(scarce))
+        self.assertIn(" → sell to a vendor", self.line(dead))
+        self.assertNotIn("AH", self.line(dead))
+        self.assertIn(" → sell up to 3 on the AH (quest item, about 11.0g each), the rest to a vendor",
+                      self.line(scarce, quest=True, quest_item_sales=3))
+        self.assertIn(" → sell on the AH (quest item, about 11.0g each)", self.line(scarce, quest=True))
+        self.assertIn(" → sell to a vendor", self.line(dead, quest=True))
+        self.assertIn(" → sell up to 5 on the AH (about 1.3g each), the rest to a vendor",
+                      self.line(dead, ah_premium=1.25))  # the setting moves the line

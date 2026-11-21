@@ -6,7 +6,7 @@ import tomllib
 from dataclasses import dataclass
 
 from yap_forever.config import STATIC_DIR
-from yap_forever.costmodel import BARS, ORES, STONES, money
+from yap_forever.costmodel import BARS, ORES, STONES, Valuer, money
 from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, reached_lines, step_factor
 from yap_forever import trainer_text
@@ -551,7 +551,7 @@ class _StudyHint:
 
 def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, trainer_trips="as_needed",
            market=None, capitals=None, home=None) -> None:
-    quest_limit = stock.quest_item_sales
+    sales = Valuer(market, gd, stock) if market is not None else None  # where crafts are sold (#62)
     used_by: dict[int, list[str]] = {}
     for s in plan.steps:
         for item in s.used_made:
@@ -584,7 +584,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
             groups.setdefault(stage(p, s.skill_from, False), []).append(s)
         for k, group in groups.items():
             for r in _ranges(group, gd, whole):
-                line = _range_line(r, gd, used_by, disenchanted | held, quest_limit, plan.kept_greens)
+                line = _range_line(r, gd, used_by, disenchanted | held, plan.kept_greens, sales)
                 lines.setdefault((k, p), []).append((r["from"], 1, line + (hint.note(p, r) if hint else "")))
         for s in plan.steps:
             if s.profession == p and s.skill_from == s.skill_to:  # the goal recipe, crafted once
@@ -727,7 +727,9 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
     return out
 
 
-def _range_line(r, gd, used_by, for_de, quest_limit=None, kept=frozenset()) -> str:
+def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None) -> str:
+    """One route row. sales: the render's costmodel.Valuer, whose rule says where its crafts are sold (None: no
+    prices, so to a vendor)."""
     # Disenchants are an expected count of greens you already have, not a buffered shopping count.
     n = max(1, round(r["crafts"]) if r["spell"] == DE_SPELL else math.ceil(r["crafts"] - 1e-6))
     mats = [f"{count(q)} {gd.name(i)}" for i, q in r["mats"].items()] + \
@@ -746,13 +748,24 @@ def _range_line(r, gd, used_by, for_de, quest_limit=None, kept=frozenset()) -> s
             line += " → keep for disenchanting"
         elif item in kept:
             line += " → keep for disenchanting on another character"
-        elif item in gd.quest_items and quest_limit is not None:
-            line += f" → sell up to {quest_limit} on the AH (quest item), the rest to a vendor"
-        elif item in gd.quest_items:
-            line += " → sell on the AH (quest item, steady demand)"
         else:
-            line += " → sell (up to 5 on the AH, the rest to a vendor)"
+            line += _sell_clause(item, gd, sales)
     return line
+
+
+def _sell_clause(item, gd, sales) -> str:
+    """Where a row's crafts are sold: on the AH up to the sale limit when the AH pays well above a vendor
+    (costmodel.Valuer.ah_price, at its net price), else to a vendor."""
+    ah = sales.ah_price(item) if sales is not None else None
+    limit = sales.sale_limit(item) if ah is not None else 0
+    if ah is None or limit < 1:
+        return " → sell to a vendor"
+    each = f"about {gold(ah)} each"
+    if item not in gd.quest_items:
+        return f" → sell up to {limit} on the AH ({each}), the rest to a vendor"
+    if math.isinf(limit):
+        return f" → sell on the AH (quest item, {each})"
+    return f" → sell up to {limit} on the AH (quest item, {each}), the rest to a vendor"
 
 
 # --- money and notes -------------------------------------------------------------

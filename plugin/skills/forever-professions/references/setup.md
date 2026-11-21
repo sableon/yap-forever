@@ -126,6 +126,8 @@ short_farm_ore = 0
 bag_slots = 40       # free normal bag slots while crafting; gives mailbox trips (leave out to skip them)
 reagent_slots = 0    # slots in a reagent bag (materials only, filled first); 0 = none
 keep_greens = false  # see "Green crafts" below
+# ah_premium = 2     # optional: see "Selling crafts" below
+# quest_item_sales = 10  # optional: how many of each quest item the AH takes (left out: no limit)
 [goals]              # one or two professions: a skill up to 300, or a recipe to craft once
 blacksmithing = 225
 enchanting = "Enchant Bracer - Minor Health"
@@ -165,6 +167,13 @@ planned in full.` Both routes (least gold, least total value) are cut by their o
 With `true`, green crafts that can be disenchanted are kept for another character's Enchanting
 instead of sold, and the plan counts them at the value of their disenchanting materials. With
 `false` they are sold.
+
+**Selling crafts.** A leftover craft counts as sold on the AH only when the AH pays, after its cut,
+at least `ah_premium` times its vendor price and 1s more; otherwise it goes to a vendor.
+`ah_premium` is a number, 1 or more, default 2 when left out; anything else is refused, naming
+the file and the key. At most 5 of each craft count as sold there
+(quest items: `quest_item_sales`, no limit when left out), whatever is listed today. The rule and
+the report's supplier note are in [game-rules.md](game-rules.md), "Selling crafts".
 
 **Report names.** `plan` writes `reports/<date>-<name>-plan-gold.md`, `-plan-value.md`,
 `-guide-gold.md` and `-guide-value.md`, so each character keeps its own set. `<name>` is the
@@ -266,8 +275,9 @@ the file holds several realms, the command lists their keys and asks for `--real
 none, scan the auction house with Auctionator first.
 
 What an Auctionator import can't give: one price and one count per item, no listing depth. The
-planner buys the whole quantity at that one price, so costs are a lower bound, and sale limits
-that depend on listing counts use the day's quantity, so they are approximate. The scan day is the day
+planner buys the whole quantity at that one price, so costs are a lower bound. The day's count
+doesn't limit how many crafts count as sold; the report's supplier note and buyout flag use it as
+the listing count, so they are approximate. The scan day is the day
 most items were last seen (the full scan), so a later partial scan doesn't hide it. Items whose latest
 count is more than 3 days older than that day, or zero, are left out, and the guide and
 report say how many. The guide and report header names the scan day and warns when it is more

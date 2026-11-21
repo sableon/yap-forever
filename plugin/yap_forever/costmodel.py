@@ -154,6 +154,17 @@ class Valuer:
             return math.inf if limit is None else limit
         return AH_UNIT_CAP
 
+    def supplier(self, item: int, made: float) -> bool:
+        """More of an AH-worthy craft made than the sale limit, and fewer listed than it: the player may be the
+        market's supplier (the planner still counts only the limit)."""
+        return self.ah_price(item) is not None and self.market.depth(item) < self.sale_limit(item) < made
+
+    def buyout_risk(self, item: int) -> bool:
+        """An AH-worthy craft with only 1-2 listed at BUYOUT_RATIO times its vendor price or more: those few
+        listings may be gone, or bought out and relisted, by the time the player lists."""
+        ah = self.ah_price(item)
+        return ah is not None and 1 <= self.market.depth(item) <= 2 and ah >= BUYOUT_RATIO * self.vendor_price(item)
+
     def material_value(self, item: int) -> float:
         """A material you'd otherwise buy: worth at least its AH buy price."""
         return max(self.owned_value(item), self.market.min_price(item) or 0)

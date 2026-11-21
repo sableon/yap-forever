@@ -491,6 +491,36 @@ class PublishableTests(unittest.TestCase):
         self.assertIn("The skill asks for it with `trainer_trips` when the route's stages are in two capitals "
                       "(SKILL.md, step 3)", read("setup.md"))
 
+    def test_docs_promise_ah_rule(self):
+        """#62: game-rules.md "Selling crafts" gives the AH rule with its numbers (costmodel.AH_UNIT_CAP, MIN_AH_MARGIN,
+        BUYOUT_RATIO, the `ah_premium` default) and that AH resale of crafts never chooses the route; setup.md gives the
+        key and its default (tests/test_costmodel.py AhPremiumTests, test_config.py, test_report.py
+        AhSalesReportTests, test_guide.py SellClauseGuideTests)."""
+        from yap_forever.config import Stock
+        from yap_forever.costmodel import AH_UNIT_CAP, BUYOUT_RATIO, MIN_AH_MARGIN
+        from yap_forever.guide import gold
+
+        def read(name):
+            return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
+        rules, setup = read("game-rules.md"), read("setup.md")
+        premium = Stock({}, 0, 0, 1, 0, 0).ah_premium
+        self.assertEqual((premium, gold(MIN_AH_MARGIN)), (2, "1s"))
+        section = rules[rules.index("## Selling crafts"):rules.index("## Merchant's Favor")]
+        for line in ("AH resale of crafts never chooses the route",
+                     f"at least {premium:g}× its vendor price and {gold(MIN_AH_MARGIN)} more",
+                     f"The {premium:g}× is `ah_premium` in `stock.toml` (a number, 1 or more; default {premium:g}).",
+                     f"At most {AH_UNIT_CAP} of each craft count as sold on the AH",
+                     "quest items count up to `quest_item_sales` (no limit when it is left out)",
+                     "How many are listed today doesn't change that count.",
+                     f"With only 1 or 2 listed at {BUYOUT_RATIO}× the vendor price or more"):
+            self.assertIn(line, section)
+        for line in (f"at least `ah_premium` times its vendor price and {gold(MIN_AH_MARGIN)} more",
+                     f"`ah_premium` is a number, 1 or more, default {premium:g} when left out; anything else is "
+                     "refused, naming the file and the key.",
+                     f"At most {AH_UNIT_CAP} of each craft count as sold there",
+                     "The day's count doesn't limit how many crafts count as sold"):
+            self.assertIn(line, setup)
+
 
 if __name__ == "__main__":
     unittest.main()

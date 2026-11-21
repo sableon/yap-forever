@@ -315,6 +315,82 @@ class CouldAlsoMakeReportTests(unittest.TestCase):
         self.assertNotIn(line, self.render(FavorData({1: 50}, {}, [])))
 
 
+class AhSalesReportTests(unittest.TestCase):
+    """#62: the supplier note and the buyout flag under "Crafted along the way", and the data note of the AH rule."""
+    GEAR = 7777  # a made-up craft with a 1g vendor price
+
+    def render(self, listings, made=10, market=None, **stock):
+        import dataclasses
+        gd = toy.gamedata([])
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=10000)
+        st = dataclasses.replace(toy.stock(), **stock)
+        m = market or toy.market({self.GEAR: listings})
+        p = Plan(leftovers={self.GEAR: made}, final_skill={BS: 20})
+        return render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 20}), p, gd, m, st
+
+    def crafted(self, text):
+        return text[text.index("Crafted along the way"):text.index("## Excluded recipes")]
+
+    def thin(self, p, gd, m, st):
+        from yap_forever.compare import compare
+        text = compare({"gold": p, "value": p}, gd, m, st)
+        return next(line for line in text.splitlines() if line.startswith("| Thin markets"))
+
+    def test_supplier_note_and_buyout(self):
+        supplier = ("- 10 Test Gear: only 1 listed at 11g 57s 90c (vendor 1g 0s 0c): you may be the supplier; "
+                    "list more than 5 if you think the market takes them.")
+        text, *rest = self.render([(115790, 1)])  # one listed at 11x
+        self.assertIn(supplier + " Check the AH before listing.\n", self.crafted(text))
+        self.assertEqual(self.thin(*rest),
+                         "| Thin markets | Test Gear (sells 10, 1 listed): check the AH before listing "
+                         "| Test Gear (sells 10, 1 listed): check the AH before listing |")
+        text, *rest = self.render([(31579, 3)])  # three listed at 3x: supplier only
+        self.assertIn("- 10 Test Gear: only 3 listed at 3g 15s 79c (vendor 1g 0s 0c): you may be the supplier; "
+                      "list more than 5 if you think the market takes them.\n", self.crafted(text))
+        self.assertNotIn("check the ah", text.lower())
+        self.assertNotIn("check the AH", self.thin(*rest))
+        text, *rest = self.render([(115790, 6)])  # six listed: neither
+        self.assertIn("- 10 Test Gear\n", self.crafted(text))
+        self.assertNotIn("supplier", text)
+        self.assertNotIn("check the AH", self.thin(*rest))
+
+    def test_auctionator_single_count(self):
+        # RF4: an import has one price and one count per item; the notes use that count, and it doesn't cap sales
+        from yap_forever.planner import sale_value
+        from yap_forever.prices import Market
+        m = Market({self.GEAR: [(115790, 2)]})
+        m.source, m.scan_day = "auctionator", "2026-11-20"
+        text, p, gd, m, st = self.render(None, market=m)
+        self.assertIn("- 10 Test Gear: only 2 listed at 11g 57s 90c (vendor 1g 0s 0c): you may be the supplier; "
+                      "list more than 5 if you think the market takes them. Check the AH before listing.\n",
+                      self.crafted(text))
+        self.assertIn("Test Gear (sells 10, 2 listed): check the AH before listing", self.thin(p, gd, m, st))
+        v = Valuer(m, gd, st)
+        self.assertEqual(sale_value(v, gd, self.GEAR, 10), 5 * m.net_sell(self.GEAR) + 5 * 10000)
+
+    def test_supplier_note_not_for_a_vendored_craft(self):
+        text, *rest = self.render([(13685, 1)])  # one listed at 1.3x: sold to a vendor, no AH note
+        self.assertIn("- 10 Test Gear\n", self.crafted(text))
+        self.assertNotIn("supplier", text)
+        self.assertEqual(self.thin(*rest), "| Thin markets | none | none |")  # C32: no AH sale, no thin AH market
+
+    def test_buyout_flag_without_a_supplier_line(self):
+        # C33: made no more than the sale limit, so no supplier line; the flag is on the Thin markets entry
+        text, *rest = self.render([(115790, 1)], made=4)
+        self.assertIn("- 4 Test Gear\n", self.crafted(text))
+        self.assertNotIn("check the ah", text.lower())
+        self.assertIn("Test Gear (sells 4, 1 listed): check the AH before listing", self.thin(*rest))
+        _text, *rest = self.render([(115790, 2)], made=2)  # no more made than listed: no thin market to flag
+        self.assertEqual(self.thin(*rest), "| Thin markets | none | none |")
+
+    def test_data_note_states_the_ah_rule(self):
+        note = ("- AH resale of a crafted item counts at most 5 (quest items: `quest_item_sales`), and only when the AH "
+                "pays, after its cut, at least {}× the vendor price and 1s more.")
+        self.assertIn(note.format(2) + "\n", self.render([(115790, 1)])[0])
+        self.assertIn(note.format(1.5) + "\n", self.render([(115790, 1)], ah_premium=1.5)[0])
+        self.assertNotIn("gear counts at most 5", self.render([(115790, 1)])[0])
+
+
 def toy_turnin():
     from yap_forever.favor import Turnin
     return Turnin("Copper crate", {toy.COPPER_BAR: 2}, 5)

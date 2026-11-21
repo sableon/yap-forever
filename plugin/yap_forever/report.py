@@ -3,10 +3,10 @@ import math
 from collections import defaultdict
 
 from yap_forever.budget import amount
-from yap_forever.costmodel import Valuer, money
+from yap_forever.costmodel import AH_UNIT_CAP, MIN_AH_MARGIN, Valuer, money
 from yap_forever.favor_suggest import levels_known
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
-from yap_forever.guide import NOTHING_IN_BUDGET
+from yap_forever.guide import NOTHING_IN_BUDGET, gold
 from yap_forever.planner import DISENCHANT, reached_lines, step_factor
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, Budget, mail_text
@@ -41,6 +41,20 @@ def _budget_text(cash: float, stock, budget: Budget | None, goal=None) -> str:
 
 def _q(item, gd):
     return " (quest item)" if item in gd.quest_items else ""
+
+
+def _crafted_line(item, n, plan, v, market, gd) -> str:
+    """A leftover craft under "Crafted along the way"; a craft sold on the AH with fewer listed than the sale limit
+    and more made than it gets the supplier note, and the buyout flag when its few listings may be gone (#62)."""
+    made = math.floor(n)
+    line = f"- {made} {gd.name(item)}{_q(item, gd)}"
+    sold = item not in plan.held_for_de and item not in plan.kept_greens and item not in plan.de_materials
+    if not (sold and v.supplier(item, made)):
+        return line
+    line += (f": only {market.depth(item)} listed at {money(market.min_price(item))} "
+             f"(vendor {money(v.vendor_price(item))}): you may be the supplier; list more than "
+             f"{v.sale_limit(item)} if you think the market takes them.")
+    return line + (" Check the AH before listing." if v.buyout_risk(item) else "")
 
 
 def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
@@ -191,7 +205,7 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
         out += [f"- {math.floor(n)} {gd.name(i)}: about {money(val)}" for val, i, n in sorted(spare, reverse=True)]
     if plan.leftovers:
         out += ["", "Crafted along the way (sell, or keep for quests):", ""]
-        out += [f"- {math.floor(n)} {gd.name(i)}{_q(i, gd)}"
+        out += [_crafted_line(i, n, plan, v, market, gd)
                 for i, n in sorted(plan.leftovers.items(), key=lambda kv: -kv[1]) if n >= 1]
     profit = []
     for spell in plan.learned:
@@ -244,7 +258,9 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out.append(f"- Recipes: skillup-forever {SKILLUP_SHA[:7]}; client tables wago.tools {WAGO_BUILD}; "
                f"quest items: QuestieDB {QUESTIE_SHA[:7]}.")
     out.append("- Disenchant results use Classic odds (estimates). Favor data is from community guides.")
-    out.append("- AH resale of crafted gear counts at most 5 of each item, except quest items.")
+    out.append(f"- AH resale of a crafted item counts at most {AH_UNIT_CAP} (quest items: `quest_item_sales`), and "
+               f"only when the AH pays, after its cut, at least {stock.ah_premium:g}× the vendor price and "
+               f"{gold(MIN_AH_MARGIN)} more.")
     out.append("- Leather is not farmed in this model; any leather is bought.")
     if favor.recipes:
         out.append("- Merchant's Favor recipes are not used to level"
