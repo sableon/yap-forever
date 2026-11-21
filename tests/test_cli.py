@@ -581,6 +581,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 1, bad)
             self.assertIn(said, out)
 
+
 class FreeSkipReportTests(unittest.TestCase):
     """#90 through write_reports: a trip whose route-without costs the same is planned without and said, before the
     mailbox trips, the listed saving, the table and the skip clauses shown."""

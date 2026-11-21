@@ -743,12 +743,14 @@ class BringListTests(unittest.TestCase):
 WARES = 7812  # a made-up craft a vendor pays 40s for
 
 
-def wares_route(order="first", listings=None, **plan_fields):
+def wares_route(order="first", listings=None, sell=4000, **plan_fields):
     """(plan, gd, market, stock): "BS wares" (spell 71, 10 crafts of a Copper Bar at 1g, each a Test Wares a vendor pays
-    40s for: 4g back) and "BS plain" (spell 72, 5 crafts of an Iron Bar at 1g, nothing back), all orange; order "first":
-    the wares row first, "last": after the plain row. plan_fields: more Plan fields (ranks, learn_log, held_for_de...)."""
+    `sell` for, default 40s: 4g back) and "BS plain" (spell 72, 5 crafts of an Iron Bar at 1g, nothing back), all
+    orange; order "first": the wares row first, "last": after the plain row. plan_fields: more Plan fields (ranks,
+    learn_log, held_for_de...); vendor_back defaults to the 10 wares at `sell`, as the planner counts them."""
     gd = toy.gamedata([toy.recipe(71, "BS wares", BS, {S: 1}, (WARES, 1)), toy.recipe(72, "BS plain", BS, {T: 1})])
-    gd.items[WARES] = toy.item(WARES, "Test Wares", sell=4000)
+    gd.items[WARES] = toy.item(WARES, "Test Wares", sell=sell)
+    plan_fields.setdefault("vendor_back", 10 * sell)
     wares, plain = (71, "BS wares", 10, {S: 10}), (72, "BS plain", 5, {T: 5})
     steps, skill = [], 1
     for spell, name, n, mats in (wares, plain) if order == "first" else (plain, wares):
@@ -789,11 +791,11 @@ class AsYouGoTests(unittest.TestCase):
         # bring vendor money (2g: 13g); wares held for disenchanting or kept as greens bring none (15g)
         from yap_forever.shopping import gold_as_you_go
         ah = {S: [(10000, 100)], T: [(10000, 100)], WARES: [(20000, 3)]}
-        p, gd, m, st = wares_route(listings=ah)
+        p, gd, m, st = wares_route(listings=ah, vendor_back=20000)
         self.assertEqual(gold_as_you_go(p, gd, m, st), 130000)
         for fields in ({"held_for_de": {WARES: (10, 0)}}, {"kept_greens": {WARES: 10}}):
             with self.subTest(fields=fields):
-                p, gd, m, st = wares_route(**fields)
+                p, gd, m, st = wares_route(vendor_back=0, **fields)  # the planner sells none of them
                 self.assertEqual(gold_as_you_go(p, gd, m, st), 150000)
 
     def test_as_you_go_pays_fees_and_patterns_where_the_route_meets_them(self):
@@ -814,6 +816,20 @@ class AsYouGoTests(unittest.TestCase):
         self.assertEqual(backs, [40000, 0])
         guide = render_guide(p, gd, m, st, {BS: 16})
         self.assertEqual(re.findall(r"about (\S+) back", guide), [gold(b) for b in backs if round(b) >= 1])
+
+    def test_as_you_go_line_absent_when_it_prints_the_same(self):
+        # wares a vendor pays 40c for: 4s back makes 14.96g as you go, which prints as the 15.0g to bring: no line
+        from yap_forever.shopping import gold_as_you_go, gold_to_bring, render_shopping
+        p, gd, m, st = wares_route(sell=40)
+        self.assertEqual((gold_to_bring(p, gd, m, st), gold_as_you_go(p, gd, m, st)), (150000, 149600))
+        self.assertNotIn("as you go", "\n".join(render_shopping(p, gd, m, st)[0]))
+
+    def test_as_you_go_back_capped_at_vendor_back(self):
+        # the rows round each one up to whole crafts, so their vendor money can be above what the planner counts
+        # (Plan.vendor_back): what they add up to is capped at it, 3g here, so 15g - 3g = 12g
+        from yap_forever.shopping import gold_as_you_go
+        p, gd, m, st = wares_route(vendor_back=30000)
+        self.assertEqual(gold_as_you_go(p, gd, m, st), 120000)
 
 
 if __name__ == "__main__":

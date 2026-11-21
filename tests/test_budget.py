@@ -311,14 +311,14 @@ class FeaturesTogetherTests(unittest.TestCase):
         self.assertIn("at 200 for BS trainer (1s 0c)", trips[1])
         self.assertNotIn("Plans: Something (from", trips[0])
 
-
     def test_the_budgets_pay_measures_the_cut_and_its_skips(self):
         # #97 part 3: write_reports takes one measure from the budget's pay, for the cut, its free skips and the gold
         # the cut route spends; the report's cash line says which
         from unittest import mock
 
+        from yap_forever.config import PAYS
         from yap_forever.shopping import gold_as_you_go
-        for pay in budget.PAYS:
+        for pay in PAYS:
             with self.subTest(pay=pay), mock.patch.object(budget, "gold_measure", wraps=budget.gold_measure) as made, \
                     mock.patch("yap_forever.budget.gold_as_you_go", wraps=gold_as_you_go) as went:
                 _table, texts = self.reports("as_needed", Budget(1, pay=pay))
@@ -512,8 +512,15 @@ class PayTests(unittest.TestCase):
                     go = budget.cut(i, mode, Budget(12, pay="as_you_go"))
                     self.assertEqual((go.caps, go.spent, go.next_stop, go.credited), ({BS: 16}, 110000, {}, True))
                     self.assertEqual(len(go.plan.steps), 2)
-        self.assertEqual([budget.gold_measure(Budget(12, pay=pay), gd, market, st)(full) for pay in budget.PAYS],
-                         [150000, 110000])
+                    # the budget line's gold is the as-you-go figure, and says so (as the report's cash line does)
+                    self.assertEqual(budget.lines(go, Budget(12, pay="as_you_go"))[0],
+                                     "12g takes Blacksmithing to 16 (11.0g, selling crafts to a vendor as you go).")
+                    # one cache shared by both ways to pay keeps each one's gold apart
+                    cache: dict = {}
+                    self.assertEqual([budget.cut(i, mode, Budget(12, pay=pay), cache=cache).caps
+                                      for pay in ("upfront", "as_you_go")], [{BS: 1}, {BS: 16}])
+        measured = [budget.gold_measure(Budget(12, pay=pay), gd, market, st)(full) for pay in ("upfront", "as_you_go")]
+        self.assertEqual(measured, [150000, 110000])
 
 
 if __name__ == "__main__":

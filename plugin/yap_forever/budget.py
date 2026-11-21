@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from yap_forever.compare import settle_routes
-from yap_forever.config import PAYS, Budget
+from yap_forever.config import Budget
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import gold
 from yap_forever.planner import Plan
@@ -86,7 +86,7 @@ def gold_measure(budget: Budget | None, gd, market, stock) -> Callable[[Plan], f
     """The gold a route needs, as a budget is compared with it (copper): "Gold to bring" for pay "upfront" (and without
     a budget), the as-you-go figure for "as_you_go". The budget's cut, its free skips and the gold the cut route spends
     all use this one."""
-    if budget is not None and budget.pay == PAYS[1]:
+    if budget is not None and budget.pay == "as_you_go":
         return lambda p: gold_as_you_go(p, gd, market, stock)
     return lambda p: gold_to_bring(p, gd, market, stock)
 
@@ -107,7 +107,8 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
     gold_of: the gold a route needs (default gold_measure: "Gold to bring", or the as-you-go figure with budget.pay
     "as_you_go"); every comparison here uses it, the fallback's included.
     inputs: plan.PlanInputs with the targets as caps (a recipe goal is not cut: the caller plans it in full).
-    cache: caps key -> (routes, same, the routes without the vendor credit or None) from compare.settle_routes,
+    cache: caps key -> (routes, same, the routes without the vendor credit or None) from compare.settle_routes, and
+    ("gold", mode, caps key, credited, budget.pay) -> that route's gold,
     shared by both modes' cuts (planning a set of caps takes seconds); give it the routes to the targets when the
     caller has them. The routes without the credit are planned only when a credited route misses the budget."""
     from yap_forever.plan import candidates  # plan imports this module
@@ -134,7 +135,7 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
         return bare
 
     def gold_at(caps, credited):
-        k = ("gold", mode, key(caps), credited)
+        k = ("gold", mode, key(caps), credited, budget.pay)  # the figure the budget is compared with
         if k not in cache:
             cache[k] = gold_of(routes(caps, credited)[mode])
         return cache[k]
@@ -235,8 +236,9 @@ def lines(c: BudgetCut, budget: Budget) -> list[str]:
     moved = [p for p in c.caps if c.caps[p] > c.start.get(p, c.caps[p])]
     out = []
     if moved:
+        how = ", selling crafts to a vendor as you go" if budget.pay == "as_you_go" else ""  # c.spent's figure
         out.append(f"{b} takes " + " and ".join(f"{PROFESSIONS[p]} to {c.caps[p]}" for p in moved)
-                   + f" ({gold(c.spent)}).")
+                   + f" ({gold(c.spent)}{how}).")
     elif c.below_first_stop:
         out.append(f"{b} doesn't reach the first stop: nothing is planned yet.")
     for p, why in c.stalled.items():
