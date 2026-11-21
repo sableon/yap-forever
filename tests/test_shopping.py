@@ -404,6 +404,116 @@ class BringListTests(unittest.TestCase):
         self.assertTrue(text.startswith(" Bring enough to craft to 236 at the trainer ("), text)
         self.assertIn("Made later by your Blacksmithing on this route: 10 Copper Rod:", text)
 
+    def pattern_plan(self, how, at=235):
+        # an Enchanting trip to a remote Master trainer at 225 (the Annora case): the stretch to 245 learns
+        # pattern 53 at `at`, bought on the AH (or from a vendor, with Favor, from your bank, mailed by an alt)
+        gd = toy.gamedata([toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(53, "Ench P", ENCH, {T: 1}, source="favor" if how == "favor" else "scroll",
+                                      scroll=toy.SCROLL, req=230)])
+        p = orange(Plan(steps=[Step(ENCH, 225, 235, 51, "Ench T", 10, 0, 0, {T: 10}),
+                               Step(ENCH, 235, 245, 53, "Ench P", 10, 0, 0, {T: 10})],
+                        ranks=[(ENCH, 225, 300, 0)], bought={T: 20}, final_skill={ENCH: 245},
+                        learn_log=[(ENCH, at, 53, how)],
+                        used_mail={toy.SCROLL: [("Altname", 1)]} if how == "mail" else {}))
+        gd.items[T].stack = 20
+        return p, gd
+
+    def ench_trip(self):
+        from yap_forever.trips import Trip
+        return Trip(225, ENCH, "rank", "Enchanting rank to 300")
+
+    def test_one_go_brings_the_stretchs_patterns(self):
+        from yap_forever.shopping import bring_list, bring_text
+        said = {"ah": "from the AH", "vendor": "from a pattern vendor", "favor": "from the Merchant's Favor vendor",
+                "owned": "from the bank", "mail": "mail from Altname"}
+        for how, where in said.items():
+            p, gd = self.pattern_plan(how)
+            reach, items = bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")
+            self.assertEqual(reach, 245, how)
+            self.assertEqual(items[0], (T, 20, "mail"), how)
+            self.assertEqual([(i, n) for i, n, _src in items[1:]], [(toy.SCROLL, 1)], how)
+            text = bring_text(p, gd, self.ench_trip(), None, trainer_trips="one_go")
+            self.assertIn(f" Bring: 20 Iron Bar (from the mail), 1 Plans: Something ({where}): enough to craft to 245 "
+                          "at the trainer (2 bag slots)", text)  # the pattern takes a slot of its own
+            # as needed: as before
+            self.assertEqual(bring_list(p, gd, self.ench_trip(), None), (245, [(T, 20, "mail")]), how)
+            self.assertNotIn("Plans: Something", bring_text(p, gd, self.ench_trip(), None))
+
+    def test_one_go_patterns_are_those_learned_inside_the_stretch(self):
+        from yap_forever.shopping import bring_list
+        for at, brought in ((225, True), (244, True), (220, False), (245, False)):  # from the trip's skill to its end
+            p, gd = self.pattern_plan("ah", at)
+            items = bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[1]
+            self.assertEqual(any(i == toy.SCROLL for i, _n, _src in items), brought, at)
+        p, gd = self.pattern_plan("ah")
+        for log in ([(BS, 235, 53, "ah")],  # the other profession's pattern: not this trip's
+                    [(ENCH, 235, 53, "trainer")]):  # a trainer recipe is learned there, not brought
+            p.learn_log = log
+            items = bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[1]
+            self.assertNotIn(toy.SCROLL, [i for i, _n, _src in items], log)
+
+    def test_one_go_lower_goal_leaves_out_the_patterns_above_it(self):
+        # 20 Iron Bar and the pattern are 2 slots, + 10 kept free: 11 bag slots fit the first row (to 235) only, and
+        # the pattern learned at 235 is not part of that list
+        from yap_forever.shopping import _bring_items, _bring_rows, bring_text
+        p, gd = self.pattern_plan("ah")
+        rows, left, mail, ctx = _bring_rows(p, gd, self.ench_trip(), 11, None, 0, None, None, "one_go")
+        self.assertEqual(_bring_items(p, gd, rows[:1], left, mail, "one_go", ctx, self.ench_trip()), [(T, 10, "mail")])
+        text = bring_text(p, gd, self.ench_trip(), 11, trainer_trips="one_go")
+        self.assertTrue(text.endswith(" This needs 12 free slots and you have 11: get bigger bags, bank what this "
+                                      "stretch doesn't need, or set a lower goal (for example 235) so it fits."), text)
+
+    def test_one_go_folds_pattern_trips_inside_the_stretch(self):
+        # the vendor (or Favor) pattern learned at 235 is on the trip's bring list: no trip of its own while you are away
+        from yap_forever.guide import render_guide
+        from yap_forever.trips import trips
+        start = {ENCH: 225}
+        for how in ("vendor", "favor"):
+            p, gd = self.pattern_plan(how)
+            self.assertEqual([t.kind for t in trips(p, gd, start)], ["rank", how], how)  # as needed: as before
+            self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["rank"], how)
+            text = render_guide(p, gd, toy.market({T: [(10, 1000)]}), toy.stock(skills=start), {ENCH: 245},
+                                trainer_trips="one_go")
+            rows = [line for line in text.splitlines() if line.startswith("- **Trip:**")]
+            self.assertEqual(len(rows), 1, rows)
+            self.assertIn("1 Plans: Something (from ", rows[0])
+        p, gd = self.pattern_plan("vendor", 220)  # learned before the trip: still a trip of its own
+        self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["vendor", "rank"])
+
+    def de_mail_plan(self, suffix):
+        # Blacksmithing makes 20 belts after Enchanting's trip; Enchanting disenchants 20 belts at 231 and uses the dust
+        from yap_forever.disenchant import de_yield
+        belt = toy.BELT
+        gd = toy.gamedata([toy.recipe(41, "Make belt", BS, {S: 2}, (belt, 1)), toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(54, "Ench dust", ENCH, {toy.DUST: 1})])
+        per = de_yield(gd.items[belt])[toy.DUST]
+        use = int(per * 20)
+        p = orange(Plan(steps=[Step(ENCH, 225, 230, 51, "Ench T", 5, 0, 0, {T: 5}),
+                               Step(BS, 210, 230, 41, "Make belt", 20, 0, 0, {S: 40}),
+                               Step(ENCH, 230, 240, 54, "Ench dust", use, 0, 0, used_made={toy.DUST: use})],
+                        ranks=[(ENCH, 225, 300, 0)], bought={S: 40, T: 5}, final_skill={BS: 230, ENCH: 240},
+                        events=[f"Enchanting 231: disenchant 20 {gd.name(belt)}{suffix}"]))
+        return p, gd, per, use
+
+    def test_disenchant_of_mailed_greens_parses(self):
+        # the planner's two mail forms (planner._release_held): every green mailed, or some your own
+        from yap_forever.shopping import _bring_rows, _de_supply
+        for suffix, mine in ((" (mail from Altname)", 0), (" (12 your own, 8 mail from Altname)", 12)):
+            p, gd, per, _use = self.de_mail_plan(suffix)
+            every, at = _bring_rows(p, gd, self.ench_trip(), None, None, 0, None, None, "one_go")[3]
+            got = [(o, m, round(n, 6)) for lots in _de_supply(p, gd, every, at, self.ench_trip()).values()
+                   for o, m, n in lots if m == toy.DUST]
+            want = ([(BS, toy.DUST, round(per * mine, 6))] if mine else []) + [("pre", toy.DUST, round(per * (20 - mine), 6))]
+            self.assertEqual(got, want, suffix)
+
+    def test_one_go_mixed_mail_disenchant_splits_the_dust(self):
+        from yap_forever.shopping import bring_list
+        p, gd, per, use = self.de_mail_plan(" (12 your own, 8 mail from Altname)")
+        dust = [x for x in bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[1] if x[0] == toy.DUST]
+        self.assertEqual([src for _i, _n, src in dust], ["yours", f"later:{BS}"])  # the mailed belts' dust is yours
+        self.assertEqual(sum(n for _i, n, _src in dust), use)
+        self.assertLess(abs(dust[0][1] - per * 8), 1)
+
     def test_as_needed_unchanged(self):
         # the outputs main (e94cb24) gives for this fixture, before trainer_trips existed
         from yap_forever.guide import render_guide

@@ -55,6 +55,19 @@ def stretch_end(plan, profession: int, skill: int) -> int:
     return min(later) if later else plan.final_skill.get(profession, skill)
 
 
+PATTERN_HOWS = ("ah", "vendor", "favor", "owned", "mail")  # plan.learn_log: patterns, items the player carries
+
+
+def stretch_patterns(plan, gd, profession: int, lo: int, hi: int) -> list[tuple[int, int, str]]:
+    """(skill, spell, how) of the patterns `profession` learns at skills lo <= skill < hi (plan.learn_log): bought on the
+    AH, from a vendor or with Merchant's Favor, kept in your bank or mailed by another of your characters. With
+    trainer_trips "one_go" a remote rank trip's bring list carries those of its stretch, and a vendor or Favor
+    pattern among them is no trip of its own (see trips)."""
+    return [(s, spell, how) for prof, s, spell, how in plan.learn_log
+            if prof == profession and lo <= s < hi and how in PATTERN_HOWS
+            and spell in gd.recipes and gd.recipes[spell].scroll_item]
+
+
 def _one_go(out: list[Visit], plan, gd) -> list[Visit]:
     """The visits with every visit back for recipes (a trip, or a capital stop) inside a remote rank visit's stretch
     folded into that rank visit: its recipes go to `as_reached` with the skill the route learns them at (learn_log),
@@ -155,9 +168,14 @@ class Trip:
 
 def trips(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED) -> list[Trip]:
     """The trips away from home, in skill order. start_skills: profession -> the route's start skill.
-    trainer_trips: see visits."""
+    trainer_trips: see visits; with "one_go", a vendor or Favor pattern learned inside a remote rank's stretch is on that
+    trip's bring list (stretch_patterns), not a trip of its own."""
     out = []
-    for v in visits(plan, gd, start_skills, trainer_trips):
+    found = visits(plan, gd, start_skills, trainer_trips)
+    carried = {(v.profession, s, spell) for v in found if trainer_trips == ONE_GO and v.kind == "rank" and v.remote
+               for s, spell, _how in stretch_patterns(plan, gd, v.profession, v.skill,
+                                                       stretch_end(plan, v.profession, v.skill))}
+    for v in found:
         name = PROFESSIONS.get(v.profession, v.profession)
         if v.kind == "rank" and v.remote:
             fee = next(f for prof, s, cap, f in plan.ranks if (prof, s, cap) == (v.profession, v.skill, v.rank_cap))
@@ -168,7 +186,7 @@ def trips(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED
             out.append(Trip(v.skill, v.profession, "recipe", names, None, sum(gd.recipes[s].fee for s in v.learn),
                             v.rank_cap, tuple(v.learn), v))
     for prof, s, spell, how in plan.learn_log:
-        if how in ("vendor", "favor"):
+        if how in ("vendor", "favor") and (prof, s, spell) not in carried:
             r = gd.recipes.get(spell)
             name = r.name if r else str(spell)
             cost = gd.vendor_prices.get(r.scroll_item, 0) if r and how == "vendor" and r.scroll_item else 0
