@@ -37,31 +37,24 @@ review; no force-push or deletion. Tags `v*` can't be moved or deleted.
 
 ## GitHub Actions minutes
 
-The owner's Actions minutes are a paid budget shared with their other repositories, and this public repository
-is billed too. November 2026's ran out on 2026-11-21.
+GitHub's standard runners are free for this public repository, but CI is kept lean anyway: fewer runs give
+faster feedback, and the same rules hold in the owner's private repositories, where minutes are paid (macOS
+and Windows at a much higher rate than Linux). `.github/workflows/tests.yml` (since PR #120):
 
-- **Until 2026-12-01: no Actions.** The `tests` workflow is disabled (`gh workflow disable`, 2026-11-21), so
-  a push runs nothing. Check locally instead, the same 8 checks: the unit tests on the Mac, the
-  unit tests on Linux in Docker with `python:3.11` and `python:3.13` (the full images: three tests need `git`;
-  clone the repo inside the container, copy `.private-denylist` in, run as a non-root user), `ruff check plugin
-  tests` with ruff 0.17.6, and `claude plugin validate . --strict` and `claude plugin validate plugin --strict`
-  with Claude Code 2.1.308. Windows isn't covered: say so in the pull request under "Checks (local; Actions
-  paused until December)". The `main` ruleset requires the CI test jobs, so merging needs `gh pr merge
-  --admin`, only with the owner's word for that pull request. On 2026-12-01, re-enable the workflow (`gh
-  workflow enable tests.yml`) and run it once by hand on `main` (`gh workflow run tests.yml --ref main`) if
-  `main` has moved since the last full run.
-- **From December on** (`.github/workflows/tests.yml` since PR #120):
-  1. Pull requests run the Linux jobs, lint and plugin only; macOS and Windows (billed at a much higher rate)
-     run on `v*` tags and by hand (`workflow_dispatch`, which runs every job). The `main` ruleset requires
-     only the two Linux test jobs (owner only).
-  2. No run on `push` to `main` after a merge: the pull request tested that head.
-  3. A docs-only pull request (every changed file under `docs/` or Markdown outside `plugin/`) runs only
-     `tests/test_publishable.py` in the Linux jobs, the one test file that reads those files; the jobs still
-     report, so the required checks pass. `concurrency` cancels a branch's older run.
-  4. Push a branch once, when it is ready: commit fix rounds locally and push them together. Name the pull
-     request in `docs/progress.md` before opening it (the next number is the highest issue or pull request
-     number plus one), not in a push after it.
-  5. Run the full local checks before every push, so CI confirms rather than discovers.
+1. Pull requests run the Linux test jobs (Python 3.11 and 3.13), lint and plugin. macOS and Windows run on
+   `v*` tags and by hand (`workflow_dispatch`, which runs every job). The `main` ruleset requires only the two
+   Linux test jobs. A change that touches platform-specific code (paths, encodings, file modes, processes) gets
+   one manual run on its branch before the merge: `gh workflow run tests.yml --ref <branch>`.
+2. No run on `push` to `main` after a merge: the pull request tested that head.
+3. A docs-only pull request (every changed file under `docs/` or Markdown outside `plugin/`) runs only
+   `tests/test_publishable.py` in the Linux jobs, the one test file that reads those files; the jobs still
+   report, so the required checks pass. `concurrency` cancels a branch's older run.
+4. Push a branch once, when it is ready: commit fix rounds locally and push them together. Name the pull
+   request in `docs/progress.md` before opening it (the next number is the highest issue or pull request
+   number plus one), not in a push after it.
+5. Run the full local checks before every push, so CI confirms rather than discovers: the unit tests, `ruff
+   check plugin tests` with ruff 0.17.6, and `claude plugin validate . --strict` and `claude plugin validate
+   plugin --strict` with Claude Code 2.1.308.
 
 ## Pull requests from outside contributors
 
