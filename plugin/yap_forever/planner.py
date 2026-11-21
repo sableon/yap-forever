@@ -231,6 +231,11 @@ class _Route:
 
         return self._finish()
 
+    def _may_use(self, r) -> bool:
+        """Merchant's Favor recipes are personal-use rewards: never used to level or to make a tool, unless the
+        recipe is its profession's craft-once goal (favor_suggest lists the others to craft once)."""
+        return r.source != "favor" or self.craft_once.get(r.skill_line) == r.spell_id
+
     def _tool_held(self, cat):
         return any(self.gd.satisfies(i, cat) for i in self.pools.held())
 
@@ -285,6 +290,8 @@ class _Route:
             opts.append({"how": "ah", "item": item, "cost": Cost(ah[1], ah[1]), "requests": [], "recipe": None})
         for r in self.recipes.values():
             if not r.output or r.output[0] != item or self.skill.get(r.skill_line, 0) < r.required_skill:
+                continue
+            if not self._may_use(r):
                 continue
             if any(not self._tool_held(c) for c in r.tools):
                 continue
@@ -533,7 +540,7 @@ class _Route:
         material requests), or None. Recipes that can't be used are noted in skipped."""
         best = None
         for r in self.recipes.values():
-            if r.skill_line != prof or r.required_skill > s:
+            if r.skill_line != prof or r.required_skill > s or not self._may_use(r):
                 continue
             chance = skillup_chance(s, r.thresholds, self.overtime, self.reading)
             if chance <= 0:

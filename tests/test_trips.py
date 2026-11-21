@@ -118,7 +118,7 @@ class RecipeTripTests(unittest.TestCase):
 
 class AlternativeCapTests(unittest.TestCase):
     """Pattern trips (vendor and Favor) and recipe trips each get MAX_TRIP_ALTS alternatives, costliest first;
-    nothing is planned twice."""
+    nothing is planned twice. A Favor recipe is a goal only (#95), never skipped: the free pattern here is a vendor's."""
 
     def setup(self):
         from types import SimpleNamespace
@@ -126,11 +126,11 @@ class AlternativeCapTests(unittest.TestCase):
                    ((1, 240, 100), (2, 250, 500), (3, 260, 300), (4, 270, 200), (5, 280, 400))]
         gd = toy.gamedata([toy.recipe(s, f"Recipe {s}", BS, {toy.IRON_BAR: 1}, req=r, fee=f) for s, r, f in recipes]
                           + [toy.recipe(9, "Pattern", BS, {toy.IRON_BAR: 1}, source="scroll", scroll=toy.SCROLL),
-                             toy.recipe(10, "Favor recipe", BS, {toy.IRON_BAR: 1}, source="favor")])
+                             toy.recipe(10, "Free pattern", BS, {toy.IRON_BAR: 1}, source="scroll", scroll=toy.ODD)])
         gd.vendor_prices[toy.SCROLL] = 1000
         base = Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300},
                     learn_log=[(BS, req, s, "trainer") for s, req, _f in recipes] + [(BS, 230, 9, "vendor"),
-                                                                                         (BS, 235, 10, "favor")])
+                                                                                         (BS, 235, 10, "vendor")])
         inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills={BS: 225}), craft_once={}, caps={BS: 300})
         return base, inputs
 
@@ -141,7 +141,7 @@ class AlternativeCapTests(unittest.TestCase):
         with mock.patch("yap_forever.plan.plan_route", return_value=base) as replan:
             alts = trip_alternatives(base, inputs, "gold")
         self.assertEqual(MAX_TRIP_ALTS, 3)
-        # the Favor trip (no gold cost) keeps its tail although five recipe trips have fees
+        # the free vendor pattern (no gold cost) keeps its tail although five recipe trips have fees
         self.assertEqual(set(alts), {9, 10, (2,), (5,), (3,)})  # both patterns, then the fees 5s, 4s and 3s
         self.assertEqual(replan.call_count, 5)
 
@@ -275,10 +275,10 @@ class FreeSkipTests(unittest.TestCase):
     def test_visit_count(self):
         from yap_forever.trips import visit_count
         base, inputs = AlternativeCapTests().setup()
-        # the rank training, five trips back for recipes, the vendor and the Favor trip
+        # the rank training, five trips back for recipes and the two vendor trips
         self.assertEqual(visit_count(base, inputs.gd, inputs.stock.skills), 8)
-        # in one go the trips back are folded into the rank visit and the vendor pattern is on its bring list
-        self.assertEqual(visit_count(base, inputs.gd, inputs.stock.skills, "one_go"), 2)
+        # in one go the trips back are folded into the rank visit and both vendor patterns are on its bring list
+        self.assertEqual(visit_count(base, inputs.gd, inputs.stock.skills, "one_go"), 1)
 
     def test_free_skip_adopted(self):
         from yap_forever.plan import plan_route
