@@ -25,7 +25,7 @@ player what changed, running the planner, and walking them through the result.
   `<planner> X`.
 - Commands: `init`, `check [--offline]`, `probe --item ID --buyout COPPER`, `prices`,
   `plan --character "FIRST LAST" --prof NAME:TARGET [--prof NAME:TARGET] [--budget GOLD]
-  [--order even|NAME,NAME]` (Forever character names are two words; quote them; `TARGET` is a
+  [--order even|NAME,NAME] [--pay upfront|as_you_go]` (Forever character names are two words; quote them; `TARGET` is a
   skill 1-300 or a recipe name).
 - The player's files are in `~/.yap-forever/` (or `$YAP_FOREVER_HOME`).
 - **Never open, print or ask for `credentials.json`.** The player pastes their API client ID and
@@ -56,8 +56,13 @@ when a question or answer needs it.
    me?", suggesting the `[gold]` amount of the character's ruleset and faction (`--budget GOLD`).
    With a budget and two crafting professions, ask: **raise both evenly or one at a time?** and, for
    one at a time, which first (`--order NAME,NAME`)
-   ([setup.md](references/setup.md), "A budget as a goal"). Save it under `[goals]` in `stock.toml`
-   if the player wants it kept. If Enchanting isn't in the plan, ask whether green crafts should be
+   ([setup.md](references/setup.md), "A budget as a goal"). With a budget, ask once: **Buy
+   everything before you start, or sell crafts to a vendor as you go? Selling as you go needs about Z
+   less up front.** Z is the "(Z less)" of the shopping list's line `If you sell crafts to a vendor as
+   you go ...` under "Gold to bring" after a first plan with that budget (it pays up front); with no
+   such line both ways need the same gold: don't ask, and keep the default. The answer is `pay`
+   (`"upfront"`, the default, or `"as_you_go"`; `--pay` for one run). Save it under `[goals]` in
+   `stock.toml` if the player wants it kept. If Enchanting isn't in the plan, ask whether green crafts should be
    kept to disenchant on another character or sold, and set `keep_greens`
    ([setup.md](references/setup.md), step 2, "Green crafts").
    When the goal takes two professions into Artisan stages whose trainers stand in two capitals

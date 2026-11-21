@@ -545,12 +545,37 @@ class PublishableTests(unittest.TestCase):
                      "route) and about <ah> more if the AH sales go through.",
                      "- **Back from selling crafts:** about <vendor> from vendors (counted in choosing the route).",
                      "`Back from vendors: <gold> (counted in choosing the route).`",
-                     "`AH sales on top: <gold> (not counted).`"):
+                     "`AH sales on top: <gold> (not counted).`",
+                     "(left out in choosing this route, to fit the budget)"):
             self.assertIn(line, layout)
         self.assertIn("each stop takes the route planned with what vendors pay back when its gold fits, else the route "
                       "planned without it when that one fits and gets each profession as far; the stop is reached when "
                       "either fits.", setup)
 
+
+    def test_docs_promise_two_ways_to_pay(self):
+        """#97 part 3: game-rules.md says what "Gold to bring" is and that selling crafts as you go needs less up front;
+        setup.md gives the `pay` key and flag, list-layout.md the shopping list's line, and SKILL.md asks the question
+        when the player gives a budget (tests/test_shopping.py AsYouGoTests, test_budget.py PayTests, test_config.py)."""
+        def read(name):
+            return " ".join((SKILL / name).read_text(encoding="utf-8").split())
+        rules, setup = read("references/game-rules.md"), read("references/setup.md")
+        layout, skill = read("references/list-layout.md"), read("SKILL.md")
+        section = rules[rules.index("## Selling crafts"):rules.index("## Merchant's Favor")]
+        self.assertIn("Gold to bring is the gold to buy everything before you start. Selling crafts to a vendor as you "
+                      "go needs less up front; the shopping list says how much, and a budget can use either (pay).",
+                      section)
+        for key in ('pay = "upfront"', '"as_you_go"', "--pay upfront|as_you_go"):
+            self.assertIn(key, setup)
+        from yap_forever.shopping import AS_YOU_GO_LINE
+        self.assertIn(AS_YOU_GO_LINE.format("<gold>", "<gold>"), layout)
+        step3 = skill[skill.index("3. **Ask the goal"):skill.index("4. **Refresh prices")]
+        self.assertIn("Buy everything before you start, or sell crafts to a vendor as you go? Selling as you go needs "
+                      "about Z less up front.", step3)
+        self.assertIn("`pay`", step3)
+        self.assertIn("[--pay upfront|as_you_go]", skill)
+        from yap_forever.config import PAYS
+        self.assertEqual(PAYS, ("upfront", "as_you_go"))
 
 if __name__ == "__main__":
     unittest.main()

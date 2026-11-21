@@ -69,6 +69,15 @@ Write it for that.
   sales, `- **Back from selling crafts:** about <vendor> from vendors (counted in choosing the
   route).`; its Net counts vendor sales only. The report's Totals say `Back from vendors: <gold>
   (counted in choosing the route).` and `AH sales on top: <gold> (not counted).`
+  On a budget's route planned without the vendor credit ([setup.md](setup.md), "A budget as a
+  goal"), both say `(left out in choosing this route, to fit the budget)` instead of `(counted in
+  choosing the route)`.
+- The shopping list's `**Gold to bring: <gold>**` is everything bought before you start. When selling
+  crafts to a vendor as you go needs less, the next line says `If you sell crafts to a vendor as you
+  go and buy each row's reagents when you reach it, about <gold> is enough up front (<gold> less).`:
+  the most you are short at any route row (what is bought up to the end of that row, with the
+  patterns and trainer fees met by then, less what vendors paid for the earlier rows' crafts, the
+  amounts the rows say). AH sales and disenchant materials never count.
 
 ## Trainer stages and trips
 
@@ -145,7 +154,7 @@ Write it for that.
   makes fewer trainer visits and pattern trips is left out of the route (trainer visits: rank
   trainings, trips back and capital stops; pattern trips: vendor and Favor trips). The route is
   planned again without it, at most three rounds, the recipes left out adding up, never the goal
-  recipe, and under a budget only when its "Gold to bring" still fits; the trips left out cost
+  recipe, and under a budget only when its gold ("Budget") still fits; the trips left out cost
   at most 0.5c more together, against the route as first planned, each skip is also within 0.5c
   of the route it starts from, and a route both guides share is planned without a trip only when
   it is free in both measures. The guide header (after the listing line) and the report's data
@@ -301,7 +310,8 @@ With a budget goal ([setup.md](setup.md), "A budget as a goal"), the guide says 
 and the report in its verdict, what the gold reaches, in one paragraph:
 
 - `<budget> takes <Profession> to <stop> (<gold>).`, the professions that advance joined with "and";
-  `<gold>` is the cut route's "Gold to bring". When no profession advances but one would with more
+  `<gold>` is the cut route's "Gold to bring" (with `pay = "as_you_go"`, the gold enough up front
+  selling crafts as you go: [setup.md](setup.md)). When no profession advances but one would with more
   gold: `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route section
   (guide and report) says `Nothing to craft within this budget.`, and the report's verdict gives only
   the budget paragraph, with no "Ready to level". When nothing advances because every target is
@@ -309,9 +319,9 @@ and the report in its verdict, what the gold reaches, in one paragraph:
   explain it.
 - A profession that can't advance: `<Profession> gets none of it: <why>.` (the stall reason).
 - Each profession with a stop above the cut: `The next stop, <Profession> <stop>, costs about <gold> more.`
-  (the route planned to that stop, its "Gold to bring" minus the cut route's). When that stop is where
-  the route stalls, below the target, the line ends `; the route stops there: <why>.` instead of the
-  full stop. No line when the budget reaches the target.
+  (the route planned to that stop, its gold counted the same way minus the cut route's). When that
+  stop is where the route stalls, below the target, the line ends `; the route stops there: <why>.`
+  instead of the full stop. No line when the budget reaches the target.
 - `<budget>` is the gold as given (`30g`, `12.5g`). The report's budget line ends with
   `; planned to your <budget> budget`.
 - A recipe target wins over the budget ([setup.md](setup.md)): with a budget set and a recipe target, the

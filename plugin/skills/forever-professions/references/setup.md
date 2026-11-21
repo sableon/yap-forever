@@ -133,6 +133,7 @@ blacksmithing = 225
 enchanting = "Enchant Bracer - Minor Health"
 # budget = 20        # optional: plan only as far as 20 gold reaches (see "A budget as a goal")
 # budget_order = "even"  # with two professions: "even", or one at a time: ["blacksmithing", "enchanting"]
+# pay = "upfront"   # with a budget: buy everything before you start, or "as_you_go" (see "A budget as a goal")
 [skills]             # current profession skills; the plan starts here (absent = 1)
 blacksmithing = 120
 enchanting = 95
@@ -145,9 +146,13 @@ enchanting = 95
 **A budget as a goal.** "How far does 20g get me?": `budget = 20` under `[goals]` (gold, a number, 0
 or more), or `plan --budget GOLD` for one run (the flag wins over the key). Each profession's target
 still bounds the route; the route ends at the last stop the gold reaches. Stops are the rank caps
-75, 150, 225 and 300 and the profession's own target. The gold a stop needs is the shopping list's
-"Gold to bring" (whole crafts with the buffer, patterns and trainer fees), so the list fits the budget.
-A craft's vendor price makes a route cheaper in the end but can make it need more gold up front, so
+75, 150, 225 and 300 and the profession's own target. The gold a stop needs is set by `pay` under
+`[goals]` (or `plan --pay upfront|as_you_go` for one run; the flag wins over the key; it goes with a
+budget): `pay = "upfront"` (the default) takes the shopping list's "Gold to bring" (whole crafts with
+the buffer, patterns and trainer fees, everything bought before you start), so the list fits the
+budget; `"as_you_go"` takes the gold enough up front when you sell crafts to a vendor as you go and buy
+each row's reagents when you reach it (the line under "Gold to bring"; AH sales never count). A
+craft's vendor price makes a route cheaper in the end but can make it need more of that gold, so
 each stop takes the route planned with what vendors pay back when its gold fits, else the route
 planned without it when that one fits and gets each profession as far; the stop is reached when
 either fits.
