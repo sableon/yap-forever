@@ -244,13 +244,25 @@ class PublishableTests(unittest.TestCase):
                      "first craft <n> <item> (your <Profession>)",
                      "<budget> covers one <recipe> (<gold>); your <Profession> <skill> already meets its "
                      "<recipe skill>.",
-                     "the goal stop's line ends `; the route stops there: <why>.`"):
+                     "the goal stop's line ends `; the route stops there: <why>.`",
+                     # final review, Important 2, Minors 7 and 9 (tests/test_budget.py GoalCraftFailsTests,
+                     # RecipeGoalReportsTests; tests/test_cli.py test_cli_prints_budget_lines)
+                     "the `takes` line when the cut takes the goal stop",
+                     "`<budget> doesn't cover one <recipe>; your <Profession> <skill> already meets its <recipe "
+                     "skill>; the route stops there: <why>.`",
+                     "`The route stops at <Profession> <skill>: <why>.`",
+                     "that line ends `; a trip's bring list is bought before the trip and can need more.` instead of "
+                     "the full stop (after `; the route stops there: <why>` when both are said)",
+                     "The plan command prints the budget lines after the comparison too, for every budget"):
             self.assertIn(line, layout)
+        self.assertNotIn("With a recipe target the plan command prints", layout)
         for text in (setup, layout, skill):
             self.assertNotIn("not applied", text)
         for promise in ("covers that profession's goal", "is not planned with the budget", "is one stop, the craft",
                         "first craft <n> <item> (your <Profession>)",
-                        "Two recipe targets are cut like two skill targets", "not counted in \"Gold to bring\""):
+                        "Two recipe targets are cut like two skill targets", "not counted in \"Gold to bring\"",
+                        "(or why the route can't craft it, for example too little Favor, also when the skill is "
+                        "already there)", "The plan output, the guide and the report say what the budget reaches"):
             self.assertIn(promise, setup)
         self.assertIn("A budget covers a recipe goal too", step3)
         self.assertIn("the other profession's skill target isn't planned while the budget goes to the recipe goal "

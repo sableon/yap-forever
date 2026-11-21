@@ -320,7 +320,10 @@ and the report in its verdict, what the gold reaches, in one paragraph:
 - `<budget> takes <Profession> to <stop> (<gold>).`, the professions that advance joined with "and";
   `<gold>` is the cut route's "Gold to bring". With `pay = "as_you_go"` it is the gold enough up front
   selling crafts as you go ([setup.md](setup.md)), and the line reads `<budget> takes <Profession> to
-  <stop> (<gold>, selling crafts to a vendor as you go).` When no profession advances but one would
+  <stop> (<gold>, selling crafts to a vendor as you go).` When the route has a trip with a bring list
+  (a remote trainer's), that line ends `; a trip's bring list is bought before the trip and can need
+  more.` instead of the full stop (after `; the route stops there: <why>` when both are said). When no
+  profession advances but one would
   with more gold: `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route section
   (guide and report) says `Nothing to craft within this budget.`, and the report's verdict gives only
   the budget paragraph, with no "Ready to level". When nothing advances because every target is
@@ -343,11 +346,16 @@ and the report in its verdict, what the gold reaches, in one paragraph:
   already meets its <recipe skill>.` (in a line with two goals, that goal's part reads `one <recipe>` and the
   `; your ... already meets its ...` clause comes after the gold). When the goal's route can't craft it for a
   reason gold doesn't change (too little Favor, a tool, materials), the goal stop's line ends `; the route stops
-  there: <why>.` A skill target next to it: `<Profession> is not planned with this budget: it goes to the <Profession> goal.`
-  Another of your characters who can make an item the route buys on the AH for less, by the craft margin:
-  `Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; the gold to
-  bring doesn't count that.` (after the budget lines). With a recipe target the plan command prints these
-  lines after the comparison too (once, or after `Least gold:` and `Least total value:` when the routes
-  differ).
+  there: <why>.`: the next stop's line when the goal is the next stop, the `takes` line when the cut takes the
+  goal stop. When the character already has the recipe's skill: `<budget> doesn't cover one <recipe>; your
+  <Profession> <skill> already meets its <recipe skill>; the route stops there: <why>.` When the goal is two or
+  more stops above the cut, after the next stop's line: `The route stops at <Profession> <skill>: <why>.`
+  A skill target next to it: `<Profession> is not planned with this budget: it goes to the <Profession>
+  goal.` Another of your characters who can make an item the route buys on the AH for less, by the craft
+  margin: `Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; the
+  gold to bring doesn't count that.` (after the budget lines).
+- The plan command prints the budget lines after the comparison too, for every budget (once, or after
+  `Least gold:` and `Least total value:` when the routes differ), so a budget below the first stop says so
+  there and not only in the files.
 - Two professions one at a time: the intro says `Level one profession at a time: <first> first, then <second>.`
   instead of "Level both professions side by side".

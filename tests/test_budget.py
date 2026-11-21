@@ -726,6 +726,54 @@ class RecipeGoalTests(unittest.TestCase):
                           "route stops there: can't learn BS goal: not enough Favor (500)."])
 
 
+def favor_goal_inputs(**kw):
+    """goal_inputs where "BS goal" is a Merchant's Favor recipe for 500 Favor and the character has none: its route
+    reaches the goal's skill but can't craft it."""
+    import dataclasses
+
+    from yap_forever.favor import FavorData
+    i = goal_inputs(**kw)
+    i.gd.recipes[GOAL] = dataclasses.replace(i.gd.recipes[GOAL], source="scroll", scroll_item=toy.SCROLL)
+    return dataclasses.replace(i, favor=FavorData({GOAL: 500}, {GOAL: 100}))
+
+
+class GoalCraftFailsTests(unittest.TestCase):
+    """Final review, Important 2: a budget whose route reaches the goal's skill (or starts there) but can't craft the
+    recipe says why, with the "; the route stops there: <why>" tail; and so does a goal two or more stops above the
+    cut."""
+    WHY = "can't learn BS goal: not enough Favor (500)"
+
+    def test_goal_stop_taken(self):
+        c = cut(favor_goal_inputs(), 3)  # the gold reaches the goal stop; the route is the one to 100, no craft
+        self.assertEqual((c.caps, c.covered, c.next_stop), ({BS: 100}, set(), {}))
+        self.assertEqual(budget.lines(c, Budget(3)),
+                         [f"3g takes Blacksmithing to 100 ({gold(TO_GOAL - 100)}); the route stops there: {self.WHY}."])
+
+    def test_skill_already_there(self):
+        c = cut(favor_goal_inputs(skills={BS: 120}), 1)  # before: no line at all, and an empty route
+        self.assertEqual((c.plan.steps, c.covered, c.below_first_stop), ([], set(), False))
+        self.assertEqual(budget.lines(c, Budget(1)),
+                         [f"1g doesn't cover one BS goal; your Blacksmithing 120 already meets its 100; the route stops "
+                          f"there: {self.WHY}."])
+
+    def test_goal_two_stops_above(self):
+        # stops 75, 150 and the goal at 160: the next stop is 150, and the goal's reason has a line of its own
+        said = budget.lines(cut(favor_goal_inputs(req=160), 1), Budget(1))
+        self.assertEqual(said, [f"1g takes Blacksmithing to 75 ({gold(TO_75)}).",
+                                f"The next stop, Blacksmithing 150, costs about {gold(TO_150 - TO_75)} more.",
+                                f"The route stops at Blacksmithing 160: {self.WHY}."])
+
+    def test_with_the_bring_list_tail(self):
+        # Minor 7 with the stop's reason on one line: the reason first, then the bring list's
+        c = budget.cut(favor_goal_inputs(), "gold", Budget(3, pay="as_you_go"))
+        self.assertEqual(budget.lines(c, Budget(3, pay="as_you_go"), bring=True),
+                         [f"3g takes Blacksmithing to 100 ({gold(TO_GOAL - 100)}, selling crafts to a vendor as you "
+                          f"go); the route stops there: {self.WHY}; a trip's bring list is bought before the trip and "
+                          "can need more."])
+        up = cut(favor_goal_inputs(), 3)  # paying up front, "Gold to bring" already counts the bring lists
+        self.assertNotIn("bring list", " ".join(budget.lines(up, Budget(3), bring=True)))
+
+
 class RecipeGoalReportsTests(unittest.TestCase):
     """#96 through write_reports: the budget lines of a recipe goal in the guide, the report and the comparison the
     plan command prints; a skill target next to it is not planned."""
@@ -875,6 +923,44 @@ class RecipeGoalReportsTests(unittest.TestCase):
                 table, _texts = self.reports(Budget(2), goals)
                 self.assertEqual({tuple(c.args[0].fixed.items()) for c in made.call_args_list}, {tuple(fixed.items())})
                 self.assertIn("Enchanting is not planned with this budget", table)
+
+    def test_goal_craft_fails_said_everywhere(self):
+        # Important 2 through write_reports: stdout (the comparison returned), the guide header and the report verdict
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Goal
+        why = "can't learn BS goal: not enough Favor (500)"
+        self.gd = favor_goal_inputs(recipes=[toy.recipe(2, "Ench shard", ENCH, {toy.SHARD: 1})]).gd
+        for skills, line in (("", f"3g takes Blacksmithing to 100 ({gold(TO_GOAL - 100)}); the route stops there: "
+                                  f"{why}."),
+                             ("blacksmithing = 120\n", "3g doesn't cover one BS goal; your Blacksmithing 120 already "
+                                                       f"meets its 100; the route stops there: {why}.")):
+            self.stock.write_text(f"level = 60\n[items]\n\n[skills]\n{skills}", encoding="utf-8")
+            with self.subTest(skills=skills), \
+                    mock.patch.object(plan_mod, "load_favor", return_value=favor_goal_inputs().favor):
+                table, texts = self.reports(Budget(3), {BS: Goal(recipe="BS goal")})
+                self.assertTrue(table.endswith(f"\n\n{line}"), table[-300:])
+                for m in ("gold", "value"):
+                    guide, report = texts[f"guide-{m}"], texts[f"plan-{m}"]
+                    self.assertEqual(guide[:guide.index("## ")].count(line), 1, m)
+                    verdict = report[report.index("## Verdict"):].split("\n## ")[0]
+                    self.assertEqual(verdict.count(line), 1, m)
+
+    def test_as_you_go_line_names_the_bring_list(self):
+        # Minor 7 through write_reports: the as-you-go line says a bring list can need more when the route has one
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Goal
+        covers = f"2g covers Blacksmithing to 100 and one BS goal ({gold(TO_GOAL)}, selling crafts to a vendor as you go)"
+        for bring in (False, True):
+            with self.subTest(bring=bring), mock.patch.object(plan_mod, "has_bring_list", return_value=bring) as has:
+                table, texts = self.reports(Budget(2, pay="as_you_go"), {BS: Goal(recipe="BS goal")})
+                tail = "; a trip's bring list is bought before the trip and can need more." if bring else "."
+                self.assertTrue(table.endswith(f"\n\n{covers}{tail}"), table[-300:])
+                self.assertIn(f"{covers}{tail}", texts["guide-gold"])
+                self.assertTrue(has.called)
 
     def test_said_once_labels_routes_that_differ(self):
         from yap_forever.plan import _said_once

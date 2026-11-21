@@ -532,9 +532,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(out.count(line), 1, out)
         self.assertNotIn("Enchanting gets none of it", out)
         code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20",
-                         "--prof", "enchanting:20"], self.paths)  # skill targets only: the comparison as before
+                         "--prof", "enchanting:20"], self.paths)  # skill targets: the budget lines too (Minor 9)
         self.assertEqual(code, 0, out)
-        self.assertNotIn("12.5g", out)
+        line = "12.5g takes Blacksmithing to 20 (4s). Enchanting gets none of it: no usable recipe at 1."
+        self.assertEqual(out.count(line), 1, out)
+        self.assertLess(out.index("both guides are the same route."), out.index(line))
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20", "--budget", "0"],
+                        self.paths)  # below the first stop: stdout is no longer a bare table of zeros
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.count("0g doesn't reach the first stop: nothing is planned yet. The next stop, "
+                                   "Blacksmithing 20, costs about "), 1, out)
         stock.write_text("level = 20\n[items]\n", encoding="utf-8")
         code, out = run(me, self.paths)  # no budget, nothing to say
         self.assertEqual(code, 0, out)

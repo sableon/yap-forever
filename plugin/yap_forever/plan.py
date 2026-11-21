@@ -17,7 +17,7 @@ from yap_forever.profile import CAPITAL_NAMES, report_name
 from yap_forever.quests import QuestPlan, load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
-from yap_forever.shopping import render_shopping
+from yap_forever.shopping import has_bring_list, render_shopping
 from yap_forever.trips import (AS_NEEDED, FREE_SKIP, MAX_TRIP_ALTS, Trip, alternatives, route_capitals,
                                trip_alternatives, visit_count)
 
@@ -321,7 +321,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         skips = [free_skip_line(t, gd, trainer_info, homes[m]) for t in left]
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
-        said = ([*budget_cut.lines(cuts[m], target), *aside,
+        bring = has_bring_list(route, gd, stock, trainer_trips, capitals, homes[m]) if m in cuts else False
+        said = ([*budget_cut.lines(cuts[m], target, bring), *aside,
                   *(alt_suggestions(route, gd, market, stock, mates, known) if mates else ())] if m in cuts else [])
         said_of[m] = said
         empty = m in cuts and cuts[m].below_first_stop
@@ -343,8 +344,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                                     *level_note]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
-    if once and cuts and (told := _said_once(said_of)):  # #96: the plan command prints what the budget covers, after
-        table += "\n\n" + told  # the guides have the table
+    if cuts and (told := _said_once(said_of)):  # the plan command prints what the budget reaches or covers (#96),
+        table += "\n\n" + told  # after the guides have the table
     return table, files
 
 
