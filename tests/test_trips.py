@@ -466,6 +466,8 @@ class HomeCapitalTests(unittest.TestCase):
         self.assertIsNone(self.home([(ENCH, 125, 225), (BS, 50, 150)]))
         self.assertIsNone(self.home([(ENG, 125, 225)], caps={}))  # no trainer data (RF2)
         self.assertIsNone(self.home([(ENG, 125, 225)], caps={}, capital="ironforge"))
+        # a route with no stage in a capital has no home, whatever the key says: rows say "any capital" as before
+        self.assertIsNone(self.home([(ENCH, 125, 225), (BS, 50, 150)], capital="ironforge"))
 
 
 def capital_route():

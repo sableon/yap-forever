@@ -47,12 +47,14 @@ def home_capital(stage_caps: dict[tuple[int, int], int], plan, character,
                  start_skills: dict[int, int] | None = None) -> int | None:
     """The capital zone the guide starts in and levels its stages in (#98): the character's `capital`, else the only
     capital the route's stages need, else the one whose stage the route reaches first (trips.route_capitals).
-    None without stage capitals (no trainer data or faction, RF2) or when the route has no stage in a capital."""
-    if not stage_caps:
+    None without stage capitals (no trainer data or faction, RF2) or when the route has no stage in a capital, the key
+    set or not."""
+    needed = route_capitals(stage_caps or {}, plan, start_skills or {})
+    if not needed:
         return None
     if character is not None and character.capital:
         return CAPITAL_NAMES[character.capital]
-    return next(iter(route_capitals(stage_caps, plan, start_skills or {})), None)
+    return next(iter(needed))
 
 
 def unit_value(item: int, gd, market) -> float:
