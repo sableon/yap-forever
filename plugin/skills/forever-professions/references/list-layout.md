@@ -58,8 +58,8 @@ Write it for that.
   the vendor price × the crafts the planner expects for the row, in whole crafts (without the buffer
   the row's `×N` includes) × the output, less the crafts sold on the AH, which go to the item's first
   rows. A row the AH takes whole, one whose craft a vendor pays nothing for and the AH-only quest
-  form (`→ sell on the AH (quest item, about <price> each)`) get no amount. The rows add up to the
-  vendors' total within about a craft each.
+  form (`→ sell on the AH (quest item, about <price> each)`) get no amount. For a craft the route
+  only sells, its rows add up to what vendors pay back for it within about a craft each.
 - The comparison table gives `Gold out of pocket`, `Back from a vendor`, `Total value` (vendor sales
   only) and `AH sales on top` (`—` when there are none), and ends with `Least gold is the gold out of
   pocket less what vendors pay back for the crafts. AH sales of crafts are not counted in choosing a

@@ -418,6 +418,23 @@ class UncreditedFallbackTests(unittest.TestCase):
             plan_mod.listed_savings(i, {"gold": uncredited["gold"], "value": route(i, {BS: 75}, "value")})
         self.assertEqual(sorted(c.kwargs.get("vendor_credit", True) for c in made.call_args_list), [False, True])
 
+    def test_uncredited_route_that_stops_short_is_not_taken(self):
+        # the route without the credit needs less gold but stalls at 60, below the stop at 75: the stop stays on the
+        # credited route, which misses the budget, so nothing is planned and the next stop costs the credited gold
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.planner import Plan
+
+        def planned(sub, vendor_credit=True):
+            skill = sub.caps[BS] if vendor_credit else min(60, sub.caps[BS])
+            cost = 0 if sub.caps[BS] == 1 else 20000 if vendor_credit else 500
+            return [Plan(final_skill={BS: skill}, cash_total=cost, vendor_credit=vendor_credit)]
+        i = inputs(bs_only(), {BS: 75})
+        with mock.patch.object(plan_mod, "candidates", side_effect=planned):
+            c = budget.cut(i, "gold", Budget(1), lambda p: p.cash_total)
+        self.assertEqual((c.caps, c.credited, c.next_stop), ({BS: 1}, True, {BS: (75, 20000)}))
+
 
 if __name__ == "__main__":
     unittest.main()

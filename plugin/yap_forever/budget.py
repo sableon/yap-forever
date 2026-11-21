@@ -89,7 +89,8 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
     of each profession is the one that doesn't: its cost is that route's gold minus the cut route's.
     The route to a set of caps is the mode's route planned with the vendor credit when its gold fits, else the one
     planned without it (plan.candidates(..., vendor_credit=False), settled by the same measure) when that fits; when
-    neither fits, the one that needs less gold, which is what the stop costs.
+    neither fits, the one that needs less gold, which is what the stop costs. The one without the credit is taken only
+    when it gets each profession as far as the credited one does.
     inputs: plan.PlanInputs with the targets as caps (a recipe goal is not cut: the caller plans it in full).
     cache: caps key -> (routes, same, the routes without the vendor credit or None) from compare.settle_routes,
     shared by both modes' cuts (planning a set of caps takes seconds); give it the routes to the targets when the
@@ -139,7 +140,8 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
 
     def plan_at(level):
         caps = caps_at(level)
-        credited = gold_at(caps, True) <= limit or gold_at(caps, False) >= gold_at(caps, True)
+        credited = (gold_at(caps, True) <= limit or gold_at(caps, False) >= gold_at(caps, True)
+                    or not _as_far(routes(caps, False)[mode], routes(caps)[mode], caps))
         p = routes(caps, credited)[mode]
         held = _held(caps, start, [x for x in caps if start[x] < target[x]])
         p.events = [e for e in p.events if e not in held]  # held at the start by the budget: not a target reached
@@ -183,6 +185,11 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
                 break
     next_stop = {p: (stops[p][level[p]], plan_at(more(p))[1] - spent) for p in target if left(p)}
     return BudgetCut(reached(level), plan, spent, next_stop, stalled, caps_at(level), start, early, plan.vendor_credit)
+
+
+def _as_far(p: Plan, than: Plan, caps: dict[int, int]) -> bool:
+    """p gets every profession in caps at least as far as `than` does."""
+    return all(p.final_skill.get(x, 0) >= than.final_skill.get(x, 0) for x in caps)
 
 
 def amount(budget: Budget) -> str:
