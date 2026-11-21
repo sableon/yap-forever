@@ -74,6 +74,19 @@ class CutTests(unittest.TestCase):
         self.assertEqual(c.next_stop, {BS: (75, TO_75)})
         self.assertFalse(any("already at" in e for e in c.plan.events))  # the target is not reached
 
+    def test_cut_leaves_the_cached_routes_alone(self):
+        # final review, Minor 12: the cut route drops the "already at" event in a copy; the route planned to the caps
+        # stays in the cache as it was, and both modes' cuts on one shared route get the same copy
+        i = inputs(bs_only(), {BS: 225})
+        cache: dict = {}
+        cuts = {m: budget.cut(i, m, Budget(0.5), gold_of(i), cache) for m in ("gold", "value")}
+        (routes, same, _bare), = [v for k, v in cache.items() if k == budget.key({BS: 1})]
+        self.assertTrue(same)
+        self.assertIn("Blacksmithing already at 1", routes["gold"].events)
+        self.assertFalse(any("already at" in e for e in cuts["gold"].plan.events))
+        self.assertIsNot(cuts["gold"].plan, routes["gold"])
+        self.assertIs(cuts["gold"].plan, cuts["value"].plan)
+
     def test_budget_between_stops(self):
         i = inputs(bs_only(), {BS: 225})
         c = cut(i, 1.6)

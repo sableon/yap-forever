@@ -127,7 +127,8 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
     whose last stop is its recipe's skill with the recipe crafted once: only that stop's route crafts it, so a lower
     stop has no "did not reach" stall. A recipe whose skill the character already has is one stop, the craft.
     cache: key(caps, goal recipes crafted once) -> (routes, same, the routes without the vendor credit or None) from
-    compare.settle_routes, and ("gold", mode, that key, credited, budget.pay) -> that route's gold,
+    compare.settle_routes, ("gold", mode, that key, credited, budget.pay) -> that route's gold, and ("held", that key,
+    credited, id(route)) -> the route without the "already at" events of the professions the budget holds (a copy),
     shared by both modes' cuts (planning a set of caps takes seconds); give it the routes to the targets when the
     caller has them. The routes without the credit are planned only when a credited route misses the budget."""
     from yap_forever.plan import candidates  # plan imports this module
@@ -194,7 +195,12 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
                     or not _as_far(routes(caps, crafts, False)[mode], routes(caps, crafts)[mode], caps, crafts))
         p = routes(caps, crafts, credited)[mode]
         held = _held(caps, start, [x for x in caps if start[x] < target[x] or x in once], crafts)
-        p.events = [e for e in p.events if e not in held]  # held at the start by the budget: not a target reached
+        if held & set(p.events):  # held at the start by the budget: not a target reached. In a copy, as adopt does:
+            # p is cached (and may be the caller's); kept in the cache, so a route both modes share stays one route
+            k = ("held", key(caps, crafts), credited, id(p))
+            if k not in cache:
+                cache[k] = dataclasses.replace(p, events=[e for e in p.events if e not in held])
+            p = cache[k]
         return p, gold_at(caps, crafts, credited)
 
     def made(level, plan, spent, next_stop):
