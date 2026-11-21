@@ -11,6 +11,7 @@ from pathlib import Path
 from collections.abc import Iterable
 
 from yap_forever.settings import command_hint
+from yap_forever.trainers import CAPITALS
 
 STANDINGS = ("Neutral", "Friendly", "Honored", "Revered", "Exalted")
 REGIONS = ("eu", "us", "kr", "tw")
@@ -18,6 +19,10 @@ FACTIONS = ("alliance", "horde")
 OVERTIME_READINGS = ("relative", "points")
 MAX_OVERTIME = 5
 TRAINER_TRIPS = ("as_needed", "one_go")  # how a route uses a remote trainer: come back as needed, or level there in one go
+# The capitals a character's `capital` key can name, with their AreaTable zone IDs (Alliance, then Horde): where the
+# guide starts and levels a stage whose trainers stand in that capital (trainer_text.stage_capitals, plan.home_capital).
+CAPITAL_NAMES = {"stormwind": 1519, "ironforge": 1537, "darnassus": 1657,
+                 "orgrimmar": 1637, "thunder_bluff": 1638, "undercity": 1497}
 
 
 @dataclass
@@ -29,6 +34,7 @@ class Character:
     ruleset: int | None = None  # None = the profile's ruleset
     faction: str | None = None  # None = the profile's faction
     trainer_trips: str = "as_needed"  # "as_needed" or "one_go" (see trips.visits)
+    capital: str | None = None  # a CAPITAL_NAMES key: where the guide starts; None = plan.home_capital's default
 
 
 @dataclass
@@ -121,6 +127,11 @@ def _gold_table(table) -> dict[tuple[int, str], float]:
     return out
 
 
+def capital_names(faction: str) -> tuple[str, ...]:
+    """The `capital` values a character of `faction` can use: its faction's capitals, or all six without a faction."""
+    return tuple(n for n, zone in CAPITAL_NAMES.items() if faction not in CAPITALS or zone in CAPITALS[faction])
+
+
 def load_profile(path: Path) -> Profile:
     path = Path(path)
     if not path.exists():
@@ -151,7 +162,10 @@ def load_profile(path: Path) -> Profile:
             _check(f"characters.{name}.faction", own_faction, FACTIONS)
         trips = c.get("trainer_trips", "as_needed")
         _check(f"characters.{name}.trainer_trips", trips, TRAINER_TRIPS)
-        chars[name] = Character(name, standing, overtime, study, own_ruleset, own_faction, trips)
+        capital = c.get("capital")
+        if "capital" in c:  # checked against the faction the character plays (its own, else the profile's)
+            _check(f"characters.{name}.capital", capital, capital_names(own_faction or faction))
+        chars[name] = Character(name, standing, overtime, study, own_ruleset, own_faction, trips, capital)
     return Profile(region, int(d.get("ruleset", 2)), faction, chars, reading, hint,
                    _gold_table(d["gold"]) if "gold" in d else {})
 

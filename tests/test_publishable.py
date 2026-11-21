@@ -388,6 +388,70 @@ class PublishableTests(unittest.TestCase):
         self.assertIn("never used to level", coverage)
         self.assertIn("You could also make", coverage)
 
+    def test_docs_promise_capital_key(self):
+        """#98 (C25): setup.md gives the `capital` key, its six values by faction (profile.CAPITAL_NAMES, capital_names)
+        and its default (plan.home_capital; tests/test_profile.py, test_trips.py HomeCapitalTests and
+        CapitalStopTests, test_guide.py CapitalGuideTests, test_compare.py)."""
+        from yap_forever.profile import Character, capital_names
+
+        setup = " ".join((SKILL / "references" / "setup.md").read_text(encoding="utf-8").split())
+
+        def choices(faction):
+            names = [f'`"{n}"`' for n in capital_names(faction)]
+            return ", ".join(names[:-1]) + " or " + names[-1]
+        self.assertEqual(len(capital_names("alliance") + capital_names("horde")), 6)
+        self.assertIsNone(Character("Ana Brightforge").capital)
+        for line in ("Optional per character: `capital`, the capital the guide starts in (every capital has an AH, "
+                     "mailbox and bank):",
+                     f"{choices('alliance')} for Alliance, {choices('horde')} for Horde; another faction's capital, "
+                     "or any other value, is refused.",
+                     "Left out (default), the guide starts in the only capital the route's stages need",
+                     "or, when two professions point to two capitals, in the one whose stage the route reaches first, "
+                     "and it says how to start in the other",
+                     "are capital stops, not trips, with no bring list, whatever `trainer_trips`",
+                     "The other capital follows `trainer_trips`",
+                     "Remote trainers (every Master, the Artisan Enchanters) stay trips.",
+                     '"Trips away" counts the trips outside the capital the guide starts in.'):
+            self.assertIn(line, setup)
+
+    def test_docs_promise_home_capital(self):
+        """#98: list-layout.md gives the rows the guide prints for the home capital and the other one, and game-rules.md
+        where the Artisans and Masters stand (tests/test_guide.py CapitalGuideTests, test_trips.py CapitalStopTests,
+        test_trainers.py StageCapitalTests)."""
+        def read(name):
+            return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
+        layout, rules = read("list-layout.md"), read("game-rules.md")
+        for line in ("every capital has an AH, mailbox and bank, so the player starts there",
+                     "`Level <Profession> <from>–<to> in <City>: the <Rank> <Person> <name> (x, y) is there, with the "
+                     "AH, mailbox and bank.` and the city's tip",
+                     "In that capital the rank training and every visit back for recipes are stops, not trips, with no "
+                     "bring list, as needed and in one go (one go never folds them)",
+                     "`- At <skill>, in <City>: train <Profession> to <cap> at <name>.`",
+                     "`- At <skill>, in <City>: learn <recipes> at <name>`, then the skip clause and a full stop.",
+                     "`Planned without the stop at <skill> in <City> for <recipes>: the route without it costs the "
+                     "same.`",
+                     "`- At <skill>, learn <recipes> at any <Rank> <Person> in <City>.`",
+                     "Its trip rows have no bring list and end `<City> has an AH, mailbox and bank: buy as you go "
+                     "there.` and the city's tip.",
+                     "`This route's <Rank> trainers are in <City A> (<Profession A>) and <City B> (<Profession B>). "
+                     "This guide starts in <City A>; to start in <City B>, set capital = \"<key>\" for this "
+                     "character in profile.toml.`",
+                     "\"Trips away\" counts only the trips outside the home capital.",
+                     "Remote trainers (every Master, the Artisan Enchanters) stay trips with their bring lists."):
+            self.assertIn(line, layout)
+        for line in ("every Master trainer stands outside the capitals, for both factions, and so do the Artisan "
+                     "Enchanters (Elwynn Forest, Stonetalon Mountains)",
+                     "for Alliance, Alchemy and Leatherworking in Darnassus, Blacksmithing and Engineering in Ironforge, "
+                     "Tailoring in Stormwind; for Horde, Alchemy and Tailoring in Undercity, Blacksmithing and "
+                     "Engineering in Orgrimmar, Leatherworking in Thunder Bluff.",
+                     "Every capital has an AH, mailbox and bank, so the guide levels the stage of the capital it "
+                     "starts in (the home capital) there; a stage in the other capital follows `trainer_trips`",
+                     "Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no Engineering one."):
+            self.assertIn(line, rules)
+        coverage = read("coverage.md")
+        self.assertIn("an Artisan stage in the home capital is levelled there, its visits are capital stops, not trips away",
+                      coverage)
+
 
 if __name__ == "__main__":
     unittest.main()

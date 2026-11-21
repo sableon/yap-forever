@@ -268,7 +268,7 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None, budge
     try:
         me = prof.characters[character]
         table, files = plan.write_reports(paths, stock, me.favor_standing, goals, me, prof.overtime_reading,
-                                          faction=prof.faction, profile_names=list(prof.characters),
+                                          faction=me.faction or prof.faction, profile_names=list(prof.characters),
                                           study_hint_gold_per_point=prof.study_hint_gold_per_point,
                                           group=shared.load_group(paths, prof, character), target=target)
     except (urllib.error.URLError, TimeoutError) as e:

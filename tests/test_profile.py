@@ -190,6 +190,36 @@ class ProfileTests(unittest.TestCase):
                 self.assertIn("profile.toml", str(cm.exception))
                 self.assertIn("as_needed, one_go", str(cm.exception))
 
+    def test_capital_key_parsed(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = profile.load_profile(write(d, EXAMPLE + 'capital = "darnassus"\n'))
+            self.assertEqual(prof.characters["Main"].capital, "darnassus")
+            self.assertIsNone(profile.load_profile(write(d, EXAMPLE)).characters["Main"].capital)  # absent: the default
+        self.assertEqual(profile.CAPITAL_NAMES, {"stormwind": 1519, "ironforge": 1537, "darnassus": 1657,
+                                                 "orgrimmar": 1637, "thunder_bluff": 1638, "undercity": 1497})
+
+    def test_bad_capital_names_key_and_choices(self):
+        for bad in ('"exodar"', '"Ironforge"', "1"):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ValueError) as cm:
+                    profile.load_profile(write(d, EXAMPLE + f"capital = {bad}\n"))
+                self.assertIn("characters.Main.capital", str(cm.exception))
+                self.assertIn("profile.toml", str(cm.exception))
+                self.assertIn("stormwind, ironforge, darnassus", str(cm.exception))
+
+    def test_capital_of_other_faction_refused(self):  # RF1, C20: the character's own faction wins
+        text = EXAMPLE + 'faction = "horde"\ncapital = "ironforge"\n'
+        with tempfile.TemporaryDirectory() as d, self.assertRaises(ValueError) as cm:
+            profile.load_profile(write(d, text))
+        self.assertIn("characters.Main.capital = 'ironforge'", str(cm.exception))
+        self.assertIn("orgrimmar, thunder_bluff, undercity", str(cm.exception))
+        self.assertNotIn("stormwind", str(cm.exception))
+        with tempfile.TemporaryDirectory() as d:  # a Horde character's own capital is accepted
+            text = EXAMPLE + 'faction = "horde"\ncapital = "thunder_bluff"\n'
+            self.assertEqual(profile.load_profile(write(d, text)).characters["Main"].capital, "thunder_bluff")
+        self.assertEqual(profile.capital_names("alliance"), ("stormwind", "ironforge", "darnassus"))
+        self.assertEqual(profile.capital_names(""), tuple(profile.CAPITAL_NAMES))  # no faction: any of the six (RF2)
+
 
 class ApiShapeTests(unittest.TestCase):
     def test_namespace_us(self):

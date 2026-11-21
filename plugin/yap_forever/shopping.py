@@ -14,7 +14,7 @@ from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.shared import allocate
-from yap_forever.trips import AS_NEEDED, ONE_GO, stretch_end, stretch_patterns, visits
+from yap_forever.trips import AS_NEEDED, ONE_GO, capital_trip, stretch_end, stretch_patterns, visits
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
 BRING_POINTS = 25  # without a bag count, bring enough for this many points (or to the stage end)
@@ -604,11 +604,15 @@ def _made_later_text(gd, items, market) -> str:
 
 def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
                services_known: bool = False, start_skills: dict[int, int] | None = None,
-               trainer_trips: str = AS_NEEDED, market=None) -> str:
+               trainer_trips: str = AS_NEEDED, market=None, home: int | None = None) -> str:
     """services_known: the row already says what is near the trainer (or that it is a capital).
     start_skills, trainer_trips: see bring_list. With bag_slots, a list that doesn't fit in them (CRAFT_ROOM kept
     free, the reagent bag taking reagents first) says so, with the highest skill whose list fits. market: today's
-    prices, for what the items your other profession makes later would cost on the AH (one go)."""
+    prices, for what the items your other profession makes later would cost on the AH (one go). home: the capital the
+    guide starts in; a trip to a capital's trainer then gets none (trips.capital_trip): the AH, mailbox and bank are
+    there, and the guide says so."""
+    if capital_trip(trip.visit, home):
+        return ""
     reagents = reagent_items(gd) if reagent_slots else None
     rows, left, mail, ctx = _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills,
                                         trainer_trips)

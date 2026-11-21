@@ -540,6 +540,24 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertNotIn("not applied", out)
 
+    def test_plan_passes_the_characters_own_faction(self):
+        # C20: the faction write_reports names trainers and capitals for is the character's own, else the profile's.
+        # The group check refuses a character on another faction's prices today, so it is bypassed here.
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod, profile
+        self.ready_home()
+        with mock.patch.object(plan_mod, "write_reports", return_value=("table", {})) as w:
+            run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+            self.assertEqual(w.call_args.kwargs["faction"], "alliance")
+            text = self.paths.profile.read_text(encoding="utf-8")
+            self.paths.profile.write_text(text + 'faction = "horde"\ncapital = "undercity"\n', encoding="utf-8")
+            with mock.patch.object(profile.Profile, "group_of", return_value=(2, "alliance")):
+                code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"],
+                                self.paths)
+            self.assertEqual(code, 0, out)
+            self.assertEqual(w.call_args.kwargs["faction"], "horde")
+            self.assertEqual(w.call_args.args[4].capital, "undercity")
 
 class FreeSkipReportTests(unittest.TestCase):
     """#90 through write_reports: a trip whose route-without costs the same is planned without and said, before the
@@ -677,6 +695,34 @@ class FreeSkipReportTests(unittest.TestCase):
         self.assertIn("5g takes Blacksmithing to 300 (5.0g).", guide)
         self.assertNotIn(line, guide)
         self.assertIn("at 240 for BS late 1.", guide)  # the trip back stays
+
+    def test_home_capital_reaches_every_part(self):
+        # #98 (C21): with the trainer data, write_reports gives the stage capitals and each route's home to the free
+        # skips, the skip lines, the table and the guide. The Master rank is put in Ironforge here (made up: the real
+        # Masters stand outside the capitals), so its rank training and trip back become stops: one trip away is left
+        # (the Artisan rank), not two
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod, trainer_text
+        with mock.patch.object(trainer_text, "stage_capitals", return_value={(164, 300): 1537}), \
+                mock.patch.object(plan_mod, "take_free_skips", wraps=plan_mod.take_free_skips) as take, \
+                mock.patch.object(plan_mod, "render_guide", wraps=plan_mod.render_guide) as guide:
+            table, texts = self.reports(faction="alliance")
+        self.assertEqual((take.call_args.kwargs["capitals"], take.call_args.kwargs["home"]), ({(164, 300): 1537}, 1537))
+        self.assertEqual({c.kwargs["home"] for c in guide.call_args_list}, {1537})
+        self.assertEqual([c.kwargs["capital_stages"] for c in guide.call_args_list], [{1537: [(164, 300)]}] * 2)
+        self.assertIn("| Trips away | 1 | 1 |", table)
+        line = "Planned without the stop at 240 in Ironforge for BS late 1: the route without it costs the same."
+        for m in ("gold", "value"):
+            self.assertIn(line, texts[f"guide-{m}"], m)
+            self.assertIn(f"- {line}", texts[f"plan-{m}"], m)
+            self.assertIn("in Ironforge: the Master Blacksmith is there, with the AH, mailbox and bank.",
+                          texts[f"guide-{m}"])
+            self.assertNotIn("**Trip:** Blacksmithing rank to 300", texts[f"guide-{m}"])
+            self.assertIn("**Trip:** Blacksmithing rank to 225", texts[f"guide-{m}"])
+        _table, plain = self.reports(faction="alliance")  # the fixture's own trainers: no stage capital, as before
+        self.assertIn("Planned without the trip back to Brakka Ironfold at 240", plain["guide-gold"])
+        self.assertIn("**Trip:** Blacksmithing rank to 300", plain["guide-gold"])
 
 
 class CouldAlsoMakeWiringTests(unittest.TestCase):

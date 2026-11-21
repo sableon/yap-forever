@@ -7,7 +7,8 @@ says what is there.
   recipe crafted once), from the character's `stock.toml`; two routes side by side (least gold and
   least total value).
 - The route in trainer stages, with trips away from home marked (Artisan and Master trainers, trips
-  back to them for recipes, vendor patterns, the Favor vendor) and the cost of skipping a recipe
+  back to them for recipes, vendor patterns, the Favor vendor; an Artisan stage in the home capital is
+  levelled there, its visits are capital stops, not trips away) and the cost of skipping a recipe
   trip (a trip that costs nothing to skip is left out of the route, and said); or, per character,
   levelling at the remote trainer in one go with everything brought along, and a warning when the
   bring list doesn't fit the bags. Each trainer visit lists the trainer recipes to learn there, as

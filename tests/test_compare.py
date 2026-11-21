@@ -48,6 +48,23 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(away(trainer_trips="as_needed"), "| Trips away | 2 | 2 |")
         self.assertEqual(away(trainer_trips="one_go"), "| Trips away | 1 | 1 |")
 
+    def test_trips_away_counts_outside_home(self):
+        # #98: the stops in the home capital are no trips away; each route counts with its own home
+        from yap_forever.compare import compare
+        from tests.test_trips import DARNASSUS, IRONFORGE, STAGE_CAPS, capital_route
+        p, gd, start = capital_route()
+        st = toy.stock(skills=start)
+
+        def away(**kw):
+            text = compare({"gold": p, "value": p}, gd, toy.market({}), st, **kw)
+            return next(line for line in text.splitlines() if line.startswith("| Trips away"))
+        self.assertEqual(away(), "| Trips away | 5 | 5 |")
+        self.assertEqual(away(capitals=STAGE_CAPS, homes={"gold": IRONFORGE, "value": DARNASSUS}),
+                         "| Trips away | 2 | 3 |")
+        self.assertEqual(away(capitals=STAGE_CAPS, homes={"gold": IRONFORGE, "value": IRONFORGE},
+                              trainer_trips="one_go"), "| Trips away | 1 | 1 |")
+        self.assertEqual(away(capitals={}, homes={"gold": None, "value": None}), "| Trips away | 5 | 5 |")  # RF2
+
 
 class TripTests(unittest.TestCase):
     def test_trips_kinds(self):

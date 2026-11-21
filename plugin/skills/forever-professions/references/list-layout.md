@@ -61,7 +61,8 @@ Write it for that.
   trip that learns a trainer recipe, as written guides do. A run that crosses a rank training is
   two rows, one in each stage.
 - Trips away from home are rank training to 225 and 300 (Artisan and Master trainers sit in set
-  towns), trips back to them for recipes, vendor-sold patterns and the Merchant's Favor vendor. Say
+  towns; an Artisan in a capital is a trip only to the capital the guide doesn't start in, see "The
+  home capital" below), trips back to them for recipes, vendor-sold patterns and the Merchant's Favor vendor. Say
   a trip is needed, how to avoid a second one (buy every vendor pattern on one visit; patterns can be
   bought before they can be learned), and what to bring to keep levelling at a remote trainer, with
   the bag slots it takes. The bring list ends at the next rank trip, trip back for recipes or
@@ -69,7 +70,8 @@ Write it for that.
   stock it is cut to what fits in them.
 - With `trainer_trips = "one_go"` ([setup.md](setup.md), step 2) the player levels at a remote rank
   trainer to the profession's next rank training or the end of its route, whichever comes first.
-  The trips back for recipes and capital stops inside that stretch are left out: their recipes end
+  The trips back for recipes and capital stops inside that stretch are left out (never the home
+  capital's stops, below): their recipes end
   the rank row as `Learn at the trainer as you reach them: <recipe> at <skill>, ...` (in skill order,
   `<skill>` where the route learns it), and each keeps its `*At <skill>: Learn <recipe> (trainer <fee>)*` row. The bring list
   covers the whole stretch, whatever the bags hold. What the stretch uses of your own crafts and
@@ -179,6 +181,36 @@ Write it for that.
   in a capital (for example <name>, <capital>).` names up to two trainers in the faction's capitals.
   When none of the rank's trainers is in a capital, the row names up to two of them with their zones
   and says `(no Expert Blacksmith in a capital in the data)`, never "in a capital".
+- **The home capital** ([setup.md](setup.md), `capital`). A rank whose trainers all stand in one capital
+  (the Artisans of Alchemy, Blacksmithing, Engineering, Leatherworking and Tailoring:
+  [game-rules.md](game-rules.md), "Trainers and ranks") is levelled in that capital: every capital has
+  an AH, mailbox and bank, so the player starts there. The guide starts in the character's `capital`,
+  else in the only capital the route's stages need, else in the one whose stage the route reaches first.
+  - That stage opens, under its `**<Profession> <from>–<to>**` header, with `Level <Profession>
+    <from>–<to> in <City>: the <Rank> <Person> <name> (x, y) is there, with the AH, mailbox and bank.`
+    and the city's tip.
+  - In that capital the rank training and every visit back for recipes are stops, not trips, with no
+    bring list, as needed and in one go (one go never folds them): `- At <skill>, in <City>: train
+    <Profession> to <cap> at <name>.` (then `While there, learn: ...`) and `- At <skill>, in <City>:
+    learn <recipes> at <name>`, then the skip clause and a full stop. A stop the route is planned
+    without reads `Planned without the stop at <skill> in <City> for <recipes>: the route without it
+    costs the same.`
+  - Journeyman and Expert stops name the city when it has that trainer: `- At <skill>, learn <recipes>
+    at any <Rank> <Person> in <City>.` and `- Train <Profession> to <cap> at any <Rank> <Person> in
+    <City>.`; when it hasn't (Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no
+    Engineering one), the row says "in a capital (for example ...)" as below.
+  - The other capital follows `trainer_trips`: as needed, its rank training and visits back stay trips;
+    in one go the player levels that stage there (one trip, its recipes learned as the skill reaches
+    them). Its trip rows have no bring list and end `<City> has an AH, mailbox and bank: buy as you go
+    there.` and the city's tip. The stage line is the home capital's only. A vendor or Merchant's Favor
+    pattern inside a capital's stage stays a trip of its own: there is no bring list to carry it.
+  - With two capitals and no `capital` set, a line under the intro says `This route's <Rank> trainers
+    are in <City A> (<Profession A>) and <City B> (<Profession B>). This guide starts in <City A>; to
+    start in <City B>, set capital = "<key>" for this character in profile.toml.` (without `<Rank>`
+    when the two stages' ranks differ). With `capital` set, no line.
+  - Remote trainers (every Master, the Artisan Enchanters) stay trips with their bring lists. "Trips
+    away" counts only the trips outside the home capital. Without the trainer data or a faction, or
+    with no stage in a capital, none of this shows: the trips and "in a capital" rows as before.
 - The route uses the safe requirement for trainer recipes: the higher of the Forever listing and the
   skill inferred from Classic (`TrainerInferred`), unless the recipe was seen learnable lower in play
   ([game-rules.md](game-rules.md), "Trainers and ranks"). A trainer recipe learned above its Forever
