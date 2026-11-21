@@ -3,8 +3,8 @@
 State on 2026-11-21. Phase 1 is done and tagged (`v0.1.0-planner`). The phase 2 planner work is
 in (`docs/progress.md`, 2.1 to 2.23), and so are the fixes from the engineering review of
 2026-11-19 (parts A to E, 2.24 to 2.28); phase 2 is tagged `v0.2.0-general-planner` (to 2.30). The
-0.2.1 batch is tagged `v0.2.1-options` (2.31 to 2.37). Phases 3 to 5 are planned by the owner; the
-plans are private.
+0.2.1 batch is tagged `v0.2.1-options` (2.31 to 2.37), and the 0.2.2 batch `v0.2.2-tidy` (2.38 to
+2.50). Phases 3 to 5 are planned by the owner; the plans are private.
 
 ## What works
 
@@ -38,8 +38,9 @@ plans are private.
   labelled `phase-2` (#48, #49) and `phase-3` hold the planned work.
 - Covered since 0.2.0: budget targets, the trainer-rank rule with the recipes learned at each visit
   and the trips back for them, levelling at a remote trainer in one go, and the bag warning on bring
-  lists. Open from the 0.2.1 review: #87, #90, #91 and #92; #88 (patterns on the one-go bring list)
-  is closed by the 2.36 fixes.
+  lists. Since 0.2.1: each Artisan stage in its trainer's capital, free skips, the Favor and level rules
+  for Favor recipes, vendor money in choosing the route, two ways to pay, and a budget next to a
+  recipe goal. Open from the 0.2.2 reviews: #113 to #116 and #118; also #102 and #103.
 - Merchant's Favor recipes are the Alliance ones, Blacksmithing and Enchanting only.
 - Only EU has been seen to serve Forever auction data.
 
