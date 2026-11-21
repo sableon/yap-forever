@@ -36,7 +36,8 @@ Fill in `profile.toml` with the player:
   left out of the route). `one_go`: level at the trainer up
   to the next rank or the target, learning those recipes there as the skill reaches them; the bring
   list covers the whole stretch ([list-layout.md](list-layout.md), "Trainer stages and trips"). The
-  skill asks once per character (SKILL.md, step 5).
+  skill asks once per character (SKILL.md, step 5, or step 3 with the `capital` question); the one
+  answer also decides the stage in the other capital (`capital`, below).
 - Optional per character: `capital`, the capital the guide starts in (every capital has an AH,
   mailbox and bank): `"stormwind"`, `"ironforge"` or `"darnassus"` for Alliance, `"orgrimmar"`,
   `"thunder_bluff"` or `"undercity"` for Horde; another faction's capital, or any other value, is
@@ -49,7 +50,8 @@ Fill in `profile.toml` with the player:
   capital follows `trainer_trips`; its trips have no bring list either (buy there). Remote trainers
   (every Master, the Artisan Enchanters) stay trips. "Trips away" counts the trips outside the
   capital the guide starts in. Without the trainer data or a faction, or with no stage in a capital,
-  the guide names no capital, as before.
+  the guide names no capital, as before. The skill asks for it with `trainer_trips` when the route's
+  stages are in two capitals (SKILL.md, step 3).
 - Optional, once at the top of the file: `working_overtime_reading = "relative"` (default) or
   `"points"`, how the player reads the Working Overtime bonus: `relative` adds 4% of the base
   chance per rank, `points` adds 4 percentage points per rank. `plan` uses the rank for every

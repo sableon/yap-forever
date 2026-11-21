@@ -602,5 +602,137 @@ class CapitalStopTests(unittest.TestCase):
         self.assertIs(route, alt)
         self.assertEqual([(t.kind, t.skill, t.spells, t.visit.city) for t in left], [("recipe", 170, (32,), IRONFORGE)])
 
+
+STORMWIND = 1519
+BOTH_IN_IRONFORGE = {(IRONFORGE, ALCH), (IRONFORGE, ENG), (DARNASSUS, ALCH), (STORMWIND, ENG)}
+
+
+def join_route(side_by_side=True):
+    """(plan, game data): Alchemy and Engineering levelled 80–110 one point a step, side by side (Alchemy first at each
+    skill) or one at a time (Alchemy first). Alchemy's recipes 71-73 need 91, Engineering's 81 needs 85 and 82 93."""
+    from yap_forever.planner import Step
+    gd = toy.gamedata([toy.recipe(71, "Alch draught", ALCH, {toy.ROD: 1}, req=91, fee=405),
+                       toy.recipe(72, "Alch wisdom", ALCH, {toy.ROD: 1}, req=91, fee=450),
+                       toy.recipe(73, "Alch later", ALCH, {toy.ROD: 1}, req=91, fee=500),
+                       toy.recipe(81, "Eng contact", ENG, {toy.IRON_BAR: 1}, req=85, fee=270),
+                       toy.recipe(82, "Eng late", ENG, {toy.IRON_BAR: 1}, req=93, fee=300)])
+    alch = [Step(ALCH, s, s + 1, 71, "Alch draught", 1, 0, 0, {toy.ROD: 1}) for s in range(80, 110)]
+    eng = [Step(ENG, s, s + 1, 81, "Eng contact", 1, 0, 0, {toy.IRON_BAR: 1}) for s in range(80, 110)]
+    steps = [x for pair in zip(alch, eng, strict=True) for x in pair] if side_by_side else alch + eng
+    return Plan(steps=steps, final_skill={ALCH: 110, ENG: 110}), gd
+
+
+def stop(prof, skill, learn, kind="city", cap=150, city=None):
+    from yap_forever.trips import REMOTE_RANK, Visit
+    return Visit(prof, skill, cap, cap >= REMOTE_RANK, kind, list(learn), city=city)
+
+
+def joins(got):
+    return [(v.profession, v.skill, [(j.profession, j.skill) for j in v.joined]) for v in got]
+
+
+class JoinStopTests(unittest.TestCase):
+    """#98: a later capital stop of the other profession joins an earlier one when the city has both trainers, it is
+    within JOIN_SPAN points of its profession there and its recipes can be learned then. Display only (the guide)."""
+
+    def hosts(self, pairs=frozenset(BOTH_IN_IRONFORGE)):
+        return lambda zone, prof, _cap: (zone, prof) in pairs
+
+    def test_join_within_10_points(self):
+        from yap_forever.trips import JOIN_SPAN, join_stops
+        self.assertEqual(JOIN_SPAN, 10)
+        p, gd = join_route()
+        a = stop(ALCH, 91, [71, 72])  # Engineering is at 91 where Alchemy reaches 91
+        got = join_stops([a, stop(ENG, 101, [81])], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, [(ENG, 101)])])  # 10 points below: joins
+        got = join_stops([a, stop(ENG, 102, [81])], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, []), (ENG, 102, [])])  # 11 below: a stop of its own
+
+    def test_no_join_when_not_learnable(self):
+        from yap_forever.trips import join_stops
+        p, gd = join_route()
+        got = join_stops([stop(ALCH, 91, [71]), stop(ENG, 95, [82])], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, []), (ENG, 95, [])])  # 82 needs 93: not learnable at 91
+        # all of B or none: one recipe it can't learn yet keeps the whole stop where it was
+        got = join_stops([stop(ALCH, 91, [71]), stop(ENG, 95, [81, 82])], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, []), (ENG, 95, [])])
+
+    def test_no_join_into_city_without_trainer(self):
+        # Darnassus has an Expert Alchemist but no Engineer (trainer_text.has_trainer on made-up trainers)
+        import functools
+        from tests.test_trainers import capital_info
+        from yap_forever import trainer_text, trainers
+        from yap_forever.trips import join_stops
+        info = capital_info((trainers.Trainer(9, "Fenn Sprocket", ENG, "Expert", "A", IRONFORGE, (70, 50), True),))
+        hosts = functools.partial(trainer_text.has_trainer, info)
+        p, gd = join_route()
+        found = [stop(ALCH, 91, [71]), stop(ENG, 91, [81])]
+        self.assertEqual(joins(join_stops(found, p, gd, DARNASSUS, hosts)), [(ALCH, 91, []), (ENG, 91, [])])
+        self.assertEqual(joins(join_stops(found, p, gd, IRONFORGE, hosts)), [(ALCH, 91, [(ENG, 91)])])
+
+    def test_rank_row_stays(self):
+        from yap_forever.trips import join_stops
+        p, gd = join_route()
+        # a rank training never moves
+        got = join_stops([stop(ALCH, 91, [71]), stop(ENG, 95, [], "rank")], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, []), (ENG, 95, [])])
+        # but it can be the stop others join
+        got = join_stops([stop(ALCH, 91, [], "rank"), stop(ENG, 95, [81])], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, [(ENG, 95)])])
+        # a home-capital stage's stop can be A too (its trainer stands there)
+        got = join_stops([stop(ALCH, 91, [], "rank", 225, IRONFORGE), stop(ENG, 95, [81])], p, gd, IRONFORGE,
+                         self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, [(ENG, 95)])])
+
+    def test_one_at_a_time_far_apart_no_join(self):
+        # one profession at a time: where Alchemy reaches 91, Engineering is still at 80 (and the other way round)
+        from yap_forever.trips import join_stops
+        p, gd = join_route(side_by_side=False)
+        found = [stop(ALCH, 91, [71]), stop(ENG, 91, [81])]
+        self.assertEqual(joins(join_stops(found, p, gd, IRONFORGE, self.hosts())), [(ALCH, 91, []), (ENG, 91, [])])
+        p.steps = p.steps[30:] + p.steps[:30]  # Engineering first
+        self.assertEqual(joins(join_stops(found, p, gd, IRONFORGE, self.hosts())), [(ALCH, 91, []), (ENG, 91, [])])
+
+    def test_only_the_other_professions_stops_join(self):  # C27
+        from yap_forever.trips import join_stops
+        p, gd = join_route()
+        got = join_stops([stop(ALCH, 91, [71]), stop(ALCH, 95, [73])], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, []), (ALCH, 95, [])])
+        # trips never join, nor take a stop: the other capital's rank training, a recipe trip there
+        darn = stop(ALCH, 91, [], "rank", 225, DARNASSUS)
+        got = join_stops([darn, stop(ENG, 95, [81])], p, gd, IRONFORGE, self.hosts())
+        self.assertEqual(joins(got), [(ALCH, 91, []), (ENG, 95, [])])
+        got = join_stops([stop(ENG, 91, [81]), stop(ALCH, 95, [71], "recipe", 225, DARNASSUS)], p, gd, IRONFORGE,
+                         self.hosts())
+        self.assertEqual(joins(got), [(ENG, 91, []), (ALCH, 95, [])])
+
+    def test_no_home_joins_in_a_capital_with_both(self):  # C27: "any capital", the first in CAPITAL_NAMES order
+        from yap_forever.trips import join_city, join_stops
+        p, gd = join_route()
+        found = [stop(ALCH, 91, [71]), stop(ENG, 91, [81])]
+        (a,) = join_stops(found, p, gd, None, self.hosts())
+        self.assertEqual(joins([a]), [(ALCH, 91, [(ENG, 91)])])
+        self.assertEqual(join_city(a, None, self.hosts()), IRONFORGE)  # Stormwind has no Expert Alchemist here
+        self.assertEqual(join_city(a, None, self.hosts(BOTH_IN_IRONFORGE | {(STORMWIND, ALCH)})), STORMWIND)
+        self.assertEqual(join_city(a, IRONFORGE, self.hosts()), IRONFORGE)
+        # no capital with both, or no trainer data (RF2): no join
+        for pairs in ({(IRONFORGE, ALCH), (STORMWIND, ENG)}, set()):
+            with self.subTest(pairs=pairs):
+                self.assertEqual(joins(join_stops(found, p, gd, None, self.hosts(pairs))),
+                                 [(ALCH, 91, []), (ENG, 91, [])])
+        # the visits handed in are left as they were
+        self.assertEqual([v.joined for v in found], [[], []])
+
+    def test_a_stop_inside_a_run_is_placed_at_the_run(self):
+        # Alchemy's run 80–95 is one step: its stop at 91 is made while Engineering is still at 80, not at 95
+        from yap_forever.planner import Step
+        from yap_forever.trips import join_stops
+        p, gd = join_route()
+        p.steps = [Step(ALCH, 80, 95, 71, "Alch draught", 15, 0, 0), Step(ENG, 80, 95, 81, "Eng contact", 15, 0, 0),
+                   Step(ALCH, 95, 110, 71, "Alch draught", 15, 0, 0), Step(ENG, 95, 110, 81, "Eng contact", 15, 0, 0)]
+        found = [stop(ALCH, 91, [71]), stop(ENG, 91, [81])]
+        self.assertEqual(joins(join_stops(found, p, gd, IRONFORGE, self.hosts())), [(ALCH, 91, []), (ENG, 91, [])])
+
+
 if __name__ == "__main__":
     unittest.main()

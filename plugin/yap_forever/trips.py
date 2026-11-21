@@ -8,12 +8,15 @@ by mail). With `trainer_trips = "one_go"` the player levels at a remote rank tra
 stretch (`stretch_end`) and learns the recipes there as the skill reaches them: no visits back in between.
 A rank whose trainers all stand in one capital (trainer_text.stage_capitals: `capitals`) gives its visits that
 `city`; in the capital the guide starts in (`home`, plan.home_capital) they are capital stops, not trips, whatever
-trainer_trips (#98), and the other capital's visits are trips that follow trainer_trips.
+trainer_trips (#98), and the other capital's visits are trips that follow trainer_trips. The guide joins capital stops
+of the two professions that are close together on the route into one (join_stops).
 """
+import dataclasses
 from dataclasses import dataclass, field
 
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.planner import measure
+from yap_forever.profile import CAPITAL_NAMES
 from yap_forever.trainers import RANK_BY_CAP
 
 REMOTE_RANK = 225  # ranks to 225 (Artisan) and 300 (Master) are trained in set towns
@@ -21,6 +24,7 @@ AS_NEEDED, ONE_GO = "as_needed", "one_go"  # profile.TRAINER_TRIPS
 MAX_TRIP_ALTS = 3
 FREE_SKIP = 0.5  # copper: a route without a trip that costs at most this much more costs the same (plan.take_free_skips)
 RANK_CAPS = tuple(sorted(RANK_BY_CAP))  # 75, 150, 225, 300: Journeyman, Expert, Artisan, Master
+JOIN_SPAN = 10  # skill points: a capital stop joins an earlier one of the other profession this close (join_stops)
 
 
 def recipe_rank_cap(required_skill: int) -> int:
@@ -41,7 +45,8 @@ class Visit:
     as_reached: (spell, skill) for a remote rank visit with trainer_trips "one_go": the recipes of the visits it
     replaces in its stretch, learned at this trainer at the skill the route learns them (plan.learn_log).
     city: the capital zone the trainer stands in, for a rank whose trainers all stand in one (see the module); None
-    for any other, and without trainer data."""
+    for any other, and without trainer data. joined: the later capital stops of the other profession made at this one
+    (join_stops; the guide only)."""
     profession: int
     skill: int
     rank_cap: int
@@ -51,6 +56,7 @@ class Visit:
     if_missing: list[int] = field(default_factory=list)
     as_reached: list[tuple[int, int]] = field(default_factory=list)
     city: int | None = None
+    joined: list["Visit"] = field(default_factory=list)
 
 
 def at_home(v: Visit, home: int | None) -> bool:
@@ -196,6 +202,67 @@ def before_start(plan, gd, start_skills: dict[int, int]) -> dict[int, list[int]]
     """profession -> trainer recipes already reachable at the start skill that the route uses before any
     visit that teaches them: the player should know them before starting."""
     return _visits(plan, gd, start_skills)[1]
+
+
+def step_place(plan, v: Visit) -> int:
+    """Where a visit comes in route order: the index in plan.steps of its profession's levelling step that starts at its
+    skill, or that its skill falls in (a run of one recipe is one step: the other profession's skill is then read where
+    the run starts, never later); len(plan.steps) after the last."""
+    return next((j for j, st in enumerate(plan.steps)
+                 if st.profession == v.profession and st.skill_from < st.skill_to and st.skill_to > v.skill),
+                len(plan.steps))
+
+
+def skill_at(plan, profession: int, place: int) -> int:
+    """A profession's skill at index `place` of plan.steps: where its next levelling step starts, else its final
+    skill."""
+    return next((st.skill_from for st in plan.steps[place:] if st.profession == profession and st.skill_from < st.skill_to),
+                plan.final_skill.get(profession, 0))
+
+
+def capital_stop(v: Visit, home: int | None) -> bool:
+    """Whether the guide shows a visit as a stop in a capital, not a trip: a rank below Artisan, or a visit to the home
+    capital's stage trainer (at_home)."""
+    return not v.remote or at_home(v, home)
+
+
+def join_city(v: Visit, home: int | None, has_trainer) -> int | None:
+    """The capital a stop and the stops joined to it (Visit.joined) are made in: the home capital when it has the
+    trainers of them all, else (no home) the first capital in profile.CAPITAL_NAMES order that has them; None when none
+    has. has_trainer(zone, profession, rank cap): trainer_text.has_trainer with the trainer info bound."""
+    zones = [home] if home is not None else list(CAPITAL_NAMES.values())
+    return next((z for z in zones if all(has_trainer(z, x.profession, x.rank_cap) for x in [v, *v.joined])), None)
+
+
+def join_stops(found: list[Visit], plan, gd, home: int | None, has_trainer) -> list[Visit]:
+    """The visits (visits) with each capital stop B that an earlier capital stop A can take moved into A.joined, for the
+    guide's rows (#98). In route order (step_place), B joins A when B is of the other profession (learn-ahead already
+    teaches a profession's learnable recipes at its own stop), the city has the trainers of both (join_city: the home
+    capital, or with no home any capital with both), B's profession's skill where A is made is at least B's skill less
+    JOIN_SPAN, and every recipe of B can be learned at that skill. B joins whole or not at all, and the latest such A
+    takes it. A rank training never moves, but it can be A. Display only: the trips, visit_count and the bring lists
+    count the visits unjoined, so the route and Part 3's free skips don't change. found is left as it was.
+    has_trainer: see join_city."""
+    out = [dataclasses.replace(v, joined=[]) for v in found]
+    places = {id(v): step_place(plan, v) for v in out}
+    heads: list[Visit] = []  # the capital stops so far that later ones can join, in route order
+    gone: set[int] = set()
+    for v in sorted(out, key=lambda v: places[id(v)]):
+        if not capital_stop(v, home):
+            continue
+        a = None
+        if v.kind != "rank":
+            a = next((a for a in reversed(heads) if a.profession != v.profession
+                      and (skill := skill_at(plan, v.profession, places[id(a)])) >= v.skill - JOIN_SPAN
+                      and all(gd.recipes[s].required_skill <= skill for s in v.learn + v.if_missing)
+                      and join_city(dataclasses.replace(a, joined=[*a.joined, v]), home, has_trainer) is not None),
+                     None)
+        if a is None:
+            heads.append(v)
+        else:
+            a.joined.append(v)
+            gone.add(id(v))
+    return [v for v in out if id(v) not in gone]
 
 
 @dataclass(frozen=True)

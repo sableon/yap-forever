@@ -1,4 +1,5 @@
 """A readable levelling guide: what to keep while levelling, the route in skill ranges, money."""
+import functools
 import math
 import re
 import tomllib
@@ -14,8 +15,8 @@ from yap_forever.profile import CAPITAL_NAMES
 from yap_forever.shared import SHARED_NOTE, mail_text
 from yap_forever.talents import lowest_profession, talent_lines
 from yap_forever.trainers import RANK_BY_CAP
-from yap_forever.trips import (FREE_SKIP, at_home, before_start, capital_trip, recipe_rank_cap, route_capitals,
-                               start_stage, trips, visits)
+from yap_forever.trips import (FREE_SKIP, at_home, before_start, capital_trip, join_city, join_stops, recipe_rank_cap,
+                               route_capitals, skill_at, start_stage, step_place, trips, visits)
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
     SOURCES = {group: {int(k): v for k, v in items.items()} for group, items in tomllib.load(_f).items()}
@@ -373,12 +374,91 @@ def _home_stop(v, gd, trainer_info, alts) -> str:
     return f"{head}learn {_names(v.learn, gd, True)} at {who}{_skip(tuple(v.learn), alts)}." + (f" {more}" if more else "")
 
 
-def _city_stop(v, gd, trainer_info, planned, said, named, alts=None, home=None) -> str | None:
+def _a(rank: str) -> str:
+    return "an" if rank[0] in "AEIOU" else "a"
+
+
+def _shown_at(found, plan) -> list[tuple[int, int]]:
+    """(profession, skill) of each trainer visit as the guide shows it (found: trips.join_stops): a visit at its own
+    skill, a joined one at its profession's skill where the stop it joined is made."""
+    out = []
+    for y in found:
+        out.append((y.profession, y.skill))
+        place = step_place(plan, y)
+        out += [(j.profession, skill_at(plan, j.profession, place)) for j in y.joined]
+    return out
+
+
+def _supply_text(v, plan, gd, stock, found) -> str:
+    """'The trade supplies vendor near the trainers sells the <count> <item>, ... these rows need.' for a joined capital
+    stop (#98): the vendor reagents of the route rows of each of its professions from the stop to that profession's next
+    trainer visit as the guide shows it (found: trips.join_stops; a visit joined to a later stop is made there, _shown_at),
+    the row the stop's skill falls in included and a run that crosses the next visit left to it, so no row is in two
+    stops' sentences; counted as the mailbox trips count them: whole crafts with the buffer, after the bank and the mail
+    (shopping.row_splits). "" when they buy nothing from a vendor."""
+    from yap_forever.shopping import route_rows, row_splits, vendor_counts  # shopping imports this module
+    place, shown = step_place(plan, v), _shown_at(found, plan)
+    # the windows rely on one profession's shown visit skills strictly increasing in route order (learn-ahead in
+    # trips._visits: a later visit of a profession is at a higher skill), so "the next above the start" is the next one
+    window = {}  # profession -> (its skill at the stop, its next visit's skill or None)
+    for x in (v, *v.joined):
+        start = v.skill if x.profession == v.profession else skill_at(plan, x.profession, place)
+        window[x.profession] = (start, min((s for p, s in shown if p == x.profession and s > start), default=None))
+    rows = route_rows(plan, gd)
+    counts = vendor_counts(split for r, split in zip(rows, row_splits(plan, gd, rows, stock.items), strict=True)
+                           if (w := window.get(r["st"].profession)) and r["st"].skill_to > w[0]
+                           and (w[1] is None or r["st"].skill_to <= w[1]))
+    if not counts:
+        return ""
+    items = ", ".join(f"{n} {gd.name(i)}" for i, n in sorted(counts.items(), key=lambda x: gd.name(x[0])))
+    return f"The trade supplies vendor near the trainers sells the {items} these rows need."
+
+
+def _joined_stop(v, gd, trainer_info, planned, said, alts, home, supply="") -> str:
+    """The row (with its dash) of a capital stop that later stops of the other profession joined (Visit.joined,
+    trips.join_stops; #98): '- **Capital stop** at Alchemy 91 (in Ironforge): learn A (4s 5c) at an Expert Alchemist,
+    and B (2s 70c) at an Expert Engineer (you use it from Engineering 91).', "(any capital, for example <City>)" with no
+    home. A rank training reads "train <Profession> to <cap> [and learn ...] at ...". A rank whose trainers in the city
+    have no confirmed title gets trainer_text.UNCONFIRMED (inside a joined part's parenthesis). The skip clause is the
+    first stop's own; then the supply vendor sentence (`supply`: _supply_text), the city's "different parts" sentence (once
+    in the guide) and the recipes to check."""
+    zone = join_city(v, home, functools.partial(trainer_text.has_trainer, trainer_info))
+    city = trainer_text.city_name(trainer_info, zone)
+
+    def who(x, then=""):  # then: what the row says of the recipes next, inside the flag's parenthesis
+        rank, flag = RANK_BY_CAP[x.rank_cap], trainer_text.unconfirmed(trainer_info, x.profession, x.rank_cap, zone)
+        phrase = f"{_a(rank)} {rank} {trainer_text.person(x.profession)}"
+        if flag and then:
+            return f"{phrase} ({flag.strip().removeprefix('(').removesuffix(')')}; {then})"
+        return f"{phrase}{flag}" + (f" ({then})" if then else "")
+    if v.kind == "rank":
+        head = (f"train {PROFESSIONS.get(v.profession, v.profession)} to {v.rank_cap}"
+                + (f" and learn {_names(v.learn, gd, True)}" if v.learn else "") + f" at {who(v)}")
+    else:
+        head = f"learn {_names(v.learn, gd, True)} at {who(v)}{_skip(tuple(v.learn), alts)}"
+    joined = [f"{'learn ' if v.kind == 'rank' and not v.learn else ''}{_names(j.learn, gd, True)} at "
+              + who(j, f"you use {'it' if len(j.learn) == 1 else 'them'} from "
+                       f"{PROFESSIONS.get(j.profession, j.profession)} {j.skill}")
+              for j in v.joined]
+    row = (f"- **Capital stop** at {PROFESSIONS.get(v.profession, v.profession)} {v.skill} "
+           f"({f'in {city}' if home is not None else f'any capital, for example {city}'}): {head}, and "
+           f"{', and '.join(joined)}.")
+    missing = [s for x in (v, *v.joined) for s in x.if_missing]
+    more = [supply, trainer_text.apart_once(trainer_info, zone, planned, said),
+            f"If you don't have {'it' if len(missing) == 1 else 'them'} yet: {_names(missing, gd, False)}." if missing
+            else ""]
+    return " ".join([row, *(x for x in more if x)])
+
+
+def _city_stop(v, gd, trainer_info, planned, said, named, alts=None, home=None, supply=None) -> str | None:
     """The row (with its dash) of a trainer visit below the remote ranks: a rank trained in a capital, or a
     stop there only for recipes; None for a rank row the guide can't name trainers for and nothing to learn.
     said, named: what earlier rows of the guide already said (see trainer_text.city_row). home: the capital the guide
     starts in (#98): a capital stage's visit there is a stop (_home_stop), and a lower rank's row names the city when
-    it has that trainer (trainer_text.has_trainer); alts: the skip clauses (trips.trip_alternatives)."""
+    it has that trainer (trainer_text.has_trainer); alts: the skip clauses (trips.trip_alternatives). A stop that
+    others joined (Visit.joined) is one row for them all (_joined_stop); supply(v): its supply vendor sentence."""
+    if v.joined:
+        return _joined_stop(v, gd, trainer_info, planned, said, alts or {}, home, supply(v) if supply else "")
     if at_home(v, home):
         return _home_stop(v, gd, trainer_info, alts or {})
     rank, person = RANK_BY_CAP[v.rank_cap], trainer_text.person(v.profession)
@@ -515,7 +595,9 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
                 text = f"- **Craft {recipe_name(s.spell_id, s.name, gd)} once**" + (f" — {mats}" if mats else "")
                 lines.setdefault((stage(p, s.skill_from, True), p), []).append((s.skill_from, 3, text))
     listed = _listed_notes(plan, gd)
-    learned = _learned_at(plan, gd, trainer_info, stock.skills, trainer_trips, capitals, home)
+    found = join_stops(visits(plan, gd, stock.skills, trainer_trips, capitals, home), plan, gd, home,
+                       functools.partial(trainer_text.has_trainer, trainer_info))  # the rows' visits (display only)
+    learned = _learned_at(plan, gd, trainer_info, stock.skills, trainer_trips, capitals, home, found)
     de: dict[str, list] = {}  # item name -> [first skill, last skill, count]
     for e in plan.events:
         m = EVENT.match(e)
@@ -546,10 +628,10 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
                                           trainer_info, stock.level, stock.skills, trainer_trips, market, home)))
     planned, said, named = tuple(caps), set(), set()
     # in the order the guide shows them, so a city's "different parts" sentence is on its first row
-    for v in sorted((v for v in visits(plan, gd, stock.skills, trainer_trips, capitals, home)
-                     if (not v.remote or at_home(v, home)) and v.profession in caps),
+    for v in sorted((v for v in found if (not v.remote or at_home(v, home)) and v.profession in caps),
                     key=lambda v: (stage(v.profession, v.skill, True), planned.index(v.profession), v.skill)):
-        row = _city_stop(v, gd, trainer_info, planned, said, named, alts, home)
+        row = _city_stop(v, gd, trainer_info, planned, said, named, alts, home,
+                         lambda x: _supply_text(x, plan, gd, stock, found))
         if row:
             lines.setdefault((stage(v.profession, v.skill, True), v.profession), []).append((v.skill, 0.5, row))
     for p, spells in before_start(plan, gd, stock.skills).items():
@@ -588,17 +670,23 @@ def _listed_notes(plan, gd) -> dict[tuple[int, int, str], str]:
 
 
 def _learned_at(plan, gd, trainer_info, start_skills, trainer_trips="as_needed", capitals=None,
-                home=None) -> dict[tuple[int, int, str], str]:
+                home=None, found=None) -> dict[tuple[int, int, str], str]:
     """(profession, skill, recipe name) -> where a trainer recipe the route learns there was learned instead:
     "learned at <trainer>" (a visit that learns it ahead), "learn it at <trainer> if you don't have it" (a visit
     that lists it as "If you don't have it yet": the stock doesn't say whether the character knows it) or
     "learned before you start" (trips.before_start). Recipes a "one_go" visit learns as the skill reaches them
-    (Visit.as_reached) keep their own "Learn" row, with the fee. capitals, home: see trips.visits."""
+    (Visit.as_reached) keep their own "Learn" row, with the fee. capitals, home: see trips.visits. found: the visits
+    the route's rows show (trips.join_stops: a joined stop's recipes were "learned at the capital stop at <Profession>
+    <skill>"); None: trips.visits."""
     where: dict[int, str] = {}
-    for v in visits(plan, gd, start_skills, trainer_trips, capitals, home):
+    for v in visits(plan, gd, start_skills, trainer_trips, capitals, home) if found is None else found:
         label = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
         where.update({s: f"learned at {label}" for s in v.learn})
         where.update({s: f"learn it at {label} if you don't have it" for s in v.if_missing})
+        stop = f"the capital stop at {PROFESSIONS.get(v.profession, v.profession)} {v.skill}"
+        for j in v.joined:
+            where.update({s: f"learned at {stop}" for s in j.learn})
+            where.update({s: f"learn it at {stop} if you don't have it" for s in j.if_missing})
     for spells in before_start(plan, gd, start_skills).values():
         where.update({s: "learned before you start" for s in spells})
     return {(prof, at, gd.recipes[spell].name): where[spell] for prof, at, spell, how in plan.learn_log

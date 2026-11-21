@@ -1071,6 +1071,13 @@ class StageCapitalTests(unittest.TestCase):
         self.assertEqual(trainer_text.home_row(capital_info(odd + sure), ENG, 150, IRONFORGE, "Train Engineering to 150"),
                          "Train Engineering to 150 at any Expert Engineer in Ironforge.")
 
+    def test_has_trainer_only_in_the_factions_capitals(self):
+        # a stop with no home capital joins in "any capital" (trips.join_city walks all six): a trainer both factions
+        # can use counts only in the character's own faction's capitals, as city_row's "in a capital" does
+        both = (Trainer(7, "Zig Neutralbolt", ENG, "Expert", "AH", 1637, (50, 50), True),)  # Orgrimmar
+        self.assertFalse(trainer_text.has_trainer(capital_info(both), 1637, ENG, 150))
+        self.assertTrue(trainer_text.has_trainer(capital_info(both, faction="horde"), 1637, ENG, 150))
+
 
 if __name__ == "__main__":
     unittest.main()

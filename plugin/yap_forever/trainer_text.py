@@ -221,9 +221,9 @@ def stage_capitals(info: TrainerInfo | None) -> dict[tuple[int, int], int]:
 
 
 def has_trainer(info: TrainerInfo | None, zone: int, profession: int, cap: int) -> bool:
-    """Whether a trainer of `cap`'s rank for `profession` stands in `zone`, for the faction (the trainers city_row
-    counts as a capital's); False without trainer data or a faction."""
-    if not _usable(info, cap):
+    """Whether a trainer of `cap`'s rank for `profession` stands in `zone`, one of the faction's capitals (the trainers
+    city_row counts as a capital's); False without trainer data or a faction, and for any other zone."""
+    if not _usable(info, cap) or zone not in CAPITALS[info.faction]:
         return False
     return any(t.zone == zone for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap],
                                                              info.faction))
@@ -271,15 +271,28 @@ def home_row(info: TrainerInfo, profession: int, cap: int, zone: int, lead: str,
     """'<lead> at any <Rank> <Person> in <City>.': a stop below the capital stages in the capital the guide starts in,
     when it has that trainer (has_trainer); with the city's "different parts" sentence once (see city_row). When no
     trainer there has a confirmed title, the row says so, as city_row does."""
+    text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}" \
+           f"{unconfirmed(info, profession, cap, zone)}."
+    apart = apart_once(info, zone, planned, said)
+    return f"{text} {apart}" if apart else text
+
+
+def unconfirmed(info: TrainerInfo | None, profession: int, cap: int, zone: int) -> str:
+    """UNCONFIRMED when `zone` has trainers of `cap`'s rank for `profession` and none has a confirmed title (a row that
+    names the rank there says so, as city_row does); "" otherwise."""
     here = [t for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap], info.faction)
-            if t.zone == zone]
-    flag = "" if any(t.title_confirmed for t in here) else UNCONFIRMED
-    text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}{flag}."
+            if t.zone == zone] if _usable(info, cap) else []
+    return UNCONFIRMED if here and not any(t.title_confirmed for t in here) else ""
+
+
+def apart_once(info: TrainerInfo | None, zone: int, planned: tuple[int, ...] = (), said: set[int] | None = None) -> str:
+    """The city's "different parts" sentence (see city_row) when no earlier row said it (`said`, a set the caller keeps;
+    the zone is added when this one says it); "" otherwise, and without the trainer data's notes."""
     said = set() if said is None else said
-    apart = _apart(info, zone, planned) if zone not in said else ""
+    apart = _apart(info, zone, planned) if info and info.data and zone not in said else ""
     if apart:
         said.add(zone)
-    return f"{text} {apart}" if apart else text
+    return apart
 
 
 def person(profession: int) -> str:

@@ -211,6 +211,28 @@ Write it for that.
   - Remote trainers (every Master, the Artisan Enchanters) stay trips with their bring lists. "Trips
     away" counts only the trips outside the home capital. Without the trainer data or a faction, or
     with no stage in a capital, none of this shows: the trips and "in a capital" rows as before.
+- **Joined capital stops.** Capital stops (Journeyman and Expert stops, and the home capital's) of the two
+  professions that come close together on the route are one row. In route order, a later stop joins an
+  earlier one of the other profession (in the home capital; with no home capital, in any capital) when that
+  city has the trainers of both, where the earlier stop is made, the later stop's profession is
+  no more than 10 skill points short of the later stop's skill, and every recipe of the later stop can be
+  learned at that skill. A stop joins whole or not at all; a rank training never moves, but others can join
+  it. Fees, the route, "Trips away" and the free skips don't change (a stop of one profession already
+  teaches every recipe of it the skill allows, so joins are few). The row sits in the earlier stop's block,
+  at its skill: `- **Capital stop** at <Profession A> <skill> (in <City>): learn <recipes A> at <a|an> <Rank>
+  <Person A>, and <recipes B> at <a|an> <Rank> <Person B> (you use <it|them> from <Profession B> <skill>).`,
+  with `(any capital, for example <City>)` when there is no home capital (the first capital with both) and
+  `train <Profession A> to <cap> at ...` for a rank training. When no trainer of a rank there has a
+  confirmed title, its part says so: `<a|an> <Rank> <Person> (title unconfirmed in the data)`, or `(title
+  unconfirmed in the data; you use ...)` for a joined part. The earlier stop's skip clause follows its
+  trainer, and the city's "different parts" sentence comes once, as on the other rows. The joined recipes'
+  rows read `*At <skill>: start crafting <recipe> (learned at the capital stop at <Profession A> <skill>)*`.
+  When the route rows of the stop's professions, from the stop to each one's next trainer visit as the guide
+  shows it (a visit joined to a later stop is made there, so no row is in two sentences), buy reagents from a
+  vendor, the row adds `The trade supplies vendor near the trainers sells the <count>
+  <item>, ... these rows need.`, counted as the mailbox trips count them (whole crafts with the buffer,
+  after the bank and the mail; the row the stop's skill falls in counts, a run that crosses the next visit
+  doesn't). A stop alone keeps its row.
 - The route uses the safe requirement for trainer recipes: the higher of the Forever listing and the
   skill inferred from Classic (`TrainerInferred`), unless the recipe was seen learnable lower in play
   ([game-rules.md](game-rules.md), "Trainers and ranks"). A trainer recipe learned above its Forever

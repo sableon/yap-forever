@@ -451,6 +451,45 @@ class PublishableTests(unittest.TestCase):
         coverage = read("coverage.md")
         self.assertIn("an Artisan stage in the home capital is levelled there, its visits are capital stops, not trips away",
                       coverage)
+        # 5b: the joined capital stops (trips.JOIN_SPAN; test_trips.py JoinStopTests, test_guide.py JoinedStopGuideTests)
+        from yap_forever.profile import CAPITAL_NAMES
+        from yap_forever.trainer_notes import load_notes
+        from yap_forever.trips import JOIN_SPAN
+        for line in (f"where the earlier stop is made, the later stop's profession is no more than {JOIN_SPAN} skill "
+                     "points short of the later stop's skill",
+                     "`- **Capital stop** at <Profession A> <skill> (in <City>): learn <recipes A> at <a|an> <Rank> "
+                     "<Person A>, and <recipes B> at <a|an> <Rank> <Person B> (you use <it|them> from <Profession B> "
+                     "<skill>).`",
+                     "`(any capital, for example <City>)`",
+                     "`<a|an> <Rank> <Person> (title unconfirmed in the data)`",
+                     "from the stop to each one's next trainer visit as the guide shows it (a visit joined to a later "
+                     "stop is made there, so no row is in two sentences)",
+                     "`*At <skill>: start crafting <recipe> (learned at the capital stop at <Profession A> <skill>)*`",
+                     "`The trade supplies vendor near the trainers sells the <count> <item>, ... these rows need.`",
+                     "A stop alone keeps its row."):
+            self.assertIn(line, layout)
+        # the skill's question (C29): two capitals, each with its tip, then the other one's approach; one capital: none
+        skill = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
+        step3 = skill[skill.index("3. **Ask the goal"):skill.index("4. **Refresh prices")]
+        for line in ("ask **Start in <City A> (<Profession A>'s <Rank>) or <City B> (<Profession B>'s <Rank>)?**",
+                     "with each capital's tip ([game-rules.md](references/game-rules.md), \"Trainers and ranks\")",
+                     "for the other one, **level that stage there in one go, or go as needed?**",
+                     "When the character already has `trainer_trips`, don't ask that again: say what it is set to, since "
+                     "changing it changes the trips to the remote trainers too.",
+                     "Save the answers as `capital` and `trainer_trips`",
+                     "One `trainer_trips` answer covers both kinds of trip: the other capital and the remote trainers "
+                     "(every Master, the Artisan Enchanters); tell the player so when you ask",
+                     "With one capital, say where the guide starts and ask nothing."):
+            self.assertIn(line, step3)
+        tips, city = load_notes().cities, {zone: key.replace("_", " ").title() for key, zone in CAPITAL_NAMES.items()}
+        self.assertGreaterEqual(len(tips), 2)
+        self.assertIn("- **Capital tips** (`[cities]` in `trainer_notes.toml`, from play):", rules)
+        for zone, tip in tips.items():
+            self.assertIn(f"{city[zone]}: \"{tip}\"", rules)
+        self.assertIn("One `trainer_trips` answer covers both kinds of trip: the stage in the other capital and the "
+                      "remote trainers", rules)
+        self.assertIn("The skill asks for it with `trainer_trips` when the route's stages are in two capitals "
+                      "(SKILL.md, step 3)", read("setup.md"))
 
 
 if __name__ == "__main__":
