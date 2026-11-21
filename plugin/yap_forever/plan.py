@@ -116,25 +116,34 @@ def listed_savings(inputs: PlanInputs, routes) -> dict[str, float]:
 
 
 def take_free_skips(route, inputs: PlanInputs, mode, cache: dict, trainer_trips: str = AS_NEEDED, fits=None,
-                    excluded: frozenset[int] = frozenset()) -> tuple:
+                    excluded: frozenset[int] = frozenset(), also: tuple[str, ...] = ()) -> tuple:
     """(the route planned without the trips that cost nothing to skip, those trips in the order left out).
     Round by round, at most MAX_TRIP_ALTS rounds, among the trips trip_alternatives measures: a trip whose
-    route-without costs at most FREE_SKIP more (or less) in the route's measure, reaches every profession's final
-    skill, makes fewer trainer visits and pattern trips (trips.visit_count) and, when fits is given (a budget:
+    route-without costs at most FREE_SKIP more (or less) than `route` as given (the route as first settled, so the
+    rounds together stay within FREE_SKIP) in the route's measure and in the measure of each mode in `also` (the
+    other mode of a route shared by gold and value), reaches every profession's final skill, makes fewer trainer
+    visits and pattern trips than the route of the round (trips.visit_count) and, when fits is given (a budget:
     its gold to bring within the budget), fits(route-without) is left out; the cheapest such route is taken (on a
     tie the first in trip_alternatives' order: pattern trips, then recipe trips, each costliest first), and the
-    next round plans without its recipes too. The goal recipe is never left out. cache, trainer_trips: as for trip_alternatives; excluded: recipes `route` was planned without."""
+    next round plans without its recipes too. The goal recipe is never left out.
+    cache, trainer_trips: as for trip_alternatives; excluded: recipes `route` was planned without."""
     left: list[Trip] = []
     excluded = frozenset(excluded)
     gd, start = inputs.gd, inputs.stock.skills
+    original = route
+    costs = [measure(m) for m in (mode, *also)]
+
+    def extra(alt):  # what the route-without costs more than the original route, in the route's own measure
+        return costs[0](alt) - costs[0](original)
     for _ in range(MAX_TRIP_ALTS):
         now = visit_count(route, gd, start, trainer_trips)
-        free = [(diff, t, alt) for t, alt, diff in alternatives(route, inputs, mode, cache, trainer_trips, excluded)
-                if diff is not None and diff <= FREE_SKIP and visit_count(alt, gd, start, trainer_trips) < now
-                and (fits is None or fits(alt))]
+        free = [(extra(alt), t, alt) for t, alt, diff in alternatives(route, inputs, mode, cache, trainer_trips,
+                                                                     excluded)
+                if diff is not None and all(c(alt) - c(original) <= FREE_SKIP for c in costs)
+                and visit_count(alt, gd, start, trainer_trips) < now and (fits is None or fits(alt))]
         if not free:
             break
-        _diff, t, route = min(free, key=lambda x: x[0])
+        _extra, t, route = min(free, key=lambda x: x[0])
         excluded |= t.recipes
         left.append(t)
     return route, left
@@ -143,14 +152,17 @@ def take_free_skips(route, inputs: PlanInputs, mode, cache: dict, trainer_trips:
 def _free_skips(routes: dict, per_mode: dict, cache: dict, trainer_trips: str, limit: int | None,
                 gold_of) -> dict[str, tuple]:
     """mode -> take_free_skips of its route (with a budget, a route-without must bring at most `limit` copper,
-    by gold_of). Gold and value on one route to the same caps are adopted once, so they stay one route."""
+    by gold_of). Gold and value on one route to the same caps are adopted once, free in both measures, so they stay
+    one route."""
     out: dict[str, tuple] = {}
     for m, route in routes.items():
-        if m == "value" and route is routes["gold"] and per_mode[m].caps == per_mode["gold"].caps:
+        shared = route is routes["value"] and per_mode["value"].caps == per_mode["gold"].caps
+        if m == "value" and shared:
             out[m] = out["gold"]
             continue
         fits = None if limit is None else (lambda p: gold_of(p) <= limit)
-        out[m] = take_free_skips(route, per_mode[m], m, cache, trainer_trips=trainer_trips, fits=fits)
+        out[m] = take_free_skips(route, per_mode[m], m, cache, trainer_trips=trainer_trips, fits=fits,
+                                 also=("value",) if m == "gold" and shared else ())
     return out
 
 

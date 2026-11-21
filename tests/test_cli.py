@@ -603,6 +603,7 @@ class FreeSkipReportTests(unittest.TestCase):
             self.reports()
         self.assertEqual(take.call_count, 1)  # gold and value are one route: adopted once
         self.assertIsNone(take.call_args.kwargs["fits"])  # no budget
+        self.assertEqual(take.call_args.kwargs["also"], ("value",))  # free in both measures
         self.assertEqual([c.kwargs["excluded"] for c in alts.call_args_list], [frozenset({1})])
 
     def test_free_skip_under_a_budget(self):

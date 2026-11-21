@@ -334,6 +334,8 @@ class PublishableTests(unittest.TestCase):
         for line in ("A trip whose route-without costs at most 0.5c more (or less), reaches the same skills and makes "
                      "fewer trainer visits and pattern trips is left out of the route",
                      "at most three rounds, the recipes left out adding up",
+                     "the trips left out cost at most 0.5c more together, against the route as first planned",
+                     "a route both guides share is planned without a trip only when it is free in both measures",
                      "`Planned without the trip back to <trainer> at <skill> for <recipes>: the route without it "
                      "costs the same.`",
                      "`Planned without the trip to buy the pattern for <recipe>: the route without it costs the same.`",

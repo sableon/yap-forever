@@ -368,6 +368,38 @@ class FreeSkipTests(unittest.TestCase):
         self.assertEqual(replan.call_args.kwargs["exclude"], frozenset({3, 7}))
         self.assertEqual(list(cache), [("gold", ((BS, 300),), frozenset({3, 7}))])
 
+    def test_shared_route_needs_both_measures(self):
+        # gold and value on one route: the route without the trip is taken only when it is free in both measures
+        base, inputs, alt = self.mocked(1000)
+        alt.economic_total = 1001  # free in gold, 1c more in total value
+        self.assertIs(self.take(base, inputs, alt)[0], alt)
+        route, left = self.take(base, inputs, alt, also=("value",))
+        self.assertIs(route, base)
+        self.assertEqual(left, [])
+        alt.economic_total = 1000.5
+        self.assertIs(self.take(base, inputs, alt, also=("value",))[0], alt)
+
+    def test_rounds_add_up_to_at_most_free_skip(self):
+        # each round is measured against the route as first settled: two skips of 0.3c each would cost 0.6c in all,
+        # so only the first is taken
+        from types import SimpleNamespace
+        from unittest import mock
+        from yap_forever.plan import take_free_skips
+        gd = toy.gamedata([toy.recipe(3, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=200),
+                           toy.recipe(5, "BS later", BS, {toy.IRON_BAR: 1}, req=260, fee=100)])
+        inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills={BS: 225}), craft_once={}, caps={BS: 300})
+
+        def route(learns, cost):
+            return Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300}, cash_total=cost, economic_total=cost,
+                        learn_log=[(BS, s, spell, "trainer") for spell, s in learns])
+        base = route([(3, 240), (5, 260)], 1000)
+        without = {frozenset({3}): route([(5, 260)], 1000.3), frozenset({5}): route([(3, 240)], 1000.4),
+                   frozenset({3, 5}): route([], 1000.6)}
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: without[exclude]):
+            got, left = take_free_skips(base, inputs, "gold", {})
+        self.assertIs(got, without[frozenset({3})])
+        self.assertEqual([t.spells for t in left], [(3,)])
+
 
 if __name__ == "__main__":
     unittest.main()
