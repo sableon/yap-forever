@@ -112,6 +112,7 @@ class StockTests(unittest.TestCase):
             self.assertEqual(config.load_stock(write(d, "stock.toml", STOCK)).ah_premium, 2)
             self.assertEqual(config.load_stock(write(d, "stock.toml", "ah_premium = 1.5\n" + STOCK)).ah_premium, 1.5)
             self.assertEqual(config.load_stock(write(d, "stock.toml", "ah_premium = 3\n" + STOCK)).ah_premium, 3)
+            self.assertEqual(config.load_stock(write(d, "stock.toml", "ah_premium = 1\n" + STOCK)).ah_premium, 1)
             for text in ("ah_premium = 0.5\n", 'ah_premium = "x"\n', "ah_premium = true\n"):
                 path = write(d, "stock.toml", text + STOCK)
                 with self.subTest(text=text), self.assertRaises(ValueError) as cm:

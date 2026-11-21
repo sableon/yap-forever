@@ -499,6 +499,7 @@ class PublishableTests(unittest.TestCase):
         from yap_forever.config import Stock
         from yap_forever.costmodel import AH_UNIT_CAP, BUYOUT_RATIO, MIN_AH_MARGIN
         from yap_forever.guide import gold
+        from yap_forever.prices import AH_CUT
 
         def read(name):
             return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
@@ -507,6 +508,7 @@ class PublishableTests(unittest.TestCase):
         self.assertEqual((premium, gold(MIN_AH_MARGIN)), (2, "1s"))
         section = rules[rules.index("## Selling crafts"):rules.index("## Merchant's Favor")]
         for line in ("AH resale of crafts never chooses the route",
+                     f"only when the AH pays, after its {AH_CUT:.0%} cut (the lowest listing less the cut)",
                      f"at least {premium:g}× its vendor price and {gold(MIN_AH_MARGIN)} more",
                      f"The {premium:g}× is `ah_premium` in `stock.toml` (a number, 1 or more; default {premium:g}).",
                      f"At most {AH_UNIT_CAP} of each craft count as sold on the AH",
