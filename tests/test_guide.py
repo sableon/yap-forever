@@ -100,6 +100,14 @@ class GoldTests(unittest.TestCase):
         self.assertEqual(gold(250), "2s")
         self.assertEqual(gold(42), "42c")
 
+    def test_negative_amounts(self):
+        # #97: a route whose crafts sell back to vendors for more than it spends has a total value below zero
+        from yap_forever.guide import gold
+        self.assertEqual(gold(-6328), "-63s")
+        self.assertEqual(gold(-32381), "-3.2g")
+        self.assertEqual(gold(-1234567), "-123g")
+        self.assertEqual(gold(-42), "-42c")
+
 
 class SourceGroupTests(unittest.TestCase):
     def test_groups(self):

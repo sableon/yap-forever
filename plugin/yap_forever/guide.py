@@ -76,6 +76,8 @@ def count(q: float) -> str:
 
 def gold(copper: float) -> str:
     c = round(copper)
+    if c < 0:  # a total value below zero: crafts that sell back for more than the route spends
+        return "-" + gold(-c)
     if c >= 1000000:  # from 100g, silver is under 1% of the amount
         return f"{c / 10000:,.0f}g"
     if c >= 10000:
