@@ -38,7 +38,8 @@ plans are private.
   labelled `phase-2` (#48, #49) and `phase-3` hold the planned work.
 - Covered since 0.2.0: budget targets, the trainer-rank rule with the recipes learned at each visit
   and the trips back for them, levelling at a remote trainer in one go, and the bag warning on bring
-  lists. Open from the 0.2.1 review: #87, #88, #90, #91 and #92.
+  lists. Open from the 0.2.1 review: #87, #90, #91 and #92; #88 (patterns on the one-go bring list)
+  is closed by the 2.36 fixes.
 - Merchant's Favor recipes are the Alliance ones, Blacksmithing and Enchanting only.
 - Only EU has been seen to serve Forever auction data.
 
