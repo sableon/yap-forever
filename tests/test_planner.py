@@ -616,17 +616,21 @@ class GreensForDisenchantingTests(unittest.TestCase):
         self.assertNotIn(toy.BELT, p.held_for_de)
 
 
+def master_route_data(recipes=None, stock=None, listings=BARS, cap=300):
+    """(plan, game data, market, stock) for one profession from its start to cap, ranks trained at 75, 150 and 225
+    (the Master rank, from skill 225, is added to the toy's two)."""
+    from yap_forever.gamedata import Rank
+    gd = toy.gamedata(recipes or base_recipes())
+    gd.trainer_ranks[BS] = gd.trainer_ranks[BS] + [Rank(300, 9000, 225, 20)]
+    st, m = stock or toy.stock(), toy.market(listings)
+    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={BS: cap}), gd, m, st
+
+
 class RankCutTests(unittest.TestCase):
     """A rank training ends the profession's Step: no Step spans the skill a rank was trained at."""
 
     def master_route(self, recipes=None):
-        """One recipe from 1 to 300 with ranks trained at 75, 150 and 225 (the last is added here)."""
-        from yap_forever.gamedata import Rank
-        gd = toy.gamedata(recipes or base_recipes())
-        gd.trainer_ranks[BS] = gd.trainer_ranks[BS] + [Rank(300, 9000, 200, 20)]
-        st = toy.stock()
-        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, toy.NO_FAVOR, caps={BS: 300})
-        return p
+        return master_route_data(recipes)[0]
 
     def test_step_never_spans_a_rank_training(self):
         p = self.master_route()
@@ -649,4 +653,7 @@ class RankCutTests(unittest.TestCase):
         self.assertAlmostEqual(sum(s.crafts for s in p.steps), 719.9406655687324, places=6)
         self.assertAlmostEqual(sum(s.buffered for s in p.steps), 818.9317654040408, places=6)
         self.assertEqual(p.fees, 13950)
+        self.assertEqual(sum(s.cash for s in p.steps), 144000)  # what the Steps carry, as on main
+        self.assertEqual(sum(s.economic for s in p.steps), 144000)
+        self.assertAlmostEqual(sum(s.materials[toy.COPPER_BAR] for s in p.steps), 1439.881331137465, places=6)
         self.assertAlmostEqual(p.bought[toy.COPPER_BAR], 1439.8813311374647, places=6)

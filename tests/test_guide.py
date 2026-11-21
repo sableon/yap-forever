@@ -983,3 +983,23 @@ class VisitRowTests(unittest.TestCase):
                       "(for example Grom Anvilhand, Orgrimmar).", text)
         text = self.render(60, [], [(21, 140, 500)], [(21, 142)], faction="")
         self.assertIn("- At 142, learn Recipe 21 (5s 0c) at any Expert Blacksmith in a capital.", text)
+
+
+class RunAcrossTrainingGuideTests(unittest.TestCase):
+    def test_run_across_training_shows_in_both_stages(self):
+        # #91: a run 210-244 with the Master training at 225 printed the whole run's count (51 on main) in both stages
+        import math
+        from tests.test_planner import master_route_data
+        rs = [toy.recipe(1, "BS yellow", BS, {toy.COPPER_BAR: 2}, (toy.STONE, 1), t=(1, 200, 260, 320))]
+        p, gd, m, st = master_route_data(rs, toy.stock(skills={BS: 210}), cap=244)
+        text = render_guide(p, gd, m, st, caps={BS: 244})
+        stage3 = text[text.index("### Stage 3"):text.index("### Stage 4")]
+        stage4 = text[text.index("### Stage 4"):]
+        n1, n2 = (math.ceil(x.buffered - 1e-9) for x in p.steps)
+        self.assertIn(f"- **210–225** · {n1}× BS yellow — {2 * n1} Copper Bar", stage3)
+        self.assertIn(f"- **225–244** · {n2}× BS yellow — {2 * n2} Copper Bar", stage4)
+        self.assertNotIn("225–244", stage3)
+        self.assertNotIn("210–225", stage4)
+        self.assertGreaterEqual(n1 + n2, 51)  # each part rounds up on its own: never fewer than the whole run
+        self.assertNotIn("51×", text)  # no row with the whole run's count
+        self.assertEqual(text.count("× BS yellow"), 2)  # one row in each stage

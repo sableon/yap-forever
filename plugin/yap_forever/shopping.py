@@ -136,9 +136,10 @@ def _counted(st, gd) -> bool:
 
 def merged_steps(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None = None) -> list[tuple]:
     """(step, parts): runs of one recipe over consecutive skill points as one step, so the buffer is
-    rounded up once per run, not once per skill point. split: (profession, skills, position): no run of that
-    profession crosses those skills, and no run of any profession crosses that index of plan.steps (where a trip's
-    bring list starts and ends, and where the trip comes in route order)."""
+    rounded up once per run, not once per skill point. No run crosses a rank training of its profession (plan.ranks):
+    the player trains between the parts, so each part is a row of its own. split: (profession, skills, position): no
+    run of that profession crosses those skills, and no run of any profession crosses that index of plan.steps (where
+    a trip's bring list starts and ends, and where the trip comes in route order)."""
     out: list[tuple] = []
     latest: dict[int, int] = {}  # profession -> index of its latest entry (professions interleave)
     begun: list[int] = []  # index in plan.steps of each entry's first step
@@ -150,6 +151,8 @@ def merged_steps(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None
         if (last and st.skill_from < st.skill_to and last[0].skill_from < last[0].skill_to
                 and last[0].spell_id == st.spell_id and last[0].profession == st.profession
                 and last[0].skill_to == st.skill_from
+                and not any(p == st.profession and last[0].skill_from < sk <= st.skill_from
+                            for p, sk, _cap, _fee in plan.ranks)
                 and not (split and split[0] == st.profession
                          and any(last[0].skill_from < s <= st.skill_from for s in split[1]))
                 and not (split and split[2] is not None and begun[at] < split[2] <= j)):

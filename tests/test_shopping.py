@@ -17,6 +17,11 @@ def shopping_text(p, gd, listings):
     return "\n".join(render_shopping(p, gd, toy.market(listings), toy.stock())[0])
 
 
+def render_shopping_lines(p, gd, m, st):
+    from yap_forever.shopping import render_shopping
+    return "\n".join(render_shopping(p, gd, m, st)[0])
+
+
 def all_need(p, gd):
     from yap_forever.shopping import route_rows
     out = {}
@@ -647,7 +652,8 @@ class BringListTests(unittest.TestCase):
                         ranks=[(BS, 225, 300, 0)], bought={S: 25, T: 10}, final_skill={BS: 245}))
         self.assertEqual(bring_list(p, gd, self.trip(), None, trainer_trips="one_go"),
                          (245, [(S, 10, "mail"), (T, 10, "mail")]))
-        self.assertEqual(bring_list(p, gd, self.trip(), None), (245, [(T, 10, "mail")]))  # as needed: as before
+        # as needed: the part after the trip is a row of its own now (#87: it was left out with the run from 210)
+        self.assertEqual(bring_list(p, gd, self.trip(), None), (245, [(S, 10, "mail"), (T, 10, "mail")]))
 
     def test_one_go_bring_list_takes_a_run_that_crosses_the_stretch_end(self):
         # Artisan at 140, Master at 200; recipe A runs 190-215 across the Master training: the 140 trip brings A to 200
@@ -1106,3 +1112,49 @@ class BoughtToolTests(unittest.TestCase):
         listings = {**BARS, toy.IRON_BAR: [(700, 100)]}
         p = run_caps(rs, {BS: 20}, listings, craft_once={BS: 5})
         self.assertIn("| Blacksmith Hammer | 1 | vendor |", shopping_text(p, toy.gamedata(rs), listings))
+
+
+class RunAtTrainingTests(unittest.TestCase):
+    """A run of one recipe that crosses a rank training is two rows: the Master training is at 225."""
+
+    def route(self):
+        from tests.test_planner import master_route_data
+        rs = [toy.recipe(1, "BS yellow", BS, {S: 2}, (K, 1), t=(1, 200, 260, 320))]
+        return master_route_data(rs, toy.stock(skills={BS: 210}), cap=244)  # yellow: the buffer rounds up per part
+
+    def trip(self):
+        from yap_forever.trips import Trip
+        return Trip(225, BS, "rank", "Blacksmithing rank to 300")
+
+    def test_as_needed_bring_list_has_the_part_after_the_trip(self):
+        # #87: the run from 210 was one row beginning before the trip, so the list left out all of it
+        from yap_forever.shopping import bring_list, route_rows
+        p, gd, _m, _st = self.route()
+        parts = [r for r in route_rows(p, gd) if r["st"].skill_from >= 225]
+        self.assertEqual([(r["st"].skill_from, r["st"].skill_to) for r in parts], [(225, 244)])
+        reach, items = bring_list(p, gd, self.trip(), None, start_skills={BS: 210})
+        self.assertEqual((reach, items), (244, [(S, parts[0]["need"][S], "mail")]))
+        self.assertGreater(parts[0]["need"][S], 0)
+
+    def test_one_go_brings_the_craft_at_the_training_skill(self):
+        # the craft from 225 to 226 is in the part after the trip, not inside a run that began at 210
+        from yap_forever.shopping import bring_list, route_rows
+        p, gd, _m, _st = self.route()
+        reach, items = bring_list(p, gd, self.trip(), None, start_skills={BS: 210}, trainer_trips="one_go")
+        after = next(r for r in route_rows(p, gd) if r["st"].skill_from == 225)
+        self.assertEqual((reach, items), (244, [(S, after["need"][S], "mail")]))
+        self.assertEqual(after["st"].skill_to - after["st"].skill_from, 19)  # 225 to 244, the craft at 225 among them
+
+    def test_split_run_totals_are_the_sum_of_its_parts(self):
+        # each part rounds up on its own: the shopping list asks the sum of the rows, and never less than the route
+        import math
+        from yap_forever.shopping import route_rows
+        p, gd, m, st = self.route()
+        rows = route_rows(p, gd)
+        self.assertEqual([(r["st"].skill_from, r["st"].skill_to) for r in rows], [(210, 225), (225, 244)])
+        whole = sum(r["need"][S] for r in rows)
+        self.assertEqual(whole, sum(2 * math.ceil(x.buffered - 1e-9) for x in p.steps))
+        self.assertGreaterEqual(whole, sum(x.materials[S] * x.buffered / x.crafts for x in p.steps) - 1e-6)
+        self.assertEqual(all_need(p, gd)[S], whole)
+        lines = render_shopping_lines(p, gd, m, st)
+        self.assertIn(f"| Copper Bar | {whole} | AH |", lines)
