@@ -1,9 +1,10 @@
 # Handoff
 
-State on 2026-11-20. Phase 1 is done and tagged (`v0.1.0-planner`). The phase 2 planner work is
+State on 2026-11-21. Phase 1 is done and tagged (`v0.1.0-planner`). The phase 2 planner work is
 in (`docs/progress.md`, 2.1 to 2.23), and so are the fixes from the engineering review of
-2026-11-19 (parts A to E, 2.24 to 2.28). Phase 2 has no tag yet. Phases 3 to 5 are planned by the
-owner; the plans are private.
+2026-11-19 (parts A to E, 2.24 to 2.28); phase 2 is tagged `v0.2.0-general-planner` (to 2.30). The
+0.2.1 batch (2.31 to 2.36) is in, with no tag yet. Phases 3 to 5 are planned by the owner; the
+plans are private.
 
 ## What works
 
@@ -32,10 +33,12 @@ owner; the plans are private.
 
 ## Not done yet
 
-- Not covered by the planner: gathering while levelling, keep-or-sell advice, budget targets,
-  gear. The list is in
+- Not covered by the planner: gathering while levelling, keep-or-sell advice, gear. The list is in
   [coverage.md](plugin/skills/forever-professions/references/coverage.md); the open issues
-  labelled `phase-2` (#35, #48, #49, #50) and `phase-3` hold the planned work.
+  labelled `phase-2` (#48, #49) and `phase-3` hold the planned work.
+- Covered since 0.2.0: budget targets, the trainer-rank rule with the recipes learned at each visit
+  and the trips back for them, levelling at a remote trainer in one go, and the bag warning on bring
+  lists. Open from the 0.2.1 review: #87, #88, #90, #91 and #92.
 - Merchant's Favor recipes are the Alliance ones, Blacksmithing and Enchanting only.
 - Only EU has been seen to serve Forever auction data.
 

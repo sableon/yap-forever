@@ -1,7 +1,7 @@
 # Skill checks before a tag
 
 CI checks the manifests and the skill's frontmatter on every push (`claude plugin validate
---strict`, the `plugin` job). It can't check what Claude does with the skill. These four cases
+--strict`, the `plugin` job). It can't check what Claude does with the skill. These five cases
 do; they make real model calls, so they are run by hand before a tag, not in CI.
 
 ## Before the tag: bump the version
@@ -121,3 +121,16 @@ Afterwards: `rm -rf "$HOME/.claude-skill-check" "$HOME/.yap-skill-check" ~/yap-c
     plans may count the same mailed items.
   - The plan runs, the reports are named for this character, and the first character's reports
     are still there.
+
+## 5. A budget and a remote trainer
+
+- **Starting state:** the home from case 2, with a character whose route to 300 has a remote trainer
+  (a profession above 150, so the plan has a `**Trip:**` row for a rank to 225 or 300), no
+  `trainer_trips` under its `[characters."Name"]`, and a `budget` under `[goals]` in its `stock.toml`.
+- **Prompt:** "Plan Enchanting to 300 for <the character>, I have 20g to spend." (Name more gold if 20g
+  stops the route before the remote trainer.)
+- **Must happen:**
+  - Claude runs `plan` with `--prof enchanting:300 --budget 20`; the 20g given wins over the saved budget.
+  - With one profession it doesn't ask "evenly or one at a time" (it asks that only when two are planned).
+  - Seeing the remote trainer's `**Trip:**` row, it asks once: "level there in one go, or come back as
+    needed?", saves the answer as `trainer_trips` in `profile.toml`, and for one go runs `plan` again.
