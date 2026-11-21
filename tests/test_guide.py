@@ -1317,11 +1317,12 @@ class JoinedStopGuideTests(unittest.TestCase):
     """#98: capital stops of the two professions close together on the route are one row in the first one's block
     (trips.join_stops), and the joined recipes' rows point at it."""
 
-    def render(self, home=IRONFORGE, notes=None, reagent=None, items=None, bag_slots=None, later=()):
+    def render(self, home=IRONFORGE, notes=None, reagent=None, items=None, bag_slots=None, later=(), eng=91):
         """Alchemy and Engineering 80–110 side by side, one point a step (Alchemy first at each skill), no buffer:
-        a basic recipe to 91, then Alchemy crafts Alch draught (learned at 91 with Alch wisdom) and Engineering Eng
-        contact (learned at 91, needs 85) to 110, one `reagent` each (default: Iron Bar, bought on the AH).
-        later: (profession, skill, spell) of further trainer recipes, learned and crafted from that skill on."""
+        a basic recipe to 91 (Engineering: to `eng`), then Alchemy crafts Alch draught (learned at 91 with Alch wisdom)
+        and Engineering Eng contact (learned at `eng`, needs 85) to 110, one `reagent` each (default: Iron Bar, bought on
+        the AH; Copper Rod is sold by a vendor, 20 to a stack). items: the bank. later: (profession, skill, spell) of
+        further trainer recipes, learned and crafted from that skill on."""
         from yap_forever.planner import Plan, Step
         reagent = reagent or toy.IRON_BAR
         rs = [toy.recipe(61, "Alch basic", ALCH, {reagent: 1}), toy.recipe(62, "Eng basic", ENG, {reagent: 1}),
@@ -1331,7 +1332,7 @@ class JoinedStopGuideTests(unittest.TestCase):
               toy.recipe(81, "Eng contact", ENG, {reagent: 1}, req=85, fee=270),
               toy.recipe(82, "Eng late", ENG, {reagent: 1}, req=105, fee=300)]
         names = {r.spell_id: r.name for r in rs}
-        learns = [(ALCH, 91, 71), (ALCH, 91, 72), (ENG, 91, 81), *later]
+        learns = [(ALCH, 91, 71), (ALCH, 91, 72), (ENG, eng, 81), *later]
 
         def spell(prof, s):
             return max(((at, sp) for q, at, sp in learns if q == prof and at <= s and sp != 72),
@@ -1375,3 +1376,29 @@ class JoinedStopGuideTests(unittest.TestCase):
         self.assertEqual(text.count(apart), 1)
         self.assertIn("(you use it from Engineering 91). " + apart, text)
         self.assertIn("- At 105, learn Eng late (3s 0c) at any Expert Engineer in Ironforge.\n", text)  # alone: as before
+
+    def test_supply_vendor_sentence_counts(self):
+        # the stop's rows to each profession's next visit: Alch draught 91–110 and Eng contact 91–110, 38 Copper Rod, less
+        # the 8 the bank still holds after the basic rows; the second mailbox trip carries exactly these rows
+        text = self.render(reagent=toy.ROD, items={toy.ROD: 30}, bag_slots=12)
+        said = "The trade supplies vendor near the trainers sells the 30 Copper Rod these rows need."
+        self.assertIn("(you use it from Engineering 91). " + said + "\n", text)
+        (trip,) = [line for line in text.splitlines() if line.startswith("- 📬 **Trip 2** (skill 91–110")]
+        self.assertIn(" From a vendor: 30 Copper Rod.", trip)
+        self.assertIn(" From the bank: 8 Copper Rod.", trip)
+        # Alchemy goes back at 100: its rows end there (Alch draught 91–100: 9, 8 of them from the bank), Engineering's
+        # don't (19); the stop alone at 100 keeps its row, with no sentence; no bag slots: the sentence all the same
+        text = self.render(reagent=toy.ROD, items={toy.ROD: 30}, later=[(ALCH, 100, 73)])
+        self.assertIn("(you use it from Engineering 91). The trade supplies vendor near the trainers sells the 20 Copper "
+                      "Rod these rows need.\n", text)
+        self.assertIn("- At 100, learn Alch later (5s 0c) at any Expert Alchemist in Ironforge.\n", text)
+        self.assertEqual(text.count("trade supplies"), 1)
+        # Engineering joins from 95: its run 80–95, which the stop's skill falls in, is counted whole (15), then Eng
+        # contact 95–110 (15) and Alch draught (19)
+        text = self.render(reagent=toy.ROD, eng=95)
+        self.assertIn("(you use it from Engineering 95). The trade supplies vendor near the trainers sells the 49 Copper "
+                      "Rod these rows need.\n", text)
+
+    def test_no_sentence_without_vendor_reagents(self):
+        self.assertNotIn("trade supplies", self.render())  # Iron Bar comes from the AH
+        self.assertNotIn("trade supplies", self.render(reagent=toy.ROD, items={toy.ROD: 200}))  # all in the bank

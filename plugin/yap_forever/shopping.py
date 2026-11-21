@@ -329,6 +329,24 @@ def _split(rows, plan, gd=None, left=None, mail=None) -> dict[tuple[int, str], i
     return out
 
 
+def row_splits(plan, gd, rows, owned: dict) -> list[dict[tuple[int, str], int]]:
+    """_split of each route row in turn (route_rows), the bank (`owned`: the stock's items; the buffer comes from it while
+    it lasts) and your other characters' mail used up in route order: what the mailbox trips (render_shopping) and a
+    joined capital stop's supply vendor sentence (guide) count, so the two never differ."""
+    left, mail = {i: float(n) for i, n in owned.items()}, _mail(plan, whole_pool=True)
+    return [_split([r], plan, gd, left, mail) for r in rows]
+
+
+def vendor_counts(splits) -> dict[int, int]:
+    """item -> how many to buy from a vendor, over some rows' row_splits."""
+    out: dict[int, int] = {}
+    for split in splits:
+        for (i, src), n in split.items():
+            if src == "vendor":
+                out[i] = out.get(i, 0) + n
+    return out
+
+
 def mailed(plan, gd, stock) -> dict[int, list[tuple[str, int]]]:
     """item -> (character, count): what your other characters are asked to mail, as the shopping list and
     the mailbox trips count it (whole crafts, buffer included). A mailed pattern, which no row needs, is
@@ -697,11 +715,15 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
     lines += ["## Mailbox trips", "",
               f"Planned for {stock.bag_slots} free bag slots"
               + (f" and {bag} reagent bag slots" if bag else "") + "; bought materials wait in the mail.", ""]
-    left, mail = dict(owned), _mail(plan, whole_pool=True)
+    split_of = dict(zip(map(id, rows), row_splits(plan, gd, rows, owned), strict=True))
     for t, trip in enumerate(trips, 1):
-        parts = {"mail": [], "vendor": [], "bank": [], "other": []}
-        for (i, src), n in sorted(_split(trip, plan, gd, left, mail).items(),
-                                  key=lambda x: (gd.name(x[0][0]), x[0][1])):
+        splits = [split_of[id(r)] for r in trip]
+        parts = {"mail": [], "vendor": [f"{n} {gd.name(i)}" for i, n in sorted(vendor_counts(splits).items(),
+                                                                                key=lambda x: gd.name(x[0]))],
+                 "bank": [], "other": []}
+        for (i, src), n in sorted(_sum(splits).items(), key=lambda x: (gd.name(x[0][0]), x[0][1])):
+            if src == "vendor":  # listed above
+                continue
             who = from_character(src)
             if who is None:
                 parts[src].append(f"{n} {gd.name(i)}")
