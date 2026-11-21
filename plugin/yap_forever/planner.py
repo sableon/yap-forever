@@ -569,7 +569,7 @@ class _Route:
     def _best_recipe(self, prof, s):
         """The recipe to craft at skill s: (sort key, recipe, crafts per point, learn option, tools to get,
         material requests), or None. Recipes that can't be used are noted in skipped."""
-        best = None
+        found = []  # (key, key without the vendor credit, the pick)
         for r in self.recipes.values():
             if r.skill_line != prof or r.required_skill > s or not self._may_use(r):
                 continue
@@ -603,7 +603,8 @@ class _Route:
                 continue
             # Each output unit is credited once (_output_fate): reused at what it would cost, kept at its disenchant
             # value (no gold), sold at its vendor price. AH resale never counts. The vendor credit never takes the
-            # craft below zero cost: the route levels, it doesn't farm vendor gold.
+            # craft below zero cost and never pulls in a lower-chance craft (_pick): the route levels, it doesn't farm
+            # vendor gold.
             reuse_val = held_val = sold_val = 0
             if r.output:
                 item, n = r.output[0], r.output[1] * crafts
@@ -617,17 +618,18 @@ class _Route:
                 sold_val = sold * self.valuer.vendor_price(item)
             one_time = lo[0].economic + sum(t["cost"].economic for t in tools)
             base = c.score + one_time / usable
-            score = base - reuse_val - held_val - min(sold_val, max(0.0, base))
-            if self.valuer.mode == "gold":  # gold spent first; among equal gold, the lower total value
+            plain = base - reuse_val - held_val  # the score without the vendor credit
+            score = plain - min(sold_val, max(0.0, base))
+            if self.valuer.mode == "gold":  # gold spent first; at equal gold the higher chance, then the lower value
                 one_cash = lo[0].cash + sum(t["cost"].cash for t in tools)
                 spread = 1 if self.one_time_in_full else usable
                 cash = c.cash + one_cash / spread
-                key = (round(cash - reuse_val - min(sold_val, max(0.0, cash)), 2), score, crafts, r.spell_id)
+                key = (round(cash - reuse_val - min(sold_val, max(0.0, cash)), 2), crafts, score, r.spell_id)
+                plain_key = (round(cash - reuse_val, 2), crafts, plain, r.spell_id)
             else:
-                key = (score, crafts, r.spell_id)
-            if best is None or key < best[0]:
-                best = (key, r, crafts, lo, tools, requests)
-        return best
+                key, plain_key = (score, crafts, r.spell_id), (plain, crafts, r.spell_id)
+            found.append((key, plain_key, (key, r, crafts, lo, tools, requests)))
+        return _pick(found)
 
     def _commit(self, prof, s, name, best):
         """Learn, get the tools and take the materials for the best recipe's crafts at skill s.
@@ -736,6 +738,16 @@ class _Route:
         # crafts sold count at their vendor price only: what the AH pays on top never chooses the route
         p.economic_total = self.spent.economic - p.vendor_back - p.leftover_value
         return p
+
+
+def _pick(found):
+    """The best of _best_recipe's candidates, (key, key without the vendor credit, pick), or None: the lowest key among
+    those whose skill-up chance is not lower than that of the best pick without the vendor credit. Vendor money may
+    change which craft levels a point, but never pulls in one that needs more crafts for it (#97)."""
+    if not found:
+        return None
+    crafts = min(found, key=lambda f: f[1])[2][2]
+    return min((f for f in found if f[2][2] <= crafts + 1e-9), key=lambda f: f[0])[2]
 
 
 def _snapshot(pools) -> dict:

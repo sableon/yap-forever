@@ -923,6 +923,35 @@ class VendorCashbackTests(unittest.TestCase):
                 (row,) = [line for line in text.splitlines() if "× BS gear" in line]
                 self.assertIn("— 25 Copper Bar → sell to a vendor — about 12s a point here: Dedicated Study", row)
 
+    def test_vendor_credit_never_pulls_in_a_lower_chance_craft(self):
+        # alt 1's shape: a 1-in-5 craft on 20c of bought iron vendors 3 x 50c back, above its cost. It may not displace
+        # an orange craft: (1) one that costs 5c net (10c bought, 5c back); (2) one made from the bank (no gold, 50c of
+        # value), against which the low-chance craft would tie at zero gold
+        rs = [toy.recipe(81, "Low chance", BS, {toy.IRON_BAR: 1}, (self.PIN, 3), t=(1, 6, 8, 11)),
+              toy.recipe(82, "High chance", BS, {toy.COPPER_BAR: 1}, (self.BOLT, 1))]
+        gd = self.gamedata(rs)
+        gd.items[self.BOLT] = toy.item(self.BOLT, "Test Bolt", sell=5)
+        gd.items[self.PIN] = toy.item(self.PIN, "Test Pin", sell=50)
+        iron = {toy.IRON_BAR: [(20, 1000)]}
+        cases = {"5c net": ({**iron, toy.COPPER_BAR: [(10, 1000)]}, None),
+                 "from the bank": ({**iron, toy.COPPER_BAR: [(50, 1000)]}, {toy.COPPER_BAR: 10})}
+        for case, (listings, bank) in cases.items():
+            for mode in ("gold", "value"):
+                with self.subTest(case=case, mode=mode):
+                    p = self.plan(rs, listings, mode, caps={BS: 11}, stock=toy.stock(bank, skills={BS: 10}), gd=gd)
+                    self.assertEqual(self.spells(p), {82})
+
+    def test_gold_tie_goes_to_the_higher_chance(self):
+        # at equal gold the higher skill-up chance wins before the lower total value: both crafts use bank materials
+        # (no gold); the 1-in-5 one uses 5 dust worth 1s in all, the orange one an essence worth 50s
+        rs = [toy.recipe(91, "Low chance", BS, {toy.DUST: 1}, t=(1, 6, 8, 11)),
+              toy.recipe(92, "High chance", BS, {toy.ESSENCE: 1})]
+        listings = {toy.DUST: [(20, 1000)], toy.ESSENCE: [(5000, 1000)]}
+        st = toy.stock({toy.DUST: 10, toy.ESSENCE: 10}, skills={BS: 10})
+        p = self.plan(rs, listings, "gold", caps={BS: 11}, stock=st)
+        self.assertEqual(p.cash_total, 0)
+        self.assertEqual(self.spells(p), {92})
+
     def gear_data(self):
         """(game data, market, stock) of a one-recipe route, 1–20, whose crafts sell to a vendor for 3s each."""
         gd = self.gamedata([toy.recipe(1, "BS gear", BS, {toy.COPPER_BAR: 1}, (self.PLATE, 1), t=(1, 10, 15, 30))])
