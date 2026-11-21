@@ -791,16 +791,20 @@ class VendorCashbackTests(unittest.TestCase):
                 self.assertEqual(self.spells(self.plan(rs, listings, mode)), {42})
 
     def test_cashback_floor(self):
-        # A: orange, 10c of reagents, vendors 10c back (net 0). B: a 1-in-5 chance, 20c of reagents a point, vendors
-        # 150c back: without the floor it would earn 1.3s a point by crafting more. Floored, both cost 0 and A has the
-        # higher chance (B has the lower spell id, so the chance decides the tie).
-        rs = [toy.recipe(51, "B many", BS, {toy.IRON_BAR: 1}, (self.PIN, 1), t=(1, 6, 8, 11)),
-              toy.recipe(52, "A once", BS, {toy.COPPER_BAR: 1}, (self.BOLT, 1))]
-        listings = {toy.COPPER_BAR: [(10, 100000)], toy.IRON_BAR: [(4, 100000)]}
+        # The best pick without vendor credit is L (1 in 3, 15c a point, nothing back), so both crafts that vendor
+        # pass the chance rule. H1: orange, 40c, 1s back; H2: 1 in 2, 50c a point, 2s back. Unfloored, H2 would earn
+        # 1.5s a point to H1's 60c; floored, both cost 0 and the higher chance (H1) wins, though H2 has the lower id.
+        rs = [toy.recipe(51, "L plain", BS, {toy.COPPER_BAR: 1}, t=(1, 8, 9, 11)),
+              toy.recipe(52, "H2 more back", BS, {toy.ESSENCE: 1}, (self.PIN, 1), t=(1, 8, 10, 12)),
+              toy.recipe(53, "H1 orange", BS, {toy.IRON_BAR: 1}, (self.BOLT, 1))]
+        gd = self.gamedata(rs)
+        gd.items[self.BOLT] = toy.item(self.BOLT, "Test Bolt", sell=100)
+        gd.items[self.PIN] = toy.item(self.PIN, "Test Pin", sell=100)
+        listings = {toy.COPPER_BAR: [(5, 1000)], toy.ESSENCE: [(25, 1000)], toy.IRON_BAR: [(40, 1000)]}
         for mode in ("gold", "value"):
             with self.subTest(mode=mode):
-                p = self.plan(rs, listings, mode, caps={BS: 11}, stock=toy.stock(skills={BS: 10}))
-                self.assertEqual(self.spells(p), {52})
+                p = self.plan(rs, listings, mode, caps={BS: 11}, stock=toy.stock(skills={BS: 10}), gd=gd)
+                self.assertEqual(self.spells(p), {53})
 
     def test_held_green_no_gold_credit(self):
         # the belt is held for this route's disenchanting: its 1s vendor price earns no gold
@@ -877,8 +881,8 @@ class VendorCashbackTests(unittest.TestCase):
         self.assertIn(toy.BELT, held.held_for_de)
         self.assertEqual(held.vendor_back, 0)
 
-    def test_score_and_vendor_back_count_the_same_units(self):
-        # C38: the units the score credits as sold are the ones vendor_back counts
+    def test_vendor_back_counts_every_crafted_unit(self):
+        # C38: with nothing reused or kept, every unit crafted is sold and counted at its vendor price
         rs = [toy.recipe(42, "B plate", BS, {toy.IRON_BAR: 1}, (self.PLATE, 1), t=(1, 5, 15, 30))]
         for mode in ("gold", "value"):
             with self.subTest(mode=mode):
@@ -951,6 +955,30 @@ class VendorCashbackTests(unittest.TestCase):
         p = self.plan(rs, listings, "gold", caps={BS: 11}, stock=st)
         self.assertEqual(p.cash_total, 0)
         self.assertEqual(self.spells(p), {92})
+
+    def test_value_tie_goes_to_the_higher_chance(self):
+        # value mode: two crafts at the same 20c a point, an orange one and a 1-in-2 one (the lower id): the higher
+        # chance wins
+        rs = [toy.recipe(95, "Half chance", BS, {toy.DUST: 1}, t=(1, 8, 10, 12)),
+              toy.recipe(96, "Orange", BS, {toy.COPPER_BAR: 1})]
+        listings = {toy.DUST: [(10, 1000)], toy.COPPER_BAR: [(20, 1000)]}
+        p = self.plan(rs, listings, "value", caps={BS: 11}, stock=toy.stock(skills={BS: 10}))
+        self.assertEqual(self.spells(p), {96})
+
+    def test_vendor_credit_never_alone_below_zero(self):
+        # A: 1s of reagents, 2 bolts a craft: one reused (worth 80c), one sold (1s). The reuse credit stays as before;
+        # the vendor credit is what is left of the cost, 20c, so A's gold is 0, not -80c. B: 50c, its scrap reused at
+        # 90c: -40c. B wins.
+        rs = [toy.recipe(97, "A bolts", BS, {toy.IRON_BAR: 1}, (self.BOLT, 2)),
+              toy.recipe(98, "B scrap", BS, {toy.COPPER_BAR: 1}, (self.SCRAP, 1))]
+        gd = self.gamedata(rs)
+        gd.items[self.BOLT] = toy.item(self.BOLT, "Test Bolt", sell=100)
+        listings = {toy.IRON_BAR: [(100, 1000)], toy.COPPER_BAR: [(50, 1000)]}
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                p = self.plan(rs, listings, mode, caps={BS: 11}, stock=toy.stock(skills={BS: 10}), gd=gd,
+                              reuse={self.BOLT: (1, 80), self.SCRAP: (1, 90)})
+                self.assertEqual(self.spells(p), {98})
 
     def gear_data(self):
         """(game data, market, stock) of a one-recipe route, 1–20, whose crafts sell to a vendor for 3s each."""

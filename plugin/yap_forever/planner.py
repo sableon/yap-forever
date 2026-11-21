@@ -603,8 +603,8 @@ class _Route:
                 continue
             # Each output unit is credited once (_output_fate): reused at what it would cost, kept at its disenchant
             # value (no gold), sold at its vendor price. AH resale never counts. The vendor credit never takes the
-            # craft below zero cost and never pulls in a lower-chance craft (_pick): the route levels, it doesn't farm
-            # vendor gold.
+            # craft below zero cost by itself (reuse and disenchant credits are as before) and never pulls in a
+            # lower-chance craft (_pick): the route levels, it doesn't farm vendor gold.
             reuse_val = held_val = sold_val = 0
             if r.output:
                 item, n = r.output[0], r.output[1] * crafts
@@ -619,13 +619,15 @@ class _Route:
             one_time = lo[0].economic + sum(t["cost"].economic for t in tools)
             base = c.score + one_time / usable
             plain = base - reuse_val - held_val  # the score without the vendor credit
-            score = plain - min(sold_val, max(0.0, base))
+            # the vendor credit is at most what is left of the craft's cost after the reuse and disenchant credits
+            score = plain - min(sold_val, max(0.0, plain))
             if self.valuer.mode == "gold":  # gold spent first; at equal gold the higher chance, then the lower value
                 one_cash = lo[0].cash + sum(t["cost"].cash for t in tools)
                 spread = 1 if self.one_time_in_full else usable
                 cash = c.cash + one_cash / spread
-                key = (round(cash - reuse_val - min(sold_val, max(0.0, cash)), 2), crafts, score, r.spell_id)
-                plain_key = (round(cash - reuse_val, 2), crafts, plain, r.spell_id)
+                plain_gold = cash - reuse_val
+                key = (round(plain_gold - min(sold_val, max(0.0, plain_gold)), 2), crafts, score, r.spell_id)
+                plain_key = (round(plain_gold, 2), crafts, plain, r.spell_id)
             else:
                 key, plain_key = (score, crafts, r.spell_id), (plain, crafts, r.spell_id)
             found.append((key, plain_key, (key, r, crafts, lo, tools, requests)))
