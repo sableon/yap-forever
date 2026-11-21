@@ -767,9 +767,15 @@ class VisitRowTests(unittest.TestCase):
     def test_visit_row_lists_recipes(self):
         text = self.render(160, [(200, 225)], [(11, 170, 1000), (12, 180, 2500)], [(11, 205), (12, 215)], final=225)
         row = self.row(text, "- **Trip:**", "rank to 225")
-        self.assertIn("Or Wandering Smith, Ironforge (20.0, 20.0). While there, learn: Recipe 11 (10s), "
-                      "Recipe 12 (25s).", row)
+        self.assertIn("Or Wandering Smith, Ironforge (20.0, 20.0). While there, learn: Recipe 11 (10s 0c), "
+                      "Recipe 12 (25s 0c).", row)
         self.assertNotIn("your skill allows", text)
+
+    def test_visit_row_fees_keep_their_copper(self):  # as the route's "(trainer 4s 50c)" rows
+        text = self.render(160, [(200, 225)], [(11, 170, 450), (12, 180, 2250), (13, 175, 90)],
+                           [(11, 205), (12, 215), (13, 216)], final=225)
+        row = self.row(text, "- **Trip:**", "rank to 225")
+        self.assertIn("While there, learn: Recipe 11 (4s 50c), Recipe 12 (22s 50c), Recipe 13 (0s 90c).", row)
 
     def test_if_missing_line(self):
         text = self.render(190, [(225, 300)], [(13, 180, 1000), (14, 185, 1000)], [(13, 230), (14, 240)])
@@ -781,12 +787,12 @@ class VisitRowTests(unittest.TestCase):
     def test_fallback_names_lower_trainer(self):
         text = self.render(200, [(225, 300)], [(13, 210, 1000)], [(13, 230)])
         row = self.row(text, "- **Trip:**", "rank to 300")
-        self.assertIn("While there, learn: Recipe 13 (10s) (if Brakka Ironfold doesn't list it: Thessa Hammerlow "
+        self.assertIn("While there, learn: Recipe 13 (10s 0c) (if Brakka Ironfold doesn't list it: Thessa Hammerlow "
                       "(Artisan, Stormwind City) or Wandering Smith (Artisan, Ironforge)).", row)
         # below the remote ranks the fallback is any trainer of the recipe's rank
         text = self.render(140, [(150, 225)], [(15, 145, 500), (16, 120, 500)], [(15, 160), (16, 170)], final=225)
         row = self.row(text, "- **Trip:**", "rank to 225")
-        self.assertIn("While there, learn: Recipe 15 (5s) (if the Artisan Blacksmith doesn't list it: any Expert "
+        self.assertIn("While there, learn: Recipe 15 (5s 0c) (if the Artisan Blacksmith doesn't list it: any Expert "
                       "Blacksmith). If you don't have it yet: Recipe 16 (if the Artisan Blacksmith doesn't list it: "
                       "any Expert Blacksmith).", row)
 
@@ -802,9 +808,9 @@ class VisitRowTests(unittest.TestCase):
         text = self.render(225, [(225, 300)], [(18, 240, 3000), (19, 245, 3000)], [(18, 240), (19, 251)],
                            alts={(18,): 30000, (19,): None})
         self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 240 for Recipe 18 "
-                      "(30s); or skip it: +3.0g for the route without it.", text)
+                      "(30s 0c); or skip it: +3.0g for the route without it.", text)
         self.assertIn("- **Trip:** back to Brakka Ironfold, Stranglethorn Vale (30.0, 70.0), at 251 for Recipe 19 "
-                      "(30s); there is no other way to reach the target without it.", text)
+                      "(30s 0c); there is no other way to reach the target without it.", text)
         route = text[text.index("## Route"):]
         self.assertLess(route.index("at 240 for"), route.index("at 251 for"))
 
@@ -816,14 +822,14 @@ class VisitRowTests(unittest.TestCase):
                            faction="horde", data=data)
         row = self.row(text, "- **Trip:**", "rank to 300")
         self.assertIn("the planner has no Master Blacksmith trainer for your faction in its data. While there, learn: "
-                      "Recipe 13 (10s) (if the Master Blacksmith doesn't list it: any Artisan Blacksmith).", row)
+                      "Recipe 13 (10s 0c) (if the Master Blacksmith doesn't list it: any Artisan Blacksmith).", row)
         self.assertIn("- **Trip:** back to the Master Blacksmith (the planner has no Master Blacksmith trainer for "
-                      "your faction in its data), at 240 for Recipe 18 (10s).", text)
+                      "your faction in its data), at 240 for Recipe 18 (10s 0c).", text)
         text = self.render(200, [(225, 300)], [(13, 210, 1000), (18, 240, 1000)], [(13, 230), (18, 240)], faction="")
         row = self.row(text, "- **Trip:**", "rank to 300")
-        self.assertIn("(the planner doesn't say where yet). While there, learn: Recipe 13 (10s)", row)
+        self.assertIn("(the planner doesn't say where yet). While there, learn: Recipe 13 (10s 0c)", row)
         self.assertIn("- **Trip:** back to the Master Blacksmith in a set town (the planner doesn't say where yet), "
-                      "at 240 for Recipe 18 (10s).", text)
+                      "at 240 for Recipe 18 (10s 0c).", text)
 
     def test_city_visit_rows(self):
         from yap_forever import trainers
@@ -832,8 +838,8 @@ class VisitRowTests(unittest.TestCase):
         text = self.render(100, [(130, 150)], [(20, 120, 500), (21, 140, 500)], [(20, 135), (21, 142)],
                            faction="horde", data=data, final=150)
         self.assertIn("- Train Blacksmithing to 150 at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
-                      "Orgrimmar). While there, learn: Recipe 20 (5s).", text)
-        self.assertIn("- Learn Recipe 21 (5s) at any Expert Blacksmith in a capital.", text)  # the rank row named them
+                      "Orgrimmar). While there, learn: Recipe 20 (5s 0c).", text)
+        self.assertIn("- Learn Recipe 21 (5s 0c) at any Expert Blacksmith in a capital.", text)  # the rank row named them
 
     def grom(self):
         from yap_forever import trainers
@@ -863,32 +869,32 @@ class VisitRowTests(unittest.TestCase):
         text = render_guide(p, toy.gamedata(rs), toy.market(BARS), toy.stock(skills={BS: 100}), caps={BS: 150},
                             trainer_info=info)
         rows = [line for line in text.splitlines() if line.startswith("- Learn ")]
-        self.assertEqual(rows, ["- Learn Recipe 20 (5s) at any Expert Blacksmith in a capital (for example Grom "
+        self.assertEqual(rows, ["- Learn Recipe 20 (5s 0c) at any Expert Blacksmith in a capital (for example Grom "
                                 "Anvilhand, Orgrimmar). A tip.",
-                                "- Learn Recipe 21 (5s) at any Expert Blacksmith in a capital.",
-                                "- Learn Recipe 22 (5s) at any Expert Blacksmith in a capital."])
+                                "- Learn Recipe 21 (5s 0c) at any Expert Blacksmith in a capital.",
+                                "- Learn Recipe 22 (5s 0c) at any Expert Blacksmith in a capital."])
 
     def test_capital_stop_fallback_comes_after_the_place(self):
         # a Journeyman recipe (70) joins an Expert stop: its fallback note follows the place
         text = self.render(60, [], [(21, 140, 500), (22, 74, 100)], [(21, 142), (22, 145)], faction="horde",
                            data=self.grom(), final=150)
-        self.assertIn("- Learn Recipe 21 (5s), Recipe 22 (1s) at any Expert Blacksmith in a capital (for example "
+        self.assertIn("- Learn Recipe 21 (5s 0c), Recipe 22 (1s 0c) at any Expert Blacksmith in a capital (for example "
                       "Grom Anvilhand, Orgrimmar) (if the Expert Blacksmith doesn't list Recipe 22: any Journeyman "
                       "Blacksmith).", text)
 
     def test_if_missing_on_a_recipe_trip_and_a_capital_stop(self):
         text = self.render(200, [], [(13, 210, 1000), (14, 190, 1000)], [(13, 212), (14, 220)])
         self.assertIn("- **Trip:** back to Thessa Hammerlow, Stormwind City (60.5, 40.2) or Wandering Smith, Ironforge "
-                      "(20.0, 20.0), at 212 for Recipe 13 (10s). If you don't have it yet: Recipe 14.", text)
+                      "(20.0, 20.0), at 212 for Recipe 13 (10s 0c). If you don't have it yet: Recipe 14.", text)
         text = self.render(100, [], [(21, 140, 500), (23, 90, 500)], [(21, 142), (23, 145)], faction="horde",
                            data=self.grom(), final=150)
-        self.assertIn("- Learn Recipe 21 (5s) at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
+        self.assertIn("- Learn Recipe 21 (5s 0c) at any Expert Blacksmith in a capital (for example Grom Anvilhand, "
                       "Orgrimmar). If you don't have it yet: Recipe 23.", text)
 
     def test_city_rank_row_without_a_faction(self):
         text = self.render(100, [(130, 150)], [(20, 120, 500)], [(20, 135)], faction="", final=150)
         self.assertIn("- Train Blacksmithing to 150 at any Expert Blacksmith in a capital. While there, learn: "
-                      "Recipe 20 (5s).", text)
+                      "Recipe 20 (5s 0c).", text)
         text = self.render(100, [(130, 150)], [], [], faction="", final=150)
         self.assertNotIn("- Train ", text)  # nothing to learn: no row, as before
 

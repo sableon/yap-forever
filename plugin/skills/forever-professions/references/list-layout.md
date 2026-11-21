@@ -112,7 +112,8 @@ Write it for that.
   the route needs it, and later recipes of that rank with a required skill at or below that skill
   join it: a recipe needed at 240 and used then, and one at 245, make two rows; when the first isn't
   used before 245, one visit teaches both. The recipes of a trip or a capital stop are listed with
-  their fees (`<recipe> (<fee>)`). An Artisan or Master recipe is a trip:
+  their fees (`<recipe> (<fee>)`, to the copper as on the route's `Learn` rows: `(4s 50c)`, `(10s 0c)`).
+  An Artisan or Master recipe is a trip:
   `- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>`, then `; or skip it: +<gold>
   for the route without it` (the route planned again without those recipes) or `; there is no other
   way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
