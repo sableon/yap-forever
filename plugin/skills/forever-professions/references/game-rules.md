@@ -7,12 +7,12 @@ say so.
 
 - Expert trainers train up to 150, Artisan to 225, Master to 300. Artisan and Master trainers
   sit in specific towns.
-- **A trainer teaches recipes only up to its rank's cap**: Journeyman to 75, Expert to 150, Artisan
-  to 225, Master to 300. From one sighting (2026-11-20): the Stormwind Expert Blacksmith doesn't
-  teach Truesilver Rod (175) and the Ironforge Artisan does. It shows only the upper bound; the
-  planner takes it that a higher rank also teaches the lower ranks' recipes, and every recipe a
-  guide lists at a trainer above the recipe's own rank names where else to learn it. A recipe's
-  rank is the lowest whose cap is at or above its required skill (the safe one, below).
+- **A trainer teaches every recipe from 1 up to its rank's cap**: Journeyman to 75, Expert to 150,
+  Artisan to 225, Master to 300. The rule is confirmed in game (2026-11-21). Expert trainers stop at 150: the
+  Stormwind Expert Blacksmith doesn't teach Truesilver Rod (175), and an Artisan does. A higher
+  rank also teaches every recipe of the lower ranks, so a guide never needs a second trainer for a
+  lower recipe. A recipe's rank is the lowest whose cap is at or above its required skill (the safe
+  one, below).
 - Level requirements (Classic data, not yet contradicted): 150 needs level 10, 225 level 20,
   300 level 35. The pinned trainer data gives Tailoring's Master rank level 0 (and a few other
   ranks too); a rank with level 0 takes the level the other professions give the same cap, when
@@ -29,7 +29,7 @@ say so.
   and report notes say how much cheaper it could be if trainers offer recipes at the listing.
   A recipe seen learnable in play below its inferred skill keeps the Forever requirement
   (`yap_forever/data_static/seen_requirements.toml`): Truesilver Rod was learned at Blacksmithing
-  184, so it needs 175, not the inferred 200. Each row is one sighting and an upper bound only.
+  184, so it needs 175, not the inferred 200. Each row is a single observation and an upper bound only.
 - Trainer places are not listed here: the guide's trainer rows come from the Questie Forever NPC
   data, for the character's faction. Facts the data lacks: Booty Bay is a neutral town, and the
   Alliance Master Enchanting trainer is inside Uldaman (Badlands), which has no map coordinates.

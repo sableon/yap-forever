@@ -70,13 +70,15 @@ Write it for that.
   trainer to the profession's next rank training or the end of its route, whichever comes first.
   The trips back for recipes and capital stops inside that stretch are left out: their recipes end
   the rank row as `Learn at the trainer as you reach them: <recipe> at <skill>, ...` (in skill order,
-  `<skill>` where the route learns it; a recipe below the trainer's rank adds `(if <trainer> doesn't
-  list it: <who>)`), and each keeps its `*At <skill>: Learn <recipe> (trainer <fee>)*` row. The bring list
+  `<skill>` where the route learns it), and each keeps its `*At <skill>: Learn <recipe> (trainer <fee>)*` row. The bring list
   covers the whole stretch, whatever the bags hold. What the stretch uses of your own crafts and
   disenchants made before the trip (in route order, either profession) is listed as `<count> <item>
   (yours)`. What your other profession makes later on the route is listed apart, after the bring list:
   `Made later by your <Profession> on this route: <count> <item>, ...: craft those rows before you go, or
-  buy them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
+  buy them on the AH (about <gold>).`; the dust, essences and shards that disenchanting such crafts
+  gives are listed in a sentence of their own, `From disenchanting what your <Profession> makes later
+  on this route: <count> <item>, ...: craft those rows and disenchant the greens before you go, or buy
+  them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
   of the items has no AH price. These items count in the bag slots too. The other profession's rows stay
   where they are. A recipe trip with no remote rank training before it on the route stays a trip.
   The patterns the stretch learns are on the bring list too: from the trip's skill up to where its bring
@@ -103,12 +105,12 @@ Write it for that.
   `- **Before you start**, make sure you know: <recipes> (any <Rank> <Person> teaches them).`
   A recipe learned at a visit or before the start is not learned again where the route first uses it:
   that row reads `*At <skill>: start crafting <recipe> (learned at <trainer>)*` or `(learned before you
-  start)`, with no second fee, and comes after the visit's row at the same skill.
-- A recipe below the visit trainer's rank says where else to learn it, since the lower ranks are
-  unconfirmed: `(if <trainer> doesn't list it: <who>)` after the recipes it is for (`them` for
-  several), where `<trainer>` is the one trainer the row names or `the <Rank> <Person>`, and `<who>`
-  names the Artisan or Master trainers of the recipe's rank (`<name> (<Rank>, <zone>)`) or reads
-  `any <Rank> <Person>` below them.
+  start)`, with no second fee, and comes after the visit's row at the same skill. A recipe listed as `If
+  you don't have them yet` may already be known, so its row reads `(learn it at <trainer> if you don't
+  have it)` and keeps the `; listed from ...` note when there is one.
+- The recipes of a row keep route order (the order the route learns them), whatever their rank:
+  a trainer teaches every recipe up to its rank's cap, so no row names a second trainer for a lower
+  recipe.
 - A trainer recipe that no earlier visit of its rank can teach gets a visit of its own at the skill
   the route needs it, and later recipes of that rank with a required skill at or below that skill
   join it: a recipe needed at 240 and used then, and one at 245, make two rows; when the first isn't
@@ -120,10 +122,9 @@ Write it for that.
   way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
   their own three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip
   for the goal recipe always says there is no other way. Below Artisan it is a stop in a capital:
-  `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`, with a
-  recipe below the stop's rank noted after the place: `(if <trainer> doesn't list <recipe>: <who>)`.
+  `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
-  later stops of that rank read `Learn <recipes> at any <Rank> <Person> in a capital.` Without
+  later stops of that rank read `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital.` Without
   the faction or the trainer in the data the row says so (`back to the Master Enchanter in a set
   town (the planner doesn't say where yet)`) and still lists the recipes.
 - Name the trainer from the data, for the character's faction (the profile's `faction`; without it

@@ -5,7 +5,9 @@
 # Per trainer (all optional):
 #   reach_level  = the character level from which the first trip is comfortable
 #   flight_path  = true when a flight path makes repeat visits easy
-#   note         = one short plain sentence
+#   note         = one short plain sentence, said to every character
+#   note_alliance, note_horde = one short plain sentence each, said (after `note`) to a character
+#                  of that faction only; a `note` never names a faction
 #   nearby       = services known from play to be near, whatever the data's radius finds:
 #                  a list of "bank", "auction", "mail"
 # For a trainer inside an instance, use group_level and solo_level (both) instead of reach_level.
@@ -29,7 +31,8 @@ note = "The first trip crosses three zones."
 [trainers.2836]  # Brikk Keencraft, Master Blacksmithing, both factions, Booty Bay
 reach_level = 20
 flight_path = true
-note = "A safe neutral town; a long first trip for Alliance."
+note = "A safe neutral town."
+note_alliance = "A long first trip for Alliance."
 
 [trainers.3355]  # Saru Steelfury, Artisan Blacksmithing, Horde, Orgrimmar
 note = "Far from the bank and the AH; the mailbox is closest."
@@ -62,7 +65,7 @@ note = "Some danger on the road the first time."
 [trainers.11052]  # Timothy Worthington, Master Tailoring, Alliance, Theramore
 reach_level = 20
 nearby = ["mail"]  # the data finds no mailbox within the radius; in play it is close
-note = "A safe town; a long first trip for Alliance."
+note = "A safe town; a long first trip."
 
 [trainers.2399]  # Daryl Stack, Master Tailoring, Horde, Hillsbrad Foothills
 reach_level = 18

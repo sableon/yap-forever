@@ -1,6 +1,7 @@
 """The safe route: trainer recipes are planned at their inferred requirement, the Forever listing is
 noted, the possible saving is named, and expensive stretches of the lowest profession point to
 Dedicated Study."""
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -377,7 +378,7 @@ class WriteReportsTests(unittest.TestCase):
             self.assertRegex(row, r"At (3[5-9]|[4-9]\d):")  # never before the inferred 35
             self.assertIn("listed from 30 in the Forever data", row)
         stops = [l for t in (texts["guide-gold"], texts["guide-value"]) for l in t.splitlines()
-                 if l.startswith("- Learn Copper Chain Belt (0s 90c) at any Journeyman Blacksmith")]
+                 if re.match(r"- At \d+, learn Copper Chain Belt \(0s 90c\) at any Journeyman Blacksmith", l)]
         self.assertEqual(len(stops), 2)  # the capital stop that learns it carries the fee
 
     def test_a_recipe_goal_is_planned_to_the_inferred_skill(self):
