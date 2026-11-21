@@ -75,7 +75,10 @@ Write it for that.
   disenchants made before the trip (in route order, either profession) is listed as `<count> <item>
   (yours)`. What your other profession makes later on the route is listed apart, after the bring list:
   `Made later by your <Profession> on this route: <count> <item>, ...: craft those rows before you go, or
-  buy them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
+  buy them on the AH (about <gold>).`; the dust, essences and shards that disenchanting such crafts
+  gives are listed in a sentence of their own, `From disenchanting what your <Profession> makes later
+  on this route: <count> <item>, ...: craft those rows and disenchant the greens before you go, or buy
+  them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
   of the items has no AH price. These items count in the bag slots too. The other profession's rows stay
   where they are. A recipe trip with no remote rank training before it on the route stays a trip.
   The patterns the stretch learns are on the bring list too: from the trip's skill up to where its bring

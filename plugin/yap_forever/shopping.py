@@ -346,6 +346,7 @@ def mailed(plan, gd, stock) -> dict[int, list[tuple[str, int]]]:
 
 YOURS = "yours"  # a bring-list source: your own crafts and disenchants from before the trip
 LATER = "later:"  # a bring-list source "later:<profession>": made by your other profession later on the route
+LATER_DE = "later-de:"  # "later-de:<profession>": disenchanted later from greens that profession makes on the route
 PATTERN = "pattern:"  # a bring-list source "pattern:<how>": a pattern bought on the AH, from a vendor or with Favor
 PATTERN_FROM = {"ah": "from the AH", "vendor": "from a pattern vendor", "favor": "from the Merchant's Favor vendor"}
 _DE_EVENT = re.compile(r"^Enchanting (\d+): disenchant ([\d.]+) (.+)$")
@@ -356,17 +357,28 @@ def made_later_by(src: str) -> int | None:
     return int(src[len(LATER):]) if src.startswith(LATER) else None
 
 
+def disenchanted_later_by(src: str) -> int | None:
+    """The profession a "later-de:<profession>" source names (the profession whose greens are disenchanted), or None."""
+    return int(src[len(LATER_DE):]) if src.startswith(LATER_DE) else None
+
+
+def _origin_key(origin) -> tuple[int, int]:
+    """Sorts the origins of what is made later: a profession's own crafts, then what its greens disenchant to."""
+    return (1, origin[1]) if isinstance(origin, tuple) else (0, origin)
+
+
 _MAILED = re.compile(r"^(.*) \((?:mail from .*|(\d+) your own, \d+ mail from .*)\)$")
 
 
-def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int, float]]]:
+def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int | tuple[str, int], int, float]]]:
     """row index -> (origin, material, count) of the disenchants done just before that row (see _own_sources): an
     event at Enchanting skill s comes before the first Enchanting row that reaches past s.
     Each event uses up the greens the route's rows made, oldest first. One done before the trip (its row comes
     before the trip's, or, on an Enchanting trip, at or below the trip's skill) takes only greens made before the
     trip and counts as before the trip. A later one takes those made by its row first, then those of rows placed
     after it (a merged run's row comes where the run starts). Greens from the bank or the mail take none and count as
-    before the trip, as do greens no row made."""
+    before the trip, as do greens no row made. The origin of a later one is ("de", profession) when another
+    profession made the greens: what that gives is disenchanted, not crafted, by then."""
     names = {it.name: i for i, it in gd.items.items()}
     made: dict[int, list[list]] = {}  # green -> [[row index, origin, count left]] in route order
     for k, r in enumerate(every):
@@ -393,7 +405,7 @@ def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int
         lots = made.get(green, [])
         lots = ([x for x in lots if x[0] < at] if before
                 else [x for x in lots if x[0] < k] + [x for x in lots if x[0] >= k])
-        parts: list[tuple[str | int, float]] = []
+        parts: list[tuple[str | int | tuple[str, int], float]] = []
         for lot in lots:
             if crafted <= 1e-9:
                 break
@@ -401,7 +413,7 @@ def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int
             if used > 1e-9:
                 lot[2] -= used
                 crafted -= used
-                parts.append(("pre" if before else lot[1], used))
+                parts.append(("pre" if before else ("de", lot[1]) if isinstance(lot[1], int) else lot[1], used))
         rest = n - sum(q for _o, q in parts)
         if rest > 1e-9:
             parts.append(("pre", rest))
@@ -412,7 +424,8 @@ def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int
 
 def _own_sources(plan, gd, every, at, rows, trip) -> tuple[dict[int, int], dict[int, dict[int, int]]]:
     """What the trip's rows use of your own crafts and disenchants that they don't make themselves: (made before the
-    trip: item -> count, made later by your other profession: profession -> item -> count). The route's rows are
+    trip: item -> count, made later by your other profession: profession -> item -> count, with ("de", profession)
+    for what that profession's greens disenchant to later). The route's rows are
     walked in order with what each makes; a trip row takes its own profession's crafts first, then what was made
     before the trip, then the other profession's; any other row takes what was made before the trip first."""
     makes = {r.output[0]: r for r in gd.recipes.values() if r.output}
@@ -454,7 +467,7 @@ def _own_sources(plan, gd, every, at, rows, trip) -> tuple[dict[int, int], dict[
             add(origin_of(k, prof), out[0], (r["n"] + r["more"]) * out[1])
 
     # whole items: each item's total rounded up once, shared by largest remainder (disenchants yield fractions)
-    origins = ["pre", *sorted(o for o in taken if o not in ("own", "pre"))]
+    origins = ["pre", *sorted((o for o in taken if o not in ("own", "pre")), key=_origin_key)]
     counts: dict[str | int, dict[int, int]] = {o: {} for o in origins}
     for i in sorted({i for o in origins for i in taken.get(o, {})}):
         shares = [(o, taken.get(o, {}).get(i, 0)) for o in origins]
@@ -522,7 +535,9 @@ def _bring_items(plan, gd, rows, left, mail, trainer_trips, ctx, trip) -> list[t
         out += [(i, n, YOURS) for i, n in yours.items()]
         out += [(gd.recipes[spell].scroll_item, 1, _pattern_source(plan, gd, spell, how))
                 for _s, spell, how in stretch_patterns(plan, gd, trip.profession, trip.skill, rows[-1]["st"].skill_to)]
-        out += [(i, n, f"{LATER}{prof}") for prof, items in sorted(later.items()) for i, n in items.items()]
+        for origin, items in sorted(later.items(), key=lambda x: _origin_key(x[0])):
+            prefix, prof = (LATER_DE, origin[1]) if isinstance(origin, tuple) else (LATER, origin)
+            out += [(i, n, f"{prefix}{prof}") for i, n in items.items()]
     return out
 
 
@@ -566,16 +581,21 @@ def _lower_goal(plan, gd, rows, left, mail, trainer_trips, ctx, trip, bag_slots,
 
 def _made_later_text(gd, items, market) -> str:
     """' Made later by your <Profession> on this route: 10 X, ...: craft those rows before you go, or buy them on the AH
-    (about <gold>).' per profession, for the "later:" items of a bring list; the gold only when every one has an AH
+    (about <gold>).' per profession, for the "later:" items of a bring list, then ' From disenchanting what your
+    <Profession> makes later on this route: 10 X, ...: craft those rows and disenchant the greens before you go, or buy
+    them on the AH (about <gold>).' per profession, for its "later-de:" items; the gold only when every one has an AH
     price (market: today's prices)."""
     out = ""
-    for prof in sorted({made_later_by(src) for _i, _n, src in items} - {None}):
-        mine = [(i, n) for i, n, src in items if made_later_by(src) == prof]
-        costs = [market.buy_cost(i, n) or (market.min_price(i) or 0) * n if market is not None else 0 for i, n in mine]
-        about = f" (about {gold(sum(costs))})" if all(costs) else ""
-        out += (f" Made later by your {PROFESSIONS.get(prof, prof)} on this route: "
-                f"{', '.join(f'{n} {gd.name(i)}' for i, n in mine)}: craft those rows before you go, or buy them on the "
-                f"AH{about}.")
+    for by, lead, tail in ((made_later_by, " Made later by your {} on this route: ", "craft those rows before you go"),
+                           (disenchanted_later_by, " From disenchanting what your {} makes later on this route: ",
+                            "craft those rows and disenchant the greens before you go")):
+        for prof in sorted({by(src) for _i, _n, src in items} - {None}):
+            mine = [(i, n) for i, n, src in items if by(src) == prof]
+            costs = [market.buy_cost(i, n) or (market.min_price(i) or 0) * n if market is not None else 0
+                     for i, n in mine]
+            about = f" (about {gold(sum(costs))})" if all(costs) else ""
+            out += (f"{lead.format(PROFESSIONS.get(prof, prof))}{', '.join(f'{n} {gd.name(i)}' for i, n in mine)}: "
+                    f"{tail}, or buy them on the AH{about}.")
     return out
 
 
@@ -599,7 +619,7 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
     where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor", YOURS: "yours",
              **{f"{PATTERN}{how}": text for how, text in PATTERN_FROM.items()}}
     parts = [f"{n} {gd.name(i)} ({where[src] if src in where else 'mail from ' + from_character(src)})"
-             for i, n, src in items if made_later_by(src) is None]
+             for i, n, src in items if made_later_by(src) is None and disenchanted_later_by(src) is None]
     total, stack, split = _carried(gd, items, reagents, reagent_slots)  # what is made later is carried too
     note = pack_note(gd, total, stack, "them at the trainer")
     town = "" if services_known else "the town may have no auction house, mailbox or bank, so "

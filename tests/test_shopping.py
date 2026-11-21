@@ -2,6 +2,7 @@
 import unittest
 
 from tests import toy
+from yap_forever.guide import gold
 from yap_forever.planner import Plan, Step
 from yap_forever.quests import QuestPlan
 from yap_forever.shopping import CRAFT_ROOM
@@ -270,7 +271,7 @@ class BringListTests(unittest.TestCase):
                         ranks=[(ENCH, 225, 300, 0)], bought={S: 40, T: 5}, final_skill={BS: 230, ENCH: 240},
                         events=[f"Enchanting 231: disenchant 20 {gd.name(belt)}"]))
         trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
-        self.assertIn((toy.DUST, use, f"later:{BS}"), bring_list(p, gd, trip, None, trainer_trips="one_go")[1])
+        self.assertIn((toy.DUST, use, f"later-de:{BS}"), bring_list(p, gd, trip, None, trainer_trips="one_go")[1])
         p.events = [f"Enchanting 225: disenchant 20 {gd.name(belt)} from your bank"]  # disenchanted before you go
         self.assertIn((toy.DUST, use, "yours"), bring_list(p, gd, trip, None, trainer_trips="one_go")[1])
 
@@ -312,7 +313,7 @@ class BringListTests(unittest.TestCase):
         items = bring_list(p, gd, trip, None, trainer_trips="one_go")[1]
         before = per * 10  # the oldest belts are disenchanted first: those made before the trip
         dust = [x for x in items if x[0] == toy.DUST]
-        self.assertEqual([src for _i, _n, src in dust], ["yours", f"later:{BS}"])
+        self.assertEqual([src for _i, _n, src in dust], ["yours", f"later-de:{BS}"])
         self.assertEqual(sum(n for _i, n, _src in dust), use)  # whole items, rounded up once
         self.assertLess(abs(dust[0][1] - before), 1)
 
@@ -334,7 +335,7 @@ class BringListTests(unittest.TestCase):
                         events=[f"Enchanting 236: disenchant 20 {gd.name(belt)}"]))
         trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
         items = bring_list(p, gd, trip, None, trainer_trips="one_go")[1]
-        self.assertEqual([x for x in items if x[0] == toy.DUST], [(toy.DUST, use, f"later:{BS}")])
+        self.assertEqual([x for x in items if x[0] == toy.DUST], [(toy.DUST, use, f"later-de:{BS}")])
 
     def test_one_go_disenchant_before_the_trip_uses_up_its_greens(self):
         # belts made before an Enchanting trip are disenchanted before it (at 220); the belts Blacksmithing makes after
@@ -356,7 +357,7 @@ class BringListTests(unittest.TestCase):
                                 f"Enchanting 231: disenchant 10 {gd.name(belt)}"]))
         trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
         items = bring_list(p, gd, trip, None, trainer_trips="one_go")[1]
-        self.assertEqual([x for x in items if x[0] == toy.DUST], [(toy.DUST, use, f"later:{BS}")])
+        self.assertEqual([x for x in items if x[0] == toy.DUST], [(toy.DUST, use, f"later-de:{BS}")])
 
     def test_one_go_bank_disenchant_before_the_trip_takes_no_greens_made_in_it(self):
         # a Blacksmithing trip whose stretch uses dust from 20 bank belts disenchanted at Enchanting 50, long before;
@@ -561,14 +562,14 @@ class BringListTests(unittest.TestCase):
             every, at = _bring_rows(p, gd, self.ench_trip(), None, None, 0, None, None, "one_go")[3]
             got = [(o, m, round(n, 6)) for lots in _de_supply(p, gd, every, at, self.ench_trip()).values()
                    for o, m, n in lots if m == toy.DUST]
-            want = ([(BS, toy.DUST, round(per * mine, 6))] if mine else []) + [("pre", toy.DUST, round(per * (20 - mine), 6))]
+            want = ([(("de", BS), toy.DUST, round(per * mine, 6))] if mine else []) + [("pre", toy.DUST, round(per * (20 - mine), 6))]
             self.assertEqual(got, want, suffix)
 
     def test_one_go_mixed_mail_disenchant_splits_the_dust(self):
         from yap_forever.shopping import bring_list
         p, gd, per, use = self.de_mail_plan(" (12 your own, 8 mail from Altname)")
         dust = [x for x in bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[1] if x[0] == toy.DUST]
-        self.assertEqual([src for _i, _n, src in dust], ["yours", f"later:{BS}"])  # the mailed belts' dust is yours
+        self.assertEqual([src for _i, _n, src in dust], ["yours", f"later-de:{BS}"])  # the mailed belts' dust is yours
         self.assertEqual(sum(n for _i, n, _src in dust), use)
         self.assertLess(abs(dust[0][1] - per * 8), 1)
 
@@ -658,6 +659,63 @@ class BringListTests(unittest.TestCase):
                         ranks=[(BS, 140, 225, 0), (BS, 200, 300, 0)], bought={S: 25, T: 50}, final_skill={BS: 215}))
         trip = Trip(140, BS, "rank", "Blacksmithing rank to 225")
         self.assertEqual(bring_list(p, gd, trip, None, trainer_trips="one_go"), (200, [(S, 10, "mail"), (T, 50, "mail")]))
+
+    def later_plan(self, rods=False):
+        """Enchanting levels from 225 at its trainer. Blacksmithing makes belts after that, disenchanted at 231 for the
+        dust Enchanting uses at 230-240 (and, with `rods`, Copper Rods Enchanting uses at 240-250)."""
+        from yap_forever.disenchant import de_yield
+        belt = toy.BELT
+        recs = [toy.recipe(41, "Make belt", BS, {S: 2}, (belt, 1)), toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                toy.recipe(54, "Ench dust", ENCH, {toy.DUST: 1})]
+        use = int(de_yield(toy.gamedata(recs).items[belt])[toy.DUST] * 20)
+        steps = [Step(ENCH, 225, 230, 51, "Ench T", 5, 0, 0, {T: 5}),
+                 Step(BS, 210, 230, 41, "Make belt", 20, 0, 0, {S: 40}),
+                 Step(ENCH, 230, 240, 54, "Ench dust", use, 0, 0, used_made={toy.DUST: use})]
+        bought = {S: 40, T: 5}
+        if rods:
+            recs += [toy.recipe(40, "Make L", BS, {S: 3}, (L, 1)), toy.recipe(50, "Ench L", ENCH, {L: 1, T: 1})]
+            steps += [Step(BS, 230, 240, 40, "Make L", 10, 0, 0, {S: 30}),
+                      Step(ENCH, 240, 250, 50, "Ench L", 10, 0, 0, {T: 10}, used_made={L: 10})]
+            bought = {S: 70, T: 15}
+        gd = toy.gamedata(recs)
+        p = orange(Plan(steps=steps, ranks=[(ENCH, 225, 300, 0)], bought=bought, crafted={L: 10} if rods else {},
+                        final_skill={BS: 240 if rods else 230, ENCH: 250 if rods else 240},
+                        events=[f"Enchanting 231: disenchant 20 {gd.name(belt)}"]))
+        return p, gd, use
+
+    def test_later_disenchant_materials_named_as_disenchant(self):
+        from yap_forever.shopping import bring_list, bring_text
+        from yap_forever.trips import Trip
+        p, gd, use = self.later_plan()
+        trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
+        self.assertIn((toy.DUST, use, f"later-de:{BS}"), bring_list(p, gd, trip, None, trainer_trips="one_go")[1])
+        text = bring_text(p, gd, trip, None, trainer_trips="one_go", market=toy.market({toy.DUST: [(2500, 100)]}))
+        self.assertIn(f" From disenchanting what your Blacksmithing makes later on this route: {use} Strange Dust: "
+                      "craft those rows and disenchant the greens before you go, or buy them on the AH (about "
+                      f"{gold(use * 2500)}).", text)
+        self.assertNotIn("Made later by your Blacksmithing", text)
+        text = bring_text(p, gd, trip, None, trainer_trips="one_go", market=toy.market({}))  # no AH price: no gold
+        self.assertTrue(text.endswith(f" From disenchanting what your Blacksmithing makes later on this route: {use} "
+                                      "Strange Dust: craft those rows and disenchant the greens before you go, or buy "
+                                      "them on the AH."), text)
+
+    def test_later_crafts_keep_their_sentence(self):
+        from yap_forever.shopping import bring_list, bring_text
+        from yap_forever.trips import Trip
+        p, gd, use = self.later_plan(rods=True)
+        trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
+        items = bring_list(p, gd, trip, None, trainer_trips="one_go")[1]
+        self.assertIn((L, 10, f"later:{BS}"), items)  # crafted later by the other profession
+        self.assertIn((toy.DUST, use, f"later-de:{BS}"), items)  # disenchanted later
+        text = bring_text(p, gd, trip, None, trainer_trips="one_go", market=toy.market({}))
+        made = " Made later by your Blacksmithing on this route: 10 Copper Rod: craft those rows before you go, or buy " \
+               "them on the AH."
+        de = f" From disenchanting what your Blacksmithing makes later on this route: {use} Strange Dust: craft those " \
+             "rows and disenchant the greens before you go, or buy them on the AH."
+        self.assertIn(made, text)
+        self.assertIn(de, text)
+        self.assertEqual(text.count("Made later by"), 1)  # not for the dust
+        self.assertEqual(text.count("From disenchanting what"), 1)  # not for the rods
 
 
 if __name__ == "__main__":
