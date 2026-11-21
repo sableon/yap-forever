@@ -1317,7 +1317,7 @@ class JoinedStopGuideTests(unittest.TestCase):
     """#98: capital stops of the two professions close together on the route are one row in the first one's block
     (trips.join_stops), and the joined recipes' rows point at it."""
 
-    def render(self, home=IRONFORGE, notes=None, reagent=None, items=None, bag_slots=None, later=(), eng=91):
+    def render(self, home=IRONFORGE, notes=None, reagent=None, items=None, bag_slots=None, later=(), eng=91, alts=None):
         """Alchemy and Engineering 80–110 side by side, one point a step (Alchemy first at each skill), no buffer:
         a basic recipe to 91 (Engineering: to `eng`), then Alchemy crafts Alch draught (learned at 91 with Alch wisdom)
         and Engineering Eng contact (learned at `eng`, needs 85) to 110, one `reagent` each (default: Iron Bar, bought on
@@ -1349,7 +1349,7 @@ class JoinedStopGuideTests(unittest.TestCase):
         stock = toy.stock(items=items, skills={ALCH: 80, ENG: 80})
         stock.bag_slots = bag_slots
         return render_guide(p, gd, toy.market(BARS), stock, caps={ALCH: 110, ENG: 110}, trainer_info=info,
-                            capitals={}, home=home)
+                            capitals={}, home=home, alts=alts)
 
     def test_joined_row(self):
         text = self.render()
@@ -1402,3 +1402,10 @@ class JoinedStopGuideTests(unittest.TestCase):
     def test_no_sentence_without_vendor_reagents(self):
         self.assertNotIn("trade supplies", self.render())  # Iron Bar comes from the AH
         self.assertNotIn("trade supplies", self.render(reagent=toy.ROD, items={toy.ROD: 200}))  # all in the bank
+
+
+    def test_joined_row_keeps_the_first_stops_skip_clause(self):  # P34: the first stop's own, after its trainer
+        text = self.render(alts={(71, 72): 30000, (81,): 4600})
+        self.assertIn("at an Expert Alchemist; or skip it: +3.0g for the route without it, and Eng contact (2s 70c) at an "
+                      "Expert Engineer (you use it from Engineering 91).\n", text)
+        self.assertNotIn("+46s", text)
