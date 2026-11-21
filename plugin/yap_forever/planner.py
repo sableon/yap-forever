@@ -237,6 +237,7 @@ class _Route:
                                   and r.source == "trainer" and r.required_skill <= self.fixed[r.skill_line]}
         self.produced: dict[int, float] = {}
         self.held: dict[int, float] = {}
+        self.goal_out: dict[int, float] = {}  # what the craft-once goals make: the player's, never sold (_finish)
         self.skipped: dict[int, str] = {}
         self.soft_stalls: set[int] = set()  # stalled for lack of materials; retried when new ones appear
         self.spent = Cost()
@@ -575,6 +576,7 @@ class _Route:
         mats, from_stock, used_made, from_mail = _deltas(before, _snapshot(self.pools))
         if r.output:
             self.pools.made[r.output[0]] = self.pools.made.get(r.output[0], 0) + r.output[1]
+            self.goal_out[r.output[0]] = self.goal_out.get(r.output[0], 0) + r.output[1]
         self.spent += step_cost
         self.p.steps.append(Step(prof, s, s, spell, r.name, 1, step_cost.cash, step_cost.economic,
                                  mats, from_stock, used_made, 1, extra, bought, from_mail, tools_mailed))
@@ -758,7 +760,10 @@ class _Route:
         p.shared = {name: dict(items) for name, items in self.stock.shared.items()}
         p.used_mail = mail_used(p.shared, self.pools.mail)
         de_mats = set(p.de_materials)
-        for item, n in list(self.pools.made.items()) + list(self.held.items()):
+        # the goal crafts are what the player set out to make: no leftover, never sold (by count: the route may make
+        # the same item to level)
+        made = [(item, n - self.goal_out.get(item, 0)) for item, n in self.pools.made.items()]
+        for item, n in made + list(self.held.items()):
             if n < 1e-9:
                 continue
             p.leftovers[item] = p.leftovers.get(item, 0) + n

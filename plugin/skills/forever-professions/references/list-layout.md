@@ -61,6 +61,8 @@ Write it for that.
   rows. A row the AH takes whole, one whose craft a vendor pays nothing for and the AH-only quest
   form (`→ sell on the AH (quest item, about <price> each)`) get no amount. For a craft the route
   only sells, its rows add up to what vendors pay back for it within about a craft each.
+- The goal recipe crafted once is the player's: it is no leftover, and neither its row nor `Back from a
+  vendor`, the guide's Money, the report's Totals or the least-gold measure count it as sold.
 - The comparison table gives `Gold out of pocket`, `Back from a vendor`, `Total value` (vendor sales
   only) and `AH sales on top` (`—` when there are none), and ends with `Least gold is the gold out of
   pocket less what vendors pay back for the crafts. AH sales of crafts are not counted in choosing a
