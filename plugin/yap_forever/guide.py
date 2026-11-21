@@ -108,7 +108,7 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
                  character=None, reading="relative", today=None, trainer_info=None, trainer_note="",
                  saving_line="", mode="gold", study_hint_gold_per_point=100, extra_notes=(),
                  budget_lines=(), order=None, nothing_in_budget=False, trainer_trips="as_needed",
-                 free_skips=()) -> str:
+                 free_skips=(), could_make=()) -> str:
     """caps: profession -> target skill (see planner.resolve_goals).
     alts: Trip.key (a recipe, or a recipe trip's recipes) -> what skipping the trip costs (None: no other way),
     from trips.trip_alternatives.
@@ -124,7 +124,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     order: the professions raised one at a time, in this order (None: side by side).
     nothing_in_budget: the budget reaches no stop (budget.BudgetCut.below_first_stop): the route says so.
     trainer_trips: the character's "as_needed" or "one_go" (profile.Character.trainer_trips; see trips.visits).
-    free_skips: a line for each trip the route was planned without (free_skip_line), said after the saving line."""
+    free_skips: a line for each trip the route was planned without (free_skip_line), said after the saving line.
+    could_make: the "You could also make" section (favor_suggest.lines), after the route, before the shopping list."""
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
     if prices_line:
@@ -155,6 +156,7 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     _route(out, plan, gd, caps, stock, alts or {}, trainer_info, hint, trainer_trips, market)
     if nothing_in_budget:
         out += [NOTHING_IN_BUDGET, ""]
+    out += list(could_make)
     from yap_forever.shopping import render_shopping  # shopping imports this module
     out += render_shopping(plan, gd, market, stock)[0]
     _money(out, plan, stock)

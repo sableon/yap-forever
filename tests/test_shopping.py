@@ -407,10 +407,10 @@ class BringListTests(unittest.TestCase):
 
     def pattern_plan(self, how, at=235):
         # an Enchanting trip to a remote Master trainer at 225 (the Annora case): the stretch to 245 learns
-        # pattern 53 at `at`, bought on the AH (or from a vendor, with Favor, from your bank, mailed by an alt)
+        # pattern 53 at `at`, bought on the AH (or from a vendor, from your bank, mailed by an alt); a Favor pattern
+        # never levels a route (#95): it is a goal's (goal_pattern_plan)
         gd = toy.gamedata([toy.recipe(51, "Ench T", ENCH, {T: 1}),
-                           toy.recipe(53, "Ench P", ENCH, {T: 1}, source="favor" if how == "favor" else "scroll",
-                                      scroll=toy.SCROLL, req=230)])
+                           toy.recipe(53, "Ench P", ENCH, {T: 1}, source="scroll", scroll=toy.SCROLL, req=230)])
         p = orange(Plan(steps=[Step(ENCH, 225, 235, 51, "Ench T", 10, 0, 0, {T: 10}),
                                Step(ENCH, 235, 245, 53, "Ench P", 10, 0, 0, {T: 10})],
                         ranks=[(ENCH, 225, 300, 0)], bought={T: 20}, final_skill={ENCH: 245},
@@ -425,8 +425,8 @@ class BringListTests(unittest.TestCase):
 
     def test_one_go_brings_the_stretchs_patterns(self):
         from yap_forever.shopping import bring_list, bring_text
-        said = {"ah": "from the AH", "vendor": "from a pattern vendor", "favor": "from the Merchant's Favor vendor",
-                "owned": "from the bank", "mail": "mail from Altname"}
+        said = {"ah": "from the AH", "vendor": "from a pattern vendor", "owned": "from the bank",
+                "mail": "mail from Altname"}
         for how, where in said.items():
             p, gd = self.pattern_plan(how)
             reach, items = bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")
@@ -466,31 +466,33 @@ class BringListTests(unittest.TestCase):
                                       "stretch doesn't need, or set a lower goal (for example 235) so it fits."), text)
 
     def test_one_go_folds_pattern_trips_inside_the_stretch(self):
-        # the vendor (or Favor) pattern learned at 235 is on the trip's bring list: no trip of its own while you are away
+        # the vendor pattern learned at 235 is on the trip's bring list: no trip of its own while you are away (a
+        # Favor goal pattern: test_one_go_folds_a_vendor_goal_pattern_at_the_end)
         from yap_forever.guide import render_guide
         from yap_forever.shopping import bring_list
         from yap_forever.trips import stretch_end, trips
         start = {ENCH: 225}
-        for how in ("vendor", "favor"):
-            p, gd = self.pattern_plan(how)
-            # the fold reads the stretch to stretch_end, the bring list to its reach: the same skill in one go
-            self.assertEqual(bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[0],
-                             stretch_end(p, ENCH, 225))
-            self.assertEqual([t.kind for t in trips(p, gd, start)], ["rank", how], how)  # as needed: as before
-            self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["rank"], how)
-            text = render_guide(p, gd, toy.market({T: [(10, 1000)]}), toy.stock(skills=start), {ENCH: 245},
-                                trainer_trips="one_go")
-            rows = [line for line in text.splitlines() if line.startswith("- **Trip:**")]
-            self.assertEqual(len(rows), 1, rows)
-            self.assertIn("1 Plans: Something (from ", rows[0])
+        how = "vendor"
+        p, gd = self.pattern_plan(how)
+        # the fold reads the stretch to stretch_end, the bring list to its reach: the same skill in one go
+        self.assertEqual(bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[0],
+                         stretch_end(p, ENCH, 225))
+        self.assertEqual([t.kind for t in trips(p, gd, start)], ["rank", how], how)  # as needed: as before
+        self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["rank"], how)
+        text = render_guide(p, gd, toy.market({T: [(10, 1000)]}), toy.stock(skills=start), {ENCH: 245},
+                            trainer_trips="one_go")
+        rows = [line for line in text.splitlines() if line.startswith("- **Trip:**")]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("1 Plans: Something (from ", rows[0])
         p, gd = self.pattern_plan("vendor", 220)  # learned before the trip: still a trip of its own
         self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["vendor", "rank"])
 
     def goal_pattern_plan(self, how):
         # the goal recipe is a pattern, learned at the route's end (235) and crafted once there, as
-        # planner._craft_once_step does: Step(prof, s, s, ..., crafts=1)
+        # planner._craft_once_step does: Step(prof, s, s, ..., crafts=1); how "favor": a Merchant's Favor goal
         gd = toy.gamedata([toy.recipe(51, "Ench T", ENCH, {T: 1}),
-                           toy.recipe(53, "Ench Goal", ENCH, {T: 1}, source="scroll", scroll=toy.SCROLL, req=235)])
+                           toy.recipe(53, "Ench Goal", ENCH, {T: 1}, source="favor" if how == "favor" else "scroll",
+                                      scroll=toy.SCROLL, req=235)])
         gd.items[T].stack = 20
         p = orange(Plan(steps=[Step(ENCH, 225, 235, 51, "Ench T", 10, 0, 0, {T: 10}),
                                Step(ENCH, 235, 235, 53, "Ench Goal", 1, 0, 0, {T: 1})],
@@ -507,19 +509,21 @@ class BringListTests(unittest.TestCase):
                       "the trainer (2 bag slots)", bring_text(p, gd, self.ench_trip(), None, trainer_trips="one_go"))
 
     def test_one_go_folds_a_vendor_goal_pattern_at_the_end(self):
+        # a vendor or Merchant's Favor goal pattern (the only Favor pattern a route learns, #95)
         from yap_forever.compare import compare
         from yap_forever.guide import render_guide
         from yap_forever.trips import trips
-        p, gd = self.goal_pattern_plan("vendor")
-        start, market = {ENCH: 225}, toy.market({T: [(10, 1000)]})
-        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start)], [("rank", 225), ("vendor", 235)])  # as needed
-        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start, "one_go")], [("rank", 225)])
-        text = render_guide(p, gd, market, toy.stock(skills=start), {ENCH: 235}, trainer_trips="one_go")
-        rows = [line for line in text.splitlines() if line.startswith("- **Trip:**")]
-        self.assertEqual(len(rows), 1, rows)
-        self.assertIn("1 Plans: Something (from a pattern vendor)", rows[0])
-        self.assertIn("| Trips away | 1 |", compare({"gold": p}, gd, market, toy.stock(skills=start),
-                                                     trainer_trips="one_go"))
+        for how, where in (("vendor", "from a pattern vendor"), ("favor", "from the Merchant's Favor vendor")):
+            p, gd = self.goal_pattern_plan(how)
+            start, market = {ENCH: 225}, toy.market({T: [(10, 1000)]})
+            self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start)], [("rank", 225), (how, 235)])  # as needed
+            self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start, "one_go")], [("rank", 225)])
+            text = render_guide(p, gd, market, toy.stock(skills=start), {ENCH: 235}, trainer_trips="one_go")
+            rows = [line for line in text.splitlines() if line.startswith("- **Trip:**")]
+            self.assertEqual(len(rows), 1, rows)
+            self.assertIn(f"1 Plans: Something ({where})", rows[0])
+            self.assertIn("| Trips away | 1 |", compare({"gold": p}, gd, market, toy.stock(skills=start),
+                                                         trainer_trips="one_go"))
 
     def test_one_go_pattern_at_a_rank_boundary_is_listed_once(self):
         # Artisan at 150 (its stretch ends at the Master training at 200), Master at 200: a pattern learned at 200

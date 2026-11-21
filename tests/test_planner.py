@@ -151,14 +151,17 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(p.sale_proceeds, 0)
 
     def test_favor_limit_respected(self):
+        # two Favor goals (Favor recipes are only planned as goals, #95) and Favor for one of them
         rs = base_recipes() + [
             toy.recipe(3, "Fav A", BS, {}, (toy.STONE, 1), source="unknown"),
             toy.recipe(4, "Fav B", ENCH, {}, None, source="unknown")]
-        fav = FavorData({3: 30, 4: 30}, {3: 1, 4: 1}, [])
-        p = run(rs, BARS, stock=toy.stock(favor=30), favor=fav)
+        fav = FavorData({3: 30, 4: 30}, {3: 20, 4: 20}, [])
+        gd, st = toy.gamedata(rs), toy.stock(favor=30)
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, fav, caps={BS: 20, ENCH: 20}, craft_once={BS: 3, ENCH: 4})
         self.assertEqual(p.favor_spent, 30)
         learned = {s.spell_id for s in p.steps} & {3, 4}
         self.assertEqual(len(learned), 1)
+        self.assertIn("not enough Favor (30)", " ".join(p.stall_reasons.values()))
 
     def test_scroll_recipe_priced_or_skipped(self):
         rs = base_recipes() + [toy.recipe(3, "Scroll free", BS, {}, (toy.STONE, 1),
@@ -401,13 +404,82 @@ if __name__ == "__main__":
 class FavorScrollTests(unittest.TestCase):
     def test_favor_listing_overrides_scroll_source(self):
         # Forever Favor recipes are taught by a scroll item sold for Favor, so game data says "scroll".
+        # A Favor recipe is planned as a goal only (#95).
         rs = base_recipes() + [toy.recipe(3, "Fav scroll", BS, {}, (toy.STONE, 1),
                                           source="scroll", scroll=toy.SCROLL)]
-        fav = FavorData({3: 30}, {3: 1}, [])
-        p = run(rs, BARS, stock=toy.stock(favor=30), favor=fav)
+        fav = FavorData({3: 30}, {3: 20}, [])
+        gd, st = toy.gamedata(rs), toy.stock(favor=30)
+        p = plan(gd, Valuer(toy.market(BARS), gd, st), st, fav, caps={BS: 20}, craft_once={BS: 3})
         self.assertEqual(p.favor_spent, 30)
+        self.assertIn((BS, 20, 3, "favor"), p.learn_log)
         self.assertIn(3, {s.spell_id for s in p.steps})
         self.assertNotIn(3, {sid for sid, _ in p.skipped})
+
+    def favor_route(self, recipes, favor, mode="gold", cap=240, craft_once=None, listings=None):
+        """Blacksmithing to cap with a Master rank from 225 (a remote trip at 225), Favor 100."""
+        from yap_forever.gamedata import Rank
+        gd = toy.gamedata(base_recipes() + recipes)
+        gd.trainer_ranks[BS] = gd.trainer_ranks[BS] + [Rank(300, 9000, 225, 20)]
+        st = toy.stock(favor=100)
+        p = plan(gd, Valuer(toy.market(listings or BARS), gd, st, mode=mode), st, favor, caps={BS: cap},
+                 craft_once=craft_once)
+        return p, gd, st
+
+    def test_favor_recipe_not_used_to_level(self):
+        # #95: a Favor recipe with no reagents is the cheapest in gold at every skill, yet never levels the route
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import trips, visit_count, visits
+        fav = FavorData({3: 30}, {3: 1}, [])
+        rs = [toy.recipe(3, "Fav free", BS, {}, (toy.STONE, 1), source="scroll", scroll=toy.SCROLL)]
+        for mode in ("gold", "value"):
+            p, gd, st = self.favor_route(rs, fav, mode)
+            self.assertEqual(p.final_skill, {BS: 240}, mode)
+            self.assertNotIn(3, [spell for _p, _s, spell, _how in p.learn_log], mode)
+            self.assertNotIn(3, {s.spell_id for s in p.steps}, mode)
+            self.assertEqual(p.favor_spent, 0, mode)
+            self.assertNotIn(3, {sid for sid, _ in p.skipped}, mode)  # not an "Excluded recipe" either
+            for how in ("as_needed", "one_go"):
+                found = trips(p, gd, {BS: 1}, how)
+                self.assertNotIn("favor", [t.kind for t in found], (mode, how))
+                self.assertEqual(visit_count(p, gd, {BS: 1}, how), len(visits(p, gd, {BS: 1}, how)), (mode, how))
+                master = next(t for t in found if t.kind == "rank" and t.cap == 300)
+                items = bring_list(p, gd, master, None, trainer_trips=how)[1]
+                self.assertNotIn(toy.SCROLL, [i for i, _n, _src in items], (mode, how))
+
+    def test_favor_goal_still_planned(self):
+        # a Favor recipe as the craft-once goal: learned with Favor, crafted once, its Favor trip (as needed) or its
+        # pattern on the Master trip's bring list (one go)
+        from yap_forever.shopping import bring_list, bring_text
+        from yap_forever.trips import trips
+        fav = FavorData({4: 30}, {4: 240}, [])
+        rs = [toy.recipe(4, "Fav goal", BS, {toy.IRON_BAR: 1}, (toy.VEST, 1), source="scroll", scroll=toy.SCROLL)]
+        for mode in ("gold", "value"):
+            p, gd, st = self.favor_route(rs, fav, mode, craft_once={BS: 4},
+                                         listings={**BARS, toy.IRON_BAR: [(700, 100)]})
+            self.assertIn((BS, 240, 4, "favor"), p.learn_log, mode)
+            self.assertEqual(p.favor_spent, 30, mode)
+            last = p.steps[-1]
+            self.assertEqual((last.spell_id, last.crafts, last.skill_from, last.skill_to), (4, 1, 240, 240), mode)
+            self.assertIn(("favor", 240), [(t.kind, t.skill) for t in trips(p, gd, {BS: 1})], mode)
+            one_go = trips(p, gd, {BS: 1}, "one_go")
+            self.assertNotIn("favor", [t.kind for t in one_go], mode)
+            master = next(t for t in one_go if t.kind == "rank" and t.cap == 300)
+            self.assertIn((toy.SCROLL, 1, "pattern:favor"),
+                          bring_list(p, gd, master, None, trainer_trips="one_go")[1], mode)
+            self.assertIn("1 Plans: Something (from the Merchant's Favor vendor)",
+                          bring_text(p, gd, master, None, trainer_trips="one_go"), mode)
+
+    def test_favor_recipe_not_used_to_make_a_tool(self):
+        # the only way to the Runed Copper Rod is a Favor recipe: the recipe that needs the rod is not used
+        fav = FavorData({5: 30}, {5: 1}, [])
+        rs = [toy.recipe(1, "BS basic", BS, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+              toy.recipe(2, "Ench copper", ENCH, {toy.COPPER_BAR: 1}),
+              toy.recipe(6, "Ench rod-needing", ENCH, {}, tools=[373]),
+            toy.recipe(5, "Fav rod", ENCH, {toy.ROD: 1}, (toy.ROD_TOOL, 1), source="scroll", scroll=toy.SCROLL)]
+        p = run(rs, {**BARS, toy.ROD: [(10, 100000)]}, stock=toy.stock(favor=100), favor=fav, cap=40)
+        self.assertNotIn(6, {s.spell_id for s in p.steps})
+        self.assertEqual(p.favor_spent, 0)
+        self.assertNotIn(5, [spell for _p, _s, spell, _how in p.learn_log])
 
 
 class NoOvercraftTests(unittest.TestCase):

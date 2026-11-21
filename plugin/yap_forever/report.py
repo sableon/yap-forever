@@ -4,6 +4,7 @@ from collections import defaultdict
 
 from yap_forever.budget import amount
 from yap_forever.costmodel import Valuer, money
+from yap_forever.favor_suggest import levels_known
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
 from yap_forever.guide import NOTHING_IN_BUDGET
 from yap_forever.planner import DISENCHANT, reached_lines, step_factor
@@ -44,11 +45,13 @@ def _q(item, gd):
 
 def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
            reading="relative", today=None, saving_line="", budget: Budget | None = None, notes=(),
-           budget_lines=(), goal=None, nothing_in_budget=False, free_skips=()) -> str:
+           budget_lines=(), goal=None, nothing_in_budget=False, free_skips=(), could_make=()) -> str:
     """budget: the shared gold the Totals line compares with; goal: the config.Budget the route was cut to,
     and budget_lines what it reaches (budget.lines), said in the verdict; nothing_in_budget: it reaches no
     stop (budget.BudgetCut.below_first_stop), so there is no verdict and the route says so; free_skips: a line
-    for each trip the route was planned without (guide.free_skip_line), in the data notes after the saving line."""
+    for each trip the route was planned without (guide.free_skip_line), in the data notes after the saving line;
+    could_make: the "You could also make" block (favor_suggest.lines, under a bold heading), inside "Merchant's
+    Favor"."""
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
@@ -95,12 +98,12 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
         out += ["", f"Smelts into: {bars}."]
 
     _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, caps, stock),
-          saving_line, budget, notes, goal, nothing_in_budget, free_skips)
+          saving_line, budget, notes, goal, nothing_in_budget, free_skips, could_make)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
 def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None, notes=(),
-          goal=None, nothing_in_budget=False, free_skips=()) -> None:
+          goal=None, nothing_in_budget=False, free_skips=(), could_make=()) -> None:
     # Route
     section("Route")
     if nothing_in_budget:
@@ -138,6 +141,8 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     if favor.note:
         out += ["", favor.note, ""]
     out += [f"- {e}" for e in fav_events]
+    if could_make:
+        out += ["", *could_make]
     if favor.turnins:
         out += ["", "Crate turn-ins, cheapest Favor first (materials at what they'd sell for; "
                 "the crate at its AH price):", "",
@@ -241,6 +246,12 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out.append("- Disenchant results use Classic odds (estimates). Favor data is from community guides.")
     out.append("- AH resale of crafted gear counts at most 5 of each item, except quest items.")
     out.append("- Leather is not farmed in this model; any leather is bought.")
+    if favor.recipes:
+        out.append("- Merchant's Favor recipes are not used to level"
+                   + (" (see You could also make)." if could_make else "."))
+        if not levels_known(gd):
+            out.append("- Item required levels are not in the game data: Merchant's Favor items are not suggested, "
+                       "only enchants.")
     if budget is not None and budget.is_sum:
         out.append(f"- The {budget.label} gold is the sum of `cash_gold` in your characters' stock files; "
                    f"set it once under [gold] in profile.toml (\"{budget.label}\" = gold).")

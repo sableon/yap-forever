@@ -19,7 +19,10 @@ says what is there.
   [list-layout.md](list-layout.md), "Trainer stages and trips").
 - Merchant's Favor recipes for the character's standing (Alliance, Blacksmithing and Enchanting),
   as far as their vendor, standing and price are known: up to the Honored Wristguards and Brilliant
-  Wand. Other Favor-era recipes (the Blacksmithing plans at 300 among them) are not listed yet.
+  Wand. They are never used to level: one can be a craft-once target, and the guide and report list
+  the ones the character could make now under "You could also make" ([game-rules.md](game-rules.md),
+  "Merchant's Favor"). Other Favor-era recipes (the Blacksmithing plans at 300 among them) are not
+  listed yet.
   Horde characters get no Favor recipes or crate turn-ins yet: the guide and report say so.
 - A shopping list in every guide; mailbox trips when `stock.toml` gives `bag_slots`, and a reagent
   bag when it gives `reagent_slots` ([list-layout.md](list-layout.md), "Mailbox trips").

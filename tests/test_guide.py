@@ -1040,3 +1040,21 @@ class RunAcrossTrainingGuideTests(unittest.TestCase):
         self.assertGreaterEqual(n1 + n2, 51)  # each part rounds up on its own: never fewer than the whole run
         self.assertNotIn("· 51× BS yellow", text)  # no row with the whole run's count
         self.assertEqual(text.count("× BS yellow"), 2)  # one row in each stage
+
+
+class CouldAlsoMakeGuideTests(unittest.TestCase):
+    """#95: the "You could also make" section comes after the route, before the shopping list."""
+    BLOCK = ["## You could also make", "", "Merchant's Favor recipes to craft once ...", "",
+             "- **Staff of Ana** (Enchanting 100, for level 30): 50 of your 150 Favor; materials about 10s on the AH.", ""]
+
+    def test_section_after_route_before_shopping_list(self):
+        p, gd, m, st = toy.master_route_data()
+        text = render_guide(p, gd, m, st, caps={BS: 300}, could_make=self.BLOCK)
+        self.assertEqual(text.count("## You could also make"), 1)
+        self.assertLess(text.index("## Route"), text.index("## You could also make"))
+        self.assertLess(text.index("## You could also make"), text.index("## Shopping list"))
+        self.assertIn("\n".join(self.BLOCK), text)
+
+    def test_no_section_without_suggestions(self):
+        p, gd, m, st = toy.master_route_data()
+        self.assertNotIn("You could also make", render_guide(p, gd, m, st, caps={BS: 300}))

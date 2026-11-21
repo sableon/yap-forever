@@ -269,7 +269,8 @@ class PublishableTests(unittest.TestCase):
                      "*At <skill>: start crafting <recipe> (learned at <trainer>)*", "(learned before you start)",
                      "- At <skill>, learn <recipes> at any <Rank> <Person> in a capital.",
                      "(learn it at <trainer> if you don't have it)",
-                     "which keep their own three, only the costliest three recipe trips",
+                     "As with vendor trips, which keep their own three, only the costliest three recipe trips",
+                     "a Favor trip, always a target's, gets no clause",
                      "a recipe needed at 240 and used then, and one at 245, make two rows",
                      "The bring list ends at the next rank trip, trip back for recipes or capital stop for recipes",
                      "(learned at <trainer>; listed from <skill> in the Forever data:",
@@ -344,6 +345,48 @@ class PublishableTests(unittest.TestCase):
         self.assertNotIn("no extra cost", layout)
         self.assertIn("one that costs nothing to skip is left out of the route", setup)
         self.assertIn("a trip that costs nothing to skip is left out of the route", coverage)
+
+    def test_docs_promise_favor_suggestions(self):
+        """#95: game-rules.md says Merchant's Favor recipes never level a route and gives the level window of
+        favor_suggest (LEVEL_WINDOW, LATE_WINDOW, LATE_FROM, GUIDE_LIMIT); list-layout.md gives the section the guide and the
+        report print (tests/test_favor_suggest.py, test_guide.py CouldAlsoMakeGuideTests, test_report.py
+        CouldAlsoMakeReportTests, test_cli.py CouldAlsoMakeWiringTests); coverage.md says it."""
+        from yap_forever import favor_suggest as fs
+
+        def read(name):
+            return " ".join((SKILL / name).read_text(encoding="utf-8").split())
+        rules, layout, coverage = (read(f"references/{n}.md") for n in ("game-rules", "list-layout", "coverage"))
+        self.assertIn("## Merchant's Favor", rules)
+        for line in ("Merchant's Favor recipes are personal-use rewards: the planner never uses them to level, as "
+                     "needed or in one go, and plans no trip to the Favor vendor for them.",
+                     "A Favor recipe set as a recipe target is still planned",
+                     f"within {fs.LEVEL_WINDOW} levels of the character's level (within {fs.LATE_WINDOW} from "
+                     f"character level {fs.LATE_FROM})",
+                     "an item with required level 0 (no requirement) has no level test, nor has an enchant, which "
+                     "crafts no item",
+                     "Without `level` in `stock.toml` only the items with no level requirement and the enchants are "
+                     "suggested",
+                     "the bank first, then by mail from the group's other characters, and the rest is bought at "
+                     "today's AH or vendor price",
+                     "A reagent with no price that nobody holds rules the recipe out."):
+            self.assertIn(line, rules)
+        self.assertEqual(fs.HEADING, "## You could also make")
+        for line in (f"`{fs.HEADING}`", f"`{fs.INTRO}`", "`**You could also make**`",
+                     "`- **<name>** (<Profession> <skill>, for level <level>): <favor> of your <Favor> Favor; "
+                     "materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`",
+                     "`(<Profession> <skill>)`", "`(<Profession> <skill>, any level)`", f"`{fs.NO_LEVEL_NOTE}`",
+                     "a recipe with no reagents ends after `Favor`", "`from a vendor`", "`on the AH and from a vendor`",
+                     "`materials: <n> <item> from your bank`",
+                     f"The guide lists at most {fs.GUIDE_LIMIT} items, then at most {fs.GUIDE_LIMIT} enchants, each "
+                     "kind followed by `and <n> more.` in a paragraph of its own when it is cut; the report lists them "
+                     "all.",
+                     "`Merchant's Favor recipes are not used to level (see You could also make).`",
+                     "`Item required levels are not in the game data: Merchant's Favor items are not suggested, only "
+                     "enchants.`"):
+            self.assertIn(line, layout)
+        self.assertEqual(tuple(fs.WHERE.values()), ("on the AH", "from a vendor", "on the AH and from a vendor"))
+        self.assertIn("never used to level", coverage)
+        self.assertIn("You could also make", coverage)
 
 
 if __name__ == "__main__":

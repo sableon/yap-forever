@@ -120,21 +120,23 @@ Write it for that.
   An Artisan or Master recipe is a trip:
   `- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>`, then `; or skip it: +<gold>
   for the route without it` (the route planned again without those recipes) or `; there is no other
-  way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
-  their own three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip
-  for the goal recipe always says there is no other way. A trip whose route-without costs at most 0.5c
-  more (or less), reaches the same skills and makes fewer trainer visits and pattern trips is left out
-  of the route (trainer visits: rank trainings, trips back and capital stops; pattern trips: vendor and
-  Favor trips). The route is planned again without it, at most three rounds, the recipes left out
-  adding up, never the goal recipe, and under a budget only when its "Gold to bring" still fits; the
-  trips left out cost at most 0.5c more together, against the route as first planned, each skip is also
-  within 0.5c of the route it starts from, and a route both guides share is planned without a trip only
-  when it is free in both measures. The guide header (after the listing line) and the report's data
-  notes say so, one line a trip: `Planned without the trip back to <trainer> at <skill> for <recipes>:
-  the route without it costs the same.` (`<trainer>` is the trainer's name when the data names one,
-  else `the <Rank> <Person>`), or `Planned without the trip to buy the pattern for <recipe>: the route
-  without it costs the same.` for a vendor or Favor trip. A trip left on the route whose skip costs at
-  most 0.5c more gets no skip clause. Below Artisan it is a stop in a capital:
+  way to reach the target without it`, and a full stop. As with vendor trips, which keep their own
+  three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip for the
+  goal recipe always says there is no other way, and a Favor trip, always a target's, gets no clause.
+  A trip whose route-without costs at most 0.5c more (or less), reaches the same skills and
+  makes fewer trainer visits and pattern trips is left out of the route (trainer visits: rank
+  trainings, trips back and capital stops; pattern trips: vendor and Favor trips). The route is
+  planned again without it, at most three rounds, the recipes left out adding up, never the goal
+  recipe, and under a budget only when its "Gold to bring" still fits; the trips left out cost
+  at most 0.5c more together, against the route as first planned, each skip is also within 0.5c
+  of the route it starts from, and a route both guides share is planned without a trip only when
+  it is free in both measures. The guide header (after the listing line) and the report's data
+  notes say so, one line a trip: `Planned without the trip back to <trainer> at <skill> for
+  <recipes>: the route without it costs the same.` (`<trainer>` is the trainer's name when the
+  data names one, else `the <Rank> <Person>`), or `Planned without the trip to buy the pattern
+  for <recipe>: the route without it costs the same.` for a vendor trip (a Favor trip is a
+  target's, never left out). A trip left on the route whose skip costs at most 0.5c more gets no
+  skip clause. Below Artisan it is a stop in a capital:
   `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
   later stops of that rank read `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital.` Without
@@ -195,6 +197,33 @@ Write it for that.
   the talent.
 - If the trainer data can't be downloaded or read, the guide renders without names and says why
   once, near the top.
+
+## You could also make
+
+Merchant's Favor recipes the character could craft once for itself ([game-rules.md](game-rules.md),
+"Merchant's Favor"). The guide has the section after the route, before the shopping list; the report
+has it inside "Merchant's Favor", after the Favor spent, under `**You could also make**`. Neither has
+it when nothing fits, or for Horde (no Favor recipes yet):
+
+- `## You could also make`, then
+  `Merchant's Favor recipes to craft once for yourself, if you don't have the item yet. They are not part of the route, its shopping list or its gold.`
+- A row per recipe: `- **<name>** (<Profession> <skill>, for level <level>): <favor> of your <Favor> Favor; materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`
+  `<skill>` is the recipe's Favor skill, `<level>` the crafted item's required level, `<gold>` what the
+  materials not held cost at today's prices. An enchant crafts no item: `(<Profession> <skill>)`;
+  an item with no level requirement reads `(<Profession> <skill>, any level)`. What is bought is
+  `on the AH`, `from a vendor` or `on the AH and from a vendor`; the bank part lists each item
+  (`2 Dream Dust and 1 Star Wood from your bank`), the mail part names each sender as on the
+  shopping list. When nothing needs buying: `materials: <n> <item> from your bank`, then the mail;
+  a recipe with no reagents ends after `Favor`.
+- Items first, the nearest to the character's level first, then by Favor price, then the items with
+  no level requirement, by Favor price; then the enchants, by Favor price, as a list of their own.
+  The guide lists at most 6 items, then at most 6 enchants, each kind followed by `and <n> more.` in
+  a paragraph of its own when it is cut; the report lists them all.
+- The report's data notes say `Merchant's Favor recipes are not used to level (see You could also make).`
+  (without the parenthesis when there is no section), and, when the game data gives no item a required
+  level, `Item required levels are not in the game data: Merchant's Favor items are not suggested, only enchants.`
+  When `stock.toml` gives no `level`, the guide's notes and the report's data notes say
+  `Set level in stock.toml to get Merchant's Favor item suggestions.`
 
 ## Budget
 

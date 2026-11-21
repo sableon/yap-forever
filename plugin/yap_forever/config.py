@@ -29,7 +29,7 @@ class Stock:
     items: dict[int, int]
     favor: int
     cash: int  # copper, soft budget
-    level: int
+    level: int  # 1 when the file gives none (see level_set)
     mining: int  # Mining skill; above 0 the guide gives the miner's notes
     short_farm_ore: int
     mining_goal: int = 0  # Mining skill you'll reach while farming; 0 = current
@@ -43,6 +43,7 @@ class Stock:
     shared: dict[str, dict[int, int]] = field(default_factory=dict)  # your group's other characters' mailable items,
     # by name (not in the file: set from the other characters' stock files, see shared.Group)
     budget: "Budget | None" = None  # [goals] budget: plan only as far as this gold reaches; None = to the targets
+    level_set: bool = True  # False: the file gives no `level` (Merchant's Favor items are then not suggested)
 
 
 MAX_SKILL = 300
@@ -230,4 +231,5 @@ def _stock(d: dict) -> Stock:
         keep_greens=bool(d.get("keep_greens", False)),
         reagent_slots=_slots(d, "reagent_slots", 0),
         budget=budget,
+        level_set="level" in d,
     )

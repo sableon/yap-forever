@@ -679,5 +679,114 @@ class FreeSkipReportTests(unittest.TestCase):
         self.assertIn("at 240 for BS late 1.", guide)  # the trip back stays
 
 
+class CouldAlsoMakeWiringTests(unittest.TestCase):
+    """#95 through write_reports: a Merchant's Favor recipe the character could make is suggested in both guides and
+    reports, its materials from the group's mail and priced against the group's gold ([gold], not cash_gold); a Favor
+    goal is planned, not suggested."""
+    ROW = ("- **Plate of Ana** (Blacksmithing 25, for level 20): 30 of your 40 Favor; materials about 2s on the AH, "
+           "1 Iron Bar (mail from Bram Ironhide).")
+
+    def setUp(self):
+        import json
+        import shutil
+
+        from tests import toy
+        from yap_forever.gamedata import ItemInfo
+        self._tmp = tempfile.TemporaryDirectory()
+        self.paths = settings.paths(Path(self._tmp.name) / "home")
+        with contextlib.redirect_stdout(io.StringIO()):
+            cli.main(["init"], self.paths)
+        shutil.copytree(Path(__file__).parent / "fixtures" / "gamedata", self.paths.gamedata)
+        self.gd = toy.gamedata([toy.recipe(1, "BS basic", 164, {toy.COPPER_BAR: 1}, (toy.STONE, 1)),
+                                toy.recipe(7, "Plate of Ana", 164, {toy.IRON_BAR: 3}, (9001, 1), source="scroll",
+                                           scroll=toy.SCROLL)])
+        self.gd.items[9001] = ItemInfo(9001, "Plate of Ana", 2, 25, 4, 100, 400, bonding=2, required_level=20)
+        listings = {str(i): [[100, 100000]] for i in (toy.COPPER_BAR, toy.IRON_BAR)}  # 1s each
+        self.paths.prices.write_text(json.dumps({"snapshot_time": "t", "listings": listings}), encoding="utf-8")
+        self.stock = self.paths.character("Ana Brightforge") / "stock.toml"
+        self.stock.parent.mkdir(parents=True)
+        self.stock.write_text("level = 22\nfavor = 40\ncash_gold = 5\n[skills]\nblacksmithing = 30\n[items]\n",
+                              encoding="utf-8")
+        self.bram = toy.stock({toy.IRON_BAR: 1})
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def reports(self, goal=None, gold=1.0, alone=False, favor=None):
+        from unittest import mock
+
+        from yap_forever import gamedata, plan as plan_mod
+        from yap_forever.config import Goal
+        from yap_forever.favor import FavorData
+        from yap_forever.shared import Group
+        group = None if alone else Group(2, "alliance", gold, {"Bram Ironhide": self.bram})
+        with mock.patch.object(gamedata, "load_gamedata", return_value=self.gd), \
+                mock.patch.object(plan_mod, "load_favor", return_value=favor or FavorData({7: 30}, {7: 25}, [])):
+            _table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", {164: goal or Goal(skill=40)},
+                                                   group=group)
+        return {k: v.read_text(encoding="utf-8") for k, v in files.items()}
+
+    def test_suggested_in_both_guides_and_reports(self):
+        texts = self.reports()
+        for m in ("gold", "value"):
+            guide, report = texts[f"guide-{m}"], texts[f"plan-{m}"]
+            self.assertIn("## You could also make\n", guide)
+            self.assertIn(self.ROW, guide)
+            favor = report[report.index("## Merchant's Favor"):report.index("## Totals")]
+            self.assertIn("**You could also make**", favor)
+            self.assertIn(self.ROW, favor)
+            self.assertIn("- Merchant's Favor recipes are not used to level (see You could also make).", report)
+            self.assertIn("Spent 0 of 40 Favor.", report)
+
+    def test_the_groups_gold_not_cash_gold(self):
+        # 2s to buy; cash_gold is 5g but the group's [gold] is 1s: not suggested
+        texts = self.reports(gold=0.01)
+        self.assertNotIn("You could also make", texts["guide-gold"])
+        self.assertNotIn("Plate of Ana", texts["plan-gold"])
+        alone = self.reports(alone=True)["guide-gold"]  # no group: the stock's own cash_gold, and no mail
+        self.assertIn("- **Plate of Ana** (Blacksmithing 25, for level 20): 30 of your 40 Favor; materials about 3s "
+                      "on the AH.", alone)
+
+    def test_goal_planned_not_suggested(self):
+        from yap_forever.config import Goal
+        texts = self.reports(goal=Goal(recipe="Plate of Ana"))
+        self.assertNotIn("You could also make", texts["guide-gold"])
+        self.assertIn("Spent 30 of 40 Favor.", texts["plan-gold"])
+
+    def test_level_not_set_says_so(self):
+        # a stock file without `level`: no item is suggested, and the guide's notes and the report's data notes say why
+        line = "- Set level in stock.toml to get Merchant's Favor item suggestions."
+        with_level = self.reports()
+        self.assertNotIn(line, with_level["guide-gold"] + with_level["plan-gold"])
+        self.stock.write_text("favor = 40\ncash_gold = 5\n[skills]\nblacksmithing = 30\n[items]\n", encoding="utf-8")
+        texts = self.reports()
+        for m in ("gold", "value"):
+            guide, report = texts[f"guide-{m}"], texts[f"plan-{m}"]
+            self.assertNotIn("Plate of Ana", guide)
+            self.assertIn(line, guide[guide.index("## Notes"):])
+            self.assertIn(line, report[report.index("## Data notes"):])
+
+    def test_guide_cut_report_complete(self):
+        # the guide lists at most favor_suggest.GUIDE_LIMIT of each kind (1 here), the report every suggestion
+        from unittest import mock
+
+        from tests import toy
+        from yap_forever import favor_suggest
+        from yap_forever.favor import FavorData
+        from yap_forever.gamedata import ItemInfo
+        self.gd.recipes[8] = toy.recipe(8, "Helm of Ana", 164, {toy.IRON_BAR: 3}, (9002, 1), source="scroll",
+                                        scroll=toy.SCROLL)
+        self.gd.items[9002] = ItemInfo(9002, "Helm of Ana", 2, 25, 4, 100, 400, bonding=2, required_level=22)
+        with mock.patch.object(favor_suggest, "GUIDE_LIMIT", 1):
+            texts = self.reports(favor=FavorData({7: 30, 8: 30}, {7: 25, 8: 25}, []))
+        guide, report = texts["guide-gold"], texts["plan-gold"]
+        self.assertIn("- **Helm of Ana**", guide)  # level 22, the character's: first
+        self.assertNotIn("- **Plate of Ana**", guide)
+        self.assertIn("\n\nand 1 more.\n", guide)
+        self.assertIn("- **Helm of Ana**", report)
+        self.assertIn("- **Plate of Ana**", report)
+        self.assertNotIn("and 1 more.", report)
+
+
 if __name__ == "__main__":
     unittest.main()
