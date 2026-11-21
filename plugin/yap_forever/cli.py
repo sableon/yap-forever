@@ -280,6 +280,9 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None, budge
         return 1
     print(table)
     print()
+    if dropped := plan.budget_dropped(goals, target):
+        print(dropped)
+        print()
     for key, path in files.items():
         print(f"{key}: {path}")
     return 0

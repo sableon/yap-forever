@@ -198,5 +198,8 @@ and the report in its verdict, what the gold reaches, in one paragraph:
   full stop. No line when the budget reaches the target.
 - `<budget>` is the gold as given (`30g`, `12.5g`). The report's budget line ends with
   `; planned to your <budget> budget`.
+- A recipe target wins over the budget ([setup.md](setup.md)): with a budget set and a recipe target, the
+  guide (under the comparison) and the report (in its verdict) say only `The <budget> budget is not applied:
+  a recipe target is planned in full.`, and the plan command prints the same line.
 - Two professions one at a time: the intro says `Level one profession at a time: <first> first, then <second>.`
   instead of "Level both professions side by side".

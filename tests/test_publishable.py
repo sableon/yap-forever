@@ -233,8 +233,13 @@ class PublishableTests(unittest.TestCase):
                      "Nothing to craft within this budget.",
                      "; the route stops there: <why>.",
                      "<Profession> gets none of it: <why>.",
-                     "Level one profession at a time: <first> first, then <second>."):
+                     "Level one profession at a time: <first> first, then <second>.",
+                     "The <budget> budget is not applied: a recipe target is planned in full."):
             self.assertIn(line, layout)
+        self.assertIn("The <budget> budget is not applied: a recipe target is planned in full.", setup)
+        from yap_forever.budget import not_applied
+        from yap_forever.config import Budget
+        self.assertEqual(not_applied(Budget(12.5)), "The 12.5g budget is not applied: a recipe target is planned in full.")
 
     def test_docs_promise_trainer_ranks(self):
         """#82: game-rules.md gives the rank caps trips.recipe_rank_cap uses and the Truesilver Rod sighting of
@@ -294,8 +299,12 @@ class PublishableTests(unittest.TestCase):
                      "This needs <N> free slots and you have <M>: get bigger bags, bank what this stretch doesn't need, "
                      "or set a lower goal (for example <skill>) so it fits.",
                      "or set a lower goal so it fits.", "10 slots kept free for crafting",
-                     "`trainer_trips = \"one_go\"`"):
+                     "`trainer_trips = \"one_go\"`", "`1 <pattern> (from the AH)`", "`(from the bank)`",
+                     "`(mail from <Name>)`", "gets no `**Trip:**` row of its own"):
             self.assertIn(line, layout)
+        from yap_forever.shopping import PATTERN_FROM
+        for text in PATTERN_FROM.values():  # #88: where a one-go bring list's pattern comes from
+            self.assertIn(f"({text})", layout)
         self.assertIn("in one go", coverage)
 
 

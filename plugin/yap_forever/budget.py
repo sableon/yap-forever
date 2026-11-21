@@ -148,6 +148,12 @@ def amount(budget: Budget) -> str:
     return f"{budget.gold:.2f}".rstrip("0").rstrip(".") + "g"
 
 
+def not_applied(budget: Budget) -> str:
+    """Said when a recipe target wins over the budget: the recipe goal is planned in full, and so is the other
+    profession's skill target."""
+    return f"The {amount(budget)} budget is not applied: a recipe target is planned in full."
+
+
 def lines(c: BudgetCut, budget: Budget) -> list[str]:
     """What the budget reaches, why a profession gets none of it, and what each next stop costs on top (and,
     when the route stalls at that stop, why). With every target reached and no stall, nothing to say."""
