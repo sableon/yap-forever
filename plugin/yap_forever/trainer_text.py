@@ -167,9 +167,9 @@ def city_row(info: TrainerInfo | None, profession: int, cap: int, planned: tuple
     planned: the professions the guide plans, in order; a capital whose notes put two of them in
     different groups says so. said: the zones that already said it (a set the caller keeps, so a
     city says it once in the guide); a zone is added when its row says it.
-    lead: what the row is for ("Learn X"); default "Train <profession> to <cap>". named: (profession, cap) of the rows that already named capital
-    trainers and city tips (a set the caller keeps); with brief, such a row is short: "<lead> at any
-    <Rank> <Person> in a capital."."""
+    lead: what the row is for ("At 80, learn X"); default "Train <profession> to <cap>". named: (profession, cap)
+    of the rows that already named capital trainers and city tips (a set the caller keeps); with brief, such a row
+    is short: "<lead> at any <Rank> <Person> in a capital."."""
     if not _usable(info, cap):
         return None
     rank, name = RANK_BY_CAP[cap], PROFESSIONS.get(profession, str(profession))
