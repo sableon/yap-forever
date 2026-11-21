@@ -124,6 +124,25 @@ class GameDataTests(unittest.TestCase):
             for item_id, row in ore[section].items():
                 self.assertEqual(names.get(int(item_id)), row[0], f"{section} {item_id}")
 
+    def test_required_level_read(self):
+        # #95: ItemSparse RequiredLevel, read like Bonding: a level as given (0 included), None when the cell is empty
+        # or the file has no such column (the fixture, like a cache cut short); the required columns are unchanged
+        import shutil
+        import tempfile
+        self.assertNotIn("RequiredLevel", gamedata.EXPECTED["ItemSparse.csv"][1])
+        self.assertIsNone(self.gd.items[2840].required_level)
+        self.assertIsNone(gamedata.ItemInfo(1, "x", 1, 1, 7, 0, 0).required_level)
+        levels = {2840: "45", 2851: "0", 2857: ""}
+        with tempfile.TemporaryDirectory() as d:
+            shutil.copytree(FIX, Path(d) / "gd")
+            sparse = Path(d) / "gd" / "ItemSparse.csv"
+            head, *rows = sparse.read_text().splitlines()
+            rows = [f"{r},{levels.get(int(r.split(',')[0]), '7')}" for r in rows]
+            sparse.write_text("\n".join([head + ",RequiredLevel", *rows]) + "\n")
+            gd = gamedata.load_gamedata(Path(d) / "gd")
+        self.assertEqual({i: gd.items[i].required_level for i in levels}, {2840: 45, 2851: 0, 2857: None})
+        self.assertEqual(gd.items[2840].bonding, 0)  # the other columns read as before
+
 
 class RankLevelFillTests(unittest.TestCase):
     R = gamedata.Rank
