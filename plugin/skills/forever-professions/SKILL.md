@@ -58,14 +58,15 @@ when a question or answer needs it.
    one at a time, which first (`--order NAME,NAME`)
    ([setup.md](references/setup.md), "A budget as a goal"). A budget covers a recipe goal too: the
    other profession's skill target isn't planned while the budget goes to the recipe goal (say so),
-   and if the player wants crafts from their other characters suggested, ask those characters' skills and save them under `[skills]` in each one's
-   `stock.toml`. With a budget, first plan to the
-   targets without it (no `--budget`, before a budget is saved under `[goals]`) and read Z: the
-   "(Z less)" of that plan's shopping-list line `If you sell crafts to a vendor as you go ...` under
-   "Gold to bring". Whenever that line is there, ask once: **Buy everything before you start, or
-   sell crafts to a vendor as you go? Selling as you go needs about Z less up front.** With no such
-   line both ways need the same gold: keep the default. Then plan with the budget and the chosen
-   `--pay`. The answer is `pay` (`"upfront"`, the default, or `"as_you_go"`): save it under
+   and if the player wants crafts from their other characters suggested, ask those characters' skills and
+   save them under `[skills]` in each one's `stock.toml`. A budget saved under `[goals]` had its `pay`
+   asked when it was saved: don't ask it again, and don't plan without the budget to read Z. With a new
+   budget, first plan to the targets without it (no `--budget`, before a budget is saved under
+   `[goals]`) and read Z: the "(Z less)" of that plan's shopping-list line `If you sell crafts to a
+   vendor as you go ...` under "Gold to bring". Whenever that line is there, ask once: **Buy everything
+   before you start, or sell crafts to a vendor as you go? Selling as you go needs about Z less up
+   front.** With no such line both ways need the same gold: keep the default. Then plan with the
+   budget and the chosen `--pay`. The answer is `pay` (`"upfront"`, the default, or `"as_you_go"`): save it under
    `[goals]` only together with a saved `budget` (`pay` alone is refused), else pass `--pay` on
    each run with `--budget`. Save the goal under `[goals]` in `stock.toml` if the player wants it
    kept. If Enchanting isn't in the plan, ask whether green crafts should be
@@ -89,7 +90,10 @@ when a question or answer needs it.
    `<planner> prices --remote` or `<planner> prices --auctionator PATH`.
 5. **Run the planner** for what they asked: `<planner> plan --character "NAME" --prof NAME:TARGET`
    (once per profession). Show the comparison table it prints and explain the two routes in a
-   sentence each: **least gold** counts what the player owns as free; **least total value** counts
+   sentence each: **least gold** counts what the player owns as free and is the route with the least
+   net gold, the gold out of pocket less what vendors pay back for its crafts (counted in choosing the
+   route), so its "Gold out of pocket" and "Gold to bring" can be higher than the other route's (the line
+   under "Gold to bring" says what selling crafts as you go needs up front); **least total value** counts
    owned materials at what they'd sell for, so it may leave valuable ones to sell, which takes time
    on the AH. When both are the same route, say so. Ask which guide they want to follow (the report
    files: [setup.md](references/setup.md), "Report names").

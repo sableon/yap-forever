@@ -587,6 +587,13 @@ class PublishableTests(unittest.TestCase):
                      "`AH sales on top: <gold> (not counted).`",
                      "(left out in choosing this route, to fit the budget)"):
             self.assertIn(line, layout)
+        # final review, Important 4: SKILL.md explains least gold the 0.2.2 way
+        skill = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
+        step5 = skill[skill.index("5. **Run the planner"):]
+        self.assertIn("**least gold** counts what the player owns as free and is the route with the least net gold, the "
+                      "gold out of pocket less what vendors pay back for its crafts (counted in choosing the route), so "
+                      "its \"Gold out of pocket\" and \"Gold to bring\" can be higher than the other route's (the line "
+                      "under \"Gold to bring\" says what selling crafts as you go needs up front)", step5)
         self.assertIn("each stop takes the route planned with what vendors pay back when its gold fits, else the route "
                       "planned without it when that one fits and gets each profession as far; the stop is reached when "
                       "either fits.", setup)
@@ -622,6 +629,9 @@ class PublishableTests(unittest.TestCase):
                      "the chosen `--pay`."):
             self.assertIn(rule, step3)
         self.assertNotIn("after a first plan with that budget", step3)
+        # final review, Minor 8: a saved budget's pay was asked when it was saved
+        self.assertIn("A budget saved under `[goals]` had its `pay` asked when it was saved: don't ask it again, and "
+                      "don't plan without the budget to read Z. With a new budget, first plan", step3)
         self.assertIn("`<budget> takes <Profession> to <stop> (<gold>, selling crafts to a vendor as you go).`", layout)
         self.assertIn("A remote trip's bring list buys its stretch before the trip", layout)
         self.assertIn("[--pay upfront|as_you_go]", skill)
