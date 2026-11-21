@@ -4,14 +4,17 @@ Ported from the old scripts/shopping.py, working on Plan steps. Rows are counted
 the buffer on yellow and green steps (planner.step_factor), so every material is a whole number of
 crafts' worth: nothing is left over that is too little for another craft.
 """
+import copy
 import dataclasses
 import math
+import re
 
-from yap_forever.disenchant import ESSENCE_PAIRS
+from yap_forever.disenchant import ESSENCE_PAIRS, de_yield
+from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.shared import allocate
-from yap_forever.trips import visits
+from yap_forever.trips import AS_NEEDED, ONE_GO, stretch_end, visits
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
 BRING_POINTS = 25  # without a bag count, bring enough for this many points (or to the stage end)
@@ -126,19 +129,30 @@ def _sum(dicts) -> dict:
     return out
 
 
-def merged_steps(plan, gd) -> list[tuple]:
+def _counted(st, gd) -> bool:
+    """A step that makes a route row (not a disenchant, a known recipe, a skill-up or a craft)."""
+    return st.spell_id != DISENCHANT and st.spell_id in gd.recipes and (st.skill_from < st.skill_to or st.crafts > 0)
+
+
+def merged_steps(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None = None) -> list[tuple]:
     """(step, parts): runs of one recipe over consecutive skill points as one step, so the buffer is
-    rounded up once per run, not once per skill point."""
+    rounded up once per run, not once per skill point. split: (profession, skills, position): no run of that
+    profession crosses those skills, and no run of any profession crosses that index of plan.steps (where a trip's
+    bring list starts and ends, and where the trip comes in route order)."""
     out: list[tuple] = []
     latest: dict[int, int] = {}  # profession -> index of its latest entry (professions interleave)
-    for st in plan.steps:
-        if st.spell_id == DISENCHANT or st.spell_id not in gd.recipes or not (st.skill_from < st.skill_to or st.crafts > 0):
+    begun: list[int] = []  # index in plan.steps of each entry's first step
+    for j, st in enumerate(plan.steps):
+        if not _counted(st, gd):
             continue
         at = latest.get(st.profession)
         last = out[at] if at is not None else None
         if (last and st.skill_from < st.skill_to and last[0].skill_from < last[0].skill_to
                 and last[0].spell_id == st.spell_id and last[0].profession == st.profession
-                and last[0].skill_to == st.skill_from):
+                and last[0].skill_to == st.skill_from
+                and not (split and split[0] == st.profession
+                         and any(last[0].skill_from < s <= st.skill_from for s in split[1]))
+                and not (split and split[2] is not None and begun[at] < split[2] <= j)):
             parts = last[1] + [st]
             out[at] = (dataclasses.replace(
                 last[0], skill_to=st.skill_to, crafts=sum(p.crafts for p in parts),
@@ -151,16 +165,18 @@ def merged_steps(plan, gd) -> list[tuple]:
         else:
             latest[st.profession] = len(out)
             out.append((st, [st]))
+            begun.append(j)
     return out
 
 
-def route_rows(plan, gd) -> list[dict]:
+def route_rows(plan, gd, split: tuple[int, tuple[int, ...], int | None] | None = None) -> list[dict]:
     """Rows in whole crafts: n crafts (buffer included) take n times what one craft takes, so no count
     leaves a remainder too small for another craft. Your own crafts from earlier rows are used first;
     intermediates still missing are crafted in whole batches at the first row that needs or makes them.
     need: what to bring (bank, mail or vendor); earlier: your own crafts (from any row) or disenchants used;
-    here: intermediates crafted on the spot; more: extra crafts of the row's own recipe for later rows."""
-    merged = merged_steps(plan, gd)
+    here: intermediates crafted on the spot; more: extra crafts of the row's own recipe for later rows.
+    split: see merged_steps."""
+    merged = merged_steps(plan, gd, split)
     steps = [st for st, _parts in merged]
     makes = {r.output[0]: r for r in gd.recipes.values() if r.output}
     craftable = set(plan.crafted) | {gd.recipes[st.spell_id].output[0] for st in steps if gd.recipes[st.spell_id].output}
@@ -328,23 +344,148 @@ def mailed(plan, gd, stock) -> dict[int, list[tuple[str, int]]]:
     return out
 
 
-def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0,
-              reagents=None, start_skills: dict[int, int] | None = None) -> tuple[int, list[tuple[int, int, str]]]:
-    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
-    owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
-    the trip use the bank first, as on the shopping list. reagent_slots: a reagent bag holds mats
-    first (`reagents`: the set from reagent_items, built here when not given); CRAFT_ROOM stays on
-    normal slots. start_skills: profession -> the route's start skill; with it, the stretch also ends at the
-    profession's next visit for trainer recipes (trips.visits): the player levels at home and comes back."""
-    every = route_rows(plan, gd)
+YOURS = "yours"  # a bring-list source: your own crafts and disenchants from before the trip
+LATER = "later:"  # a bring-list source "later:<profession>": made by your other profession later on the route
+_DE_EVENT = re.compile(r"^Enchanting (\d+): disenchant ([\d.]+) (.+)$")
+
+
+def made_later_by(src: str) -> int | None:
+    """The profession a "later:<profession>" source names, or None."""
+    return int(src[len(LATER):]) if src.startswith(LATER) else None
+
+
+_MAILED = re.compile(r"^(.*) \((?:mail from .*|(\d+) your own, \d+ mail from .*)\)$")
+
+
+def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int, float]]]:
+    """row index -> (origin, material, count) of the disenchants done just before that row (see _own_sources): an
+    event at Enchanting skill s comes before the first Enchanting row that reaches past s.
+    Each event uses up the greens the route's rows made, oldest first. One done before the trip (its row comes
+    before the trip's, or, on an Enchanting trip, at or below the trip's skill) takes only greens made before the
+    trip and counts as before the trip. A later one takes those made by its row first, then those of rows placed
+    after it (a merged run's row comes where the run starts). Greens from the bank or the mail take none and count as
+    before the trip, as do greens no row made."""
+    names = {it.name: i for i, it in gd.items.items()}
+    made: dict[int, list[list]] = {}  # green -> [[row index, origin, count left]] in route order
+    for k, r in enumerate(every):
+        out = gd.recipes[r["st"].spell_id].output
+        if out:
+            origin = "pre" if k < at else "own" if r["st"].profession == trip.profession else r["st"].profession
+            made.setdefault(out[0], []).append([k, origin, (r["n"] + r["more"]) * out[1]])
+    out: dict[int, list] = {}
+    for e in plan.events:
+        m = _DE_EVENT.match(e)
+        if not m:
+            continue
+        s, n, name = int(m.group(1)), float(m.group(2)), m.group(3)
+        crafted = n  # how many of them the route's rows made (the rest come from the bank or the mail)
+        if name.endswith(" from your bank"):
+            name, crafted = name.removesuffix(" from your bank"), 0
+        elif mailed := _MAILED.match(name):
+            name, crafted = mailed.group(1), float(mailed.group(2) or 0)
+        green = names.get(name)
+        if green is None:
+            continue
+        k = next((k for k, r in enumerate(every) if r["st"].profession == ENCH and r["st"].skill_to > s), len(every))
+        before = k < at or (trip.profession == ENCH and s <= trip.skill)
+        lots = made.get(green, [])
+        lots = ([x for x in lots if x[0] < at] if before
+                else [x for x in lots if x[0] < k] + [x for x in lots if x[0] >= k])
+        parts: list[tuple[str | int, float]] = []
+        for lot in lots:
+            if crafted <= 1e-9:
+                break
+            used = min(crafted, lot[2])
+            if used > 1e-9:
+                lot[2] -= used
+                crafted -= used
+                parts.append(("pre" if before else lot[1], used))
+        rest = n - sum(q for _o, q in parts)
+        if rest > 1e-9:
+            parts.append(("pre", rest))
+        for origin, count in parts:
+            out.setdefault(k, []).extend((origin, mat, count * per) for mat, per in de_yield(gd.items[green]).items())
+    return out
+
+
+def _own_sources(plan, gd, every, at, rows, trip) -> tuple[dict[int, int], dict[int, dict[int, int]]]:
+    """What the trip's rows use of your own crafts and disenchants that they don't make themselves: (made before the
+    trip: item -> count, made later by your other profession: profession -> item -> count). The route's rows are
+    walked in order with what each makes; a trip row takes its own profession's crafts first, then what was made
+    before the trip, then the other profession's; any other row takes what was made before the trip first."""
+    makes = {r.output[0]: r for r in gd.recipes.values() if r.output}
+    mine = {id(r) for r in rows}
+    de = _de_supply(plan, gd, every, at, trip)
+    pools: dict[str | int, dict[int, float]] = {"own": {}, "pre": {}}
+    last: dict[int, str | int] = {}  # item -> where its latest supply came from
+    taken: dict[str | int, dict[int, float]] = {}
+
+    def add(origin, i, q):
+        pools.setdefault(origin, {})[i] = pools.setdefault(origin, {}).get(i, 0) + q
+        last[i] = origin
+
+    def origin_of(k, prof):
+        return "pre" if k < at else "own" if prof == trip.profession else prof
+
+    for k, r in enumerate(every[:max((k for k, x in enumerate(every) if id(x) in mine), default=-1) + 1]):
+        for origin, i, q in de.get(k, ()):
+            add(origin, i, q)
+        prof = r["st"].profession
+        for i, q in r["here"].items():  # crafted on the spot, by the profession whose recipe makes it
+            add(origin_of(k, makes[i].skill_line if i in makes else prof), i, q)
+        others = [o for o in pools if o not in ("own", "pre")]
+        order = ["own", "pre", *others] if id(r) in mine else ["pre", *others, "own"]
+        for i, q in r["earlier"].items():
+            for o in order:
+                n = min(q, pools[o].get(i, 0))
+                if n > 1e-9:
+                    pools[o][i] -= n
+                    q -= n
+                    if id(r) in mine:
+                        taken.setdefault(o, {})[i] = taken.setdefault(o, {}).get(i, 0) + n
+            if id(r) in mine and q > 1e-6:  # more than the walk found (the buffer): from where it last came, or,
+                o = last.get(i, "pre")  # when that is this stretch's own crafts, yours from before the trip
+                o = "pre" if o == "own" else o
+                taken.setdefault(o, {})[i] = taken.setdefault(o, {}).get(i, 0) + q
+        out = gd.recipes[r["st"].spell_id].output
+        if out:
+            add(origin_of(k, prof), out[0], (r["n"] + r["more"]) * out[1])
+
+    # whole items: each item's total rounded up once, shared by largest remainder (disenchants yield fractions)
+    origins = ["pre", *sorted(o for o in taken if o not in ("own", "pre"))]
+    counts: dict[str | int, dict[int, int]] = {o: {} for o in origins}
+    for i in sorted({i for o in origins for i in taken.get(o, {})}):
+        shares = [(o, taken.get(o, {}).get(i, 0)) for o in origins]
+        left = math.ceil(sum(q for _o, q in shares) - 1e-6) - sum(math.floor(q + 1e-6) for _o, q in shares)
+        ranked = sorted(range(len(shares)), key=lambda x: (-(shares[x][1] - math.floor(shares[x][1] + 1e-6)),
+                                                           -shares[x][1], x))
+        for x, (o, q) in enumerate(shares):
+            n = math.floor(q + 1e-6) + (1 if x in ranked[:max(left, 0)] else 0)
+            if n:
+                counts[o][i] = n
+    return counts["pre"], {o: d for o, d in counts.items() if o != "pre" and d}
+
+
+def _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills, trainer_trips):
+    """(rows the trip's bring list covers, what the bank and the mail hold when it starts): see bring_list. With
+    one go, a run of one recipe that crosses the trip's skill or the stretch's end is split there, so the part
+    inside the stretch is brought, and no profession's run crosses the trip's place in route order, so what is
+    made before the trip and after it are rows of their own."""
+    end = stretch_end(plan, trip.profession, trip.skill)
+    where = next((j for j, st in enumerate(plan.steps)  # the trip in route order: no run crosses it either
+                  if st.profession == trip.profession and st.skill_from >= trip.skill and _counted(st, gd)), None)
+    every = route_rows(plan, gd, (trip.profession, (trip.skill, end), where) if trainer_trips == ONE_GO else None)
     at = next((k for k, r in enumerate(every)
                if r["st"].profession == trip.profession and r["st"].skill_from >= trip.skill), len(every))
     rows = [r for r in every[at:] if r["st"].profession == trip.profession]
-    if not rows:
-        return trip.skill, []
     left = {i: float(n) for i, n in owned.items()} if owned is not None else _bank(plan)
     mail = _mail(plan, whole_pool=owned is not None)
+    ctx = (every, at)
+    if not rows:
+        return rows, left, mail, ctx
     _split(every[:at], plan, gd, left, mail)  # the bank and the mail the rows before the trip use
+    if trainer_trips == ONE_GO:  # the whole stretch, whatever the bags hold (the bag warning says if it fits)
+        return [r for r in rows if r["st"].skill_to <= end] or rows[:1], left, mail, ctx
     later = [s for p, s, _c, _f in plan.ranks if p == trip.profession and s > trip.skill]
     if start_skills is not None:
         later += [v.skill for v in visits(plan, gd, start_skills)
@@ -358,29 +499,103 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
                            reagent_slots)[0]
     else:
         rows = [r for r in rows if r["st"].skill_to <= trip.skill + BRING_POINTS] or rows[:1]
+    return rows, left, mail, ctx
+
+
+def _bring_items(plan, gd, rows, left, mail, trainer_trips, ctx, trip) -> list[tuple[int, int, str]]:
     split = _split(rows, plan, gd, left, mail)
-    return rows[-1]["st"].skill_to, [(i, n, src) for (i, src), n in sorted(split.items())]
+    out = [(i, n, src) for (i, src), n in sorted(split.items())]
+    if trainer_trips == ONE_GO:  # nothing to fetch on the way back: your own crafts come along
+        yours, later = _own_sources(plan, gd, *ctx, rows, trip)
+        out += [(i, n, YOURS) for i, n in yours.items()]
+        out += [(i, n, f"{LATER}{prof}") for prof, items in sorted(later.items()) for i, n in items.items()]
+    return out
+
+
+def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None, reagent_slots: int = 0,
+              reagents=None, start_skills: dict[int, int] | None = None,
+              trainer_trips: str = AS_NEEDED) -> tuple[int, list[tuple[int, int, str]]]:
+    """What to bring to a remote rank trainer to keep levelling there: (skill it reaches, items).
+    owned: your bank (the stock file); without it, what the planner takes from the bank. Rows before
+    the trip use the bank first, as on the shopping list. reagent_slots: a reagent bag holds mats
+    first (`reagents`: the set from reagent_items, built here when not given); CRAFT_ROOM stays on
+    normal slots. start_skills: profession -> the route's start skill; with it, the stretch also ends at the
+    profession's next visit for trainer recipes (trips.visits): the player levels at home and comes back.
+    trainer_trips "one_go": the list covers the whole stretch (trips.stretch_end), however many bag slots it takes,
+    and what it uses of your own crafts and disenchants: from before the trip (source "yours"), or made later on the
+    route by your other profession (source "later:<profession>", see _own_sources)."""
+    rows, left, mail, ctx = _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills,
+                                        trainer_trips)
+    if not rows:
+        return trip.skill, []
+    return rows[-1]["st"].skill_to, _bring_items(plan, gd, rows, left, mail, trainer_trips, ctx, trip)
+
+
+def _carried(gd, items, reagents, reagent_slots) -> tuple[dict, dict, tuple[int, int]]:
+    """(item -> count, stack sizes, (normal slots, reagent bag slots)) for carrying bring-list items."""
+    total = _sum({i: n} for i, n, _src in items)
+    stack = stacks(gd, total)
+    return total, stack, carried_split(total, stack, reagents, reagent_slots)
+
+
+def _lower_goal(plan, gd, rows, left, mail, trainer_trips, ctx, trip, bag_slots, reagents,
+                reagent_slots) -> int | None:
+    """The highest skill whose bring list (rows up to it) fits in bag_slots, CRAFT_ROOM kept free; None when not even
+    the first row's does."""
+    for k in range(len(rows) - 1, 0, -1):
+        items = _bring_items(plan, gd, rows[:k], dict(left), copy.deepcopy(mail), trainer_trips, ctx, trip)
+        if _carried(gd, items, reagents, reagent_slots)[2][0] <= bag_slots - CRAFT_ROOM:
+            return rows[k - 1]["st"].skill_to
+    return None
+
+
+def _made_later_text(gd, items, market) -> str:
+    """' Made later by your <Profession> on this route: 10 X, ...: craft those rows before you go, or buy them on the AH
+    (about <gold>).' per profession, for the "later:" items of a bring list; the gold only when every one has an AH
+    price (market: today's prices)."""
+    out = ""
+    for prof in sorted({made_later_by(src) for _i, _n, src in items} - {None}):
+        mine = [(i, n) for i, n, src in items if made_later_by(src) == prof]
+        costs = [market.buy_cost(i, n) or (market.min_price(i) or 0) * n if market is not None else 0 for i, n in mine]
+        about = f" (about {gold(sum(costs))})" if all(costs) else ""
+        out += (f" Made later by your {PROFESSIONS.get(prof, prof)} on this route: "
+                f"{', '.join(f'{n} {gd.name(i)}' for i, n in mine)}: craft those rows before you go, or buy them on the "
+                f"AH{about}.")
+    return out
 
 
 def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
-               services_known: bool = False, start_skills: dict[int, int] | None = None) -> str:
+               services_known: bool = False, start_skills: dict[int, int] | None = None,
+               trainer_trips: str = AS_NEEDED, market=None) -> str:
     """services_known: the row already says what is near the trainer (or that it is a capital).
-    start_skills: see bring_list."""
+    start_skills, trainer_trips: see bring_list. With bag_slots, a list that doesn't fit in them (CRAFT_ROOM kept
+    free, the reagent bag taking reagents first) says so, with the highest skill whose list fits. market: today's
+    prices, for what the items your other profession makes later would cost on the AH (one go)."""
     reagents = reagent_items(gd) if reagent_slots else None
-    reach, items = bring_list(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills)
+    rows, left, mail, ctx = _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills,
+                                        trainer_trips)
+    if not rows:
+        return ""
+    start = dict(left), copy.deepcopy(mail)
+    items = _bring_items(plan, gd, rows, left, mail, trainer_trips, ctx, trip)
     if not items:
         return ""
-    where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor"}
+    reach = rows[-1]["st"].skill_to
+    where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor", YOURS: "yours"}
     parts = [f"{n} {gd.name(i)} ({where[src] if src in where else 'mail from ' + from_character(src)})"
-             for i, n, src in items]
-    total = _sum({i: n} for i, n, _src in items)
-    stack = stacks(gd, total)
-    split = carried_split(total, stack, reagents, reagent_slots)
+             for i, n, src in items if made_later_by(src) is None]
+    total, stack, split = _carried(gd, items, reagents, reagent_slots)  # what is made later is carried too
     note = pack_note(gd, total, stack, "them at the trainer")
     town = "" if services_known else "the town may have no auction house, mailbox or bank, so "
-    return (f" Bring: {', '.join(parts)}: enough to craft to {reach} at the trainer "
+    warn = ""
+    if bag_slots and split[0] > bag_slots - CRAFT_ROOM:
+        lower = _lower_goal(plan, gd, rows, *start, trainer_trips, ctx, trip, bag_slots, reagents, reagent_slots)
+        warn = (f" This needs {split[0] + CRAFT_ROOM} free slots and you have {bag_slots}: get bigger bags, bank what "
+                f"this stretch doesn't need, or set a lower goal{f' (for example {lower})' if lower else ''} so it fits.")
+    lead = f" Bring: {', '.join(parts)}: enough" if parts else " Bring enough"
+    return (f"{lead} to craft to {reach} at the trainer "
             f"({slots_text(split)}{'; ' + note if note else ''}); "
-            f"{town}buy and collect before you go.")
+            f"{town}buy and collect before you go.{_made_later_text(gd, items, market)}{warn}")
 
 
 def _patterns(plan, gd, market) -> list[tuple[str, str, float]]:

@@ -64,7 +64,27 @@ Write it for that.
   a trip is needed, how to avoid a second one (buy every vendor pattern on one visit; patterns can be
   bought before they can be learned), and what to bring to keep levelling at a remote trainer, with
   the bag slots it takes. The bring list ends at the next rank trip, trip back for recipes or
-  capital stop for recipes: level at home after that and come back then.
+  capital stop for recipes: level at home after that and come back then. With bag slots in the
+  stock it is cut to what fits in them.
+- With `trainer_trips = "one_go"` ([setup.md](setup.md), step 2) the player levels at a remote rank
+  trainer to the profession's next rank training or the end of its route, whichever comes first.
+  The trips back for recipes and capital stops inside that stretch are left out: their recipes end
+  the rank row as `Learn at the trainer as you reach them: <recipe> at <skill>, ...` (in skill order,
+  `<skill>` where the route learns it; a recipe below the trainer's rank adds `(if <trainer> doesn't
+  list it: <who>)`), and each keeps its `*At <skill>: Learn <recipe> (trainer <fee>)*` row. The bring list
+  covers the whole stretch, whatever the bags hold. What the stretch uses of your own crafts and
+  disenchants made before the trip (in route order, either profession) is listed as `<count> <item>
+  (yours)`. What your other profession makes later on the route is listed apart, after the bring list:
+  `Made later by your <Profession> on this route: <count> <item>, ...: craft those rows before you go, or
+  buy them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
+  of the items has no AH price. These items count in the bag slots too. The other profession's rows stay
+  where they are. A recipe trip with no remote rank training before it on the route stays a trip.
+- With bag slots in the stock (`bag_slots`, and `reagent_slots` for reagents), a trip's bring list that
+  doesn't fit them (10 slots kept free for crafting, as for mailbox trips) ends with `This needs <N>
+  free slots and you have <M>: get bigger bags, bank what this stretch doesn't need, or set a lower goal
+  (for example <skill>) so it fits.` `<N>` is the list's bag slots plus the 10, `<M>` is `bag_slots`,
+  and `<skill>` is the highest skill whose bring list fits; when not even the first row's list fits, it
+  ends `or set a lower goal so it fits.` Without `bag_slots`, no warning.
 - A trainer teaches recipes up to its rank's cap ([game-rules.md](game-rules.md), "Trainers and
   ranks"), so every trainer visit learns ahead: a rank row ends with `While there, learn: <recipe>
   (<fee>), ...` for the trainer recipes the route needs later whose required skill is reached and

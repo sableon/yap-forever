@@ -268,6 +268,36 @@ class PublishableTests(unittest.TestCase):
             self.assertIn(line, layout)
         self.assertIn("trips back to them for recipes", coverage)
 
+    def test_docs_promise_trainer_trips(self):
+        """#82: setup.md gives the trainer_trips key, its values and default (profile.py); SKILL.md asks the question
+        once per character and saves the answer; list-layout.md gives the rows the guide prints (tests/test_guide.py
+        VisitRowTests, tests/test_shopping.py BringListTests)."""
+        from yap_forever.profile import TRAINER_TRIPS, Character
+        from yap_forever.shopping import CRAFT_ROOM
+
+        def read(name):
+            return " ".join((SKILL / name).read_text(encoding="utf-8").split())
+        setup, skill = read("references/setup.md"), read("SKILL.md")
+        layout, coverage = read("references/list-layout.md"), read("references/coverage.md")
+        self.assertEqual(TRAINER_TRIPS, ("as_needed", "one_go"))
+        self.assertEqual(Character("Ana Brightforge").trainer_trips, "as_needed")
+        self.assertIn('`trainer_trips`: `"as_needed"` (default) or `"one_go"`', setup)
+        step5 = skill[skill.index("5. **Run the planner"):skill.index("6. **Walk through")]
+        self.assertIn("level there in one go, or come back as needed?", step5)
+        self.assertIn("once per character", step5)
+        self.assertIn('`trainer_trips` under `[characters."Name"]` in `profile.toml`', step5)
+        self.assertEqual(CRAFT_ROOM, 10)
+        for line in ("Learn at the trainer as you reach them: <recipe> at <skill>, ...",
+                     "<count> <item> (yours)",
+                     "Made later by your <Profession> on this route: <count> <item>, ...: craft those rows before you "
+                     "go, or buy them on the AH (about <gold>).",
+                     "This needs <N> free slots and you have <M>: get bigger bags, bank what this stretch doesn't need, "
+                     "or set a lower goal (for example <skill>) so it fits.",
+                     "or set a lower goal so it fits.", "10 slots kept free for crafting",
+                     "`trainer_trips = \"one_go\"`"):
+            self.assertIn(line, layout)
+        self.assertIn("in one go", coverage)
+
 
 if __name__ == "__main__":
     unittest.main()

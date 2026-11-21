@@ -424,5 +424,20 @@ class WriteReportsTests(unittest.TestCase):
             self.reports()
         self.assertEqual(alts.call_count, 1)
 
+    def test_trainer_trips_reaches_the_guide_and_alternatives(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.profile import Character
+        for character, want in ((None, "as_needed"), (Character("Alt"), "as_needed"),
+                                (Character("Alt", trainer_trips="one_go"), "one_go")):
+            with self.subTest(want=want), \
+                    mock.patch.object(plan_mod, "trip_alternatives", wraps=plan_mod.trip_alternatives) as alts, \
+                    mock.patch.object(plan_mod, "render_guide", wraps=plan_mod.render_guide) as guide, \
+                    mock.patch.object(plan_mod, "compare", wraps=plan_mod.compare) as table:
+                self.reports(character=character)
+            for f in (alts, guide, table):
+                self.assertEqual({c.kwargs["trainer_trips"] for c in f.call_args_list}, {want})
+
 if __name__ == "__main__":
     unittest.main()
