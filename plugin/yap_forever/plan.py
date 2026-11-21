@@ -10,7 +10,7 @@ from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
 from yap_forever.config import Stock, load_stock
 from yap_forever.costmodel import Valuer
 from yap_forever.favor import FavorData, load_favor, no_favor
-from yap_forever.guide import free_skip_line, gold, render_guide
+from yap_forever.guide import alt_suggestions, free_skip_line, gold, render_guide
 from yap_forever.planner import DISENCHANT, measure, plan, resolve_goals
 from yap_forever.prices import Market
 from yap_forever.profile import CAPITAL_NAMES, report_name
@@ -220,9 +220,10 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     the report's budget line is the group's shared gold (without it, the stock's own `cash_gold`).
     target: a config.Budget to plan to (each route cut at the last stop it reaches; see budget.cut), or None. With a
     recipe goal (#96) the budget covers the recipe goals: the profession with a skill target next to one is not
-    planned (budget.not_planned), held at its skill for its trainer recipes to craft reagents (PlanInputs.fixed), and
-    the comparison returned ends with the budget lines (once, or one for each route when they differ), which the guide
-    and the report also say.
+    planned (budget.not_planned), held at its skill for its trainer recipes to craft reagents (PlanInputs.fixed), the
+    group's other characters with [skills] are named for what they could make and mail (guide.alt_suggestions, after
+    the budget lines), and the comparison returned ends with those lines (once, or one for each route when they
+    differ), which the guide and the report also say.
     Trainer recipes are planned at their inferred requirement, the safe one (gamedata.safe_requirements).
     The files are named for the character (see profile.report_name; profile_names: every character in the
     profile); without a character they keep the plain names."""
@@ -246,6 +247,10 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         fixed = {q: max(1, stock.skills.get(q, 1)) for q in caps if q not in once}
         aside = [budget_cut.not_planned(q, next(iter(once))) for q in fixed]
         caps = {p: s for p, s in caps.items() if p in once}
+    # and the other characters' crafts they could mail, by the skills their stock files give (#96)
+    mates = {n: s for n, s in group.others.items() if s.skills} if group is not None and target and once else {}
+    known = (gamedata.safe_requirements(gamedata.load_gamedata(paths.gamedata, professions={
+        line for s in mates.values() for line in s.skills}), skip=quests) if mates else None)
     inputs = PlanInputs(gd=gd, market=market, stock=stock, favor=favor, caps=caps, craft_once=once,
                         quests=quests, overtime=overtime, reading=reading, order=target.order if target else None,
                         fixed=fixed)
@@ -313,7 +318,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         skips = [free_skip_line(t, gd, trainer_info, homes[m]) for t in left]
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
-        said = [*budget_cut.lines(cuts[m], target), *aside] if m in cuts else []
+        said = ([*budget_cut.lines(cuts[m], target), *aside,
+                  *(alt_suggestions(route, gd, market, stock, mates, known) if mates else ())] if m in cuts else [])
         said_of[m] = said
         empty = m in cuts and cuts[m].below_first_stop
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,

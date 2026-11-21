@@ -56,7 +56,10 @@ when a question or answer needs it.
    me?", suggesting the `[gold]` amount of the character's ruleset and faction (`--budget GOLD`).
    With a budget and two crafting professions, ask: **raise both evenly or one at a time?** and, for
    one at a time, which first (`--order NAME,NAME`)
-   ([setup.md](references/setup.md), "A budget as a goal"). With a budget, first plan to the
+   ([setup.md](references/setup.md), "A budget as a goal"). A budget covers a recipe goal too: the
+   other profession's skill target waits (say so), and if the player wants crafts from their other
+   characters suggested, ask those characters' skills and save them under `[skills]` in each one's
+   `stock.toml`. With a budget, first plan to the
    targets without it (no `--budget`, before a budget is saved under `[goals]`) and read Z: the
    "(Z less)" of that plan's shopping-list line `If you sell crafts to a vendor as you go ...` under
    "Gold to bring". Whenever that line is there, ask once: **Buy everything before you start, or

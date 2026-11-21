@@ -523,6 +523,7 @@ class PayTests(unittest.TestCase):
         self.assertEqual(measured, [150000, 110000])
 
 
+ALCH = 171
 GOAL = 90  # "BS goal": the recipe goal of RecipeGoalTests
 DYE = 7900  # a made-up reagent the AH sells and Enchanting can make
 TO_GOAL = 7400 + 450 + 2500 + 100  # to 75, the rank, 25 bars to 100, the goal crafted once (a Copper Bar)
@@ -704,14 +705,63 @@ class RecipeGoalReportsTests(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def reports(self, target, goals):
+    def reports(self, target, goals, group=None, name="Ana Brightforge"):
         from unittest import mock
 
         from yap_forever import gamedata, plan as plan_mod, profile
         with mock.patch.object(gamedata, "load_gamedata", return_value=self.gd):
-            table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", goals,
-                                                  profile.Character("Ana Brightforge"), target=target)
+            table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", goals, profile.Character(name),
+                                                  target=target, group=group)
         return table, {k: v.read_text(encoding="utf-8") for k, v in files.items()}
+
+    def dyes(self, skills):
+        """The Blacksmithing goal levelled with "BS dyed" (a Test Dye a point, 90c on the AH), planned for Bram
+        Ironhide, whose group mate Ana Brightforge has `skills`; Alchemy's "Alch dye" (trainer, required 100) makes a
+        dye from a Small Glimmering Shard at 50c. (table, texts)."""
+        import json
+
+        from yap_forever.config import Goal
+        from yap_forever.shared import Group
+        self.gd = dye_inputs(50).gd
+        self.gd.recipes[4] = toy.recipe(4, "Alch dye", ALCH, {toy.SHARD: 1}, (DYE, 1), req=100)
+        del self.gd.recipes[5]
+        listings = {str(DYE): [[90, 100000]], str(toy.SHARD): [[50, 100000]], str(toy.COPPER_BAR): [[100, 100000]]}
+        self.paths.prices.write_text(json.dumps({"snapshot_time": "t", "listings": listings}), encoding="utf-8")
+        group = Group(2, "alliance", others={"Ana Brightforge": toy.stock(skills=skills)})
+        return self.reports(Budget(3), {BS: Goal(recipe="BS goal")}, group, "Bram Ironhide")
+
+    def test_alt_suggestion_with_skills(self):
+        # Ana's Alchemy 150 makes the route's 99 dyes for 49s 50c against 89s 10c on the AH: 39s 60c less
+        table, texts = self.dyes({ALCH: 150})
+        line = ("Your Alchemist Ana Brightforge can make the 99 Test Dye for about 39s less than the AH and mail them; "
+                "the gold to bring doesn't count that.")
+        self.assertTrue(table.endswith(f"3g covers Blacksmithing to 100 and one BS goal (94s). {line}"), table[-300:])
+        for text in texts.values():
+            self.assertEqual(text.count(line), 1)
+        self.assertIn("| Test Dye | 99 | AH |", texts["guide-gold"])  # still bought: a suggestion, not a step
+
+    def test_no_suggestion_without_skills(self):
+        from yap_forever.config import Goal
+        for skills in ({}, {ALCH: 99}):  # none set, or below the recipe's skill
+            with self.subTest(skills=skills):
+                table, texts = self.dyes(skills)
+                self.assertNotIn("can make the", table + "".join(texts.values()))
+        # Ana's Alchemy names nothing without a budget, or with a budget and a skill target only
+        from yap_forever.shared import Group
+        self.dyes({ALCH: 150})  # the dye data and prices
+        group = Group(2, "alliance", others={"Ana Brightforge": toy.stock(skills={ALCH: 150})})
+        for target, goals in ((None, {BS: Goal(recipe="BS goal")}), (Budget(3), {BS: Goal(skill=100)})):
+            table, texts = self.reports(target, goals, group, "Bram Ironhide")
+            self.assertNotIn("can make the", table + "".join(texts.values()))
+
+    def test_gold_to_bring_unchanged_by_suggestion(self):
+        # pinned (D2): 99 dyes at 90c, the 4s 50c rank and the goal's Copper Bar, with Ana's Alchemy named or not
+        for skills in ({}, {ALCH: 150}):
+            with self.subTest(skills=skills):
+                _table, texts = self.dyes(skills)
+                for text in (texts["guide-gold"], texts["guide-value"]):
+                    self.assertIn("**Gold to bring: 94s**", text)
+
 
     def test_other_profession_line(self):
         from yap_forever.config import Goal

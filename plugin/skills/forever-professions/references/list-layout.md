@@ -18,7 +18,8 @@ Write it for that.
 - Crafting a reagent (bolts, cured hides, Light Leather from scraps) gives skill-ups while it is
   not grey. Count those as route steps.
 - Name a reagent craft **on the row that needs it** ("first craft 7 Handful of Copper Bolts,
-  then…"), not in a separate list.
+  then…"), not in a separate list. One made with a profession the route doesn't plan (a budget with a
+  recipe goal) names it: `first craft <n> <item> (your <Profession>)`.
 - Craft each intermediate **in one go at its first row**, with the buffer, rather than split
   across rows.
 
@@ -330,8 +331,16 @@ and the report in its verdict, what the gold reaches, in one paragraph:
 - `<budget>` is the gold as given (`30g`, `12.5g`). The report's budget line ends with
   `; planned to your <budget> budget`, and with `pay = "as_you_go"` `; planned to your <budget> budget,
   selling crafts to a vendor as you go` (its cash before any sales can then be over the budget).
-- A recipe target wins over the budget ([setup.md](setup.md)): with a budget set and a recipe target, the
-  guide (under the comparison) and the report (in its verdict) say only `The <budget> budget is not applied:
-  a recipe target is planned in full.`, and the plan command prints the same line.
+- A recipe target under a budget ([setup.md](setup.md)): its last stop is the goal, the recipe's skill with
+  the recipe crafted once. When the route covers it: `<budget> covers <Profession> to <skill> and one <recipe>
+  (<gold>).` (with `as_you_go`, `(<gold>, selling crafts to a vendor as you go).`; two recipe goals joined with
+  ", and "). When the cut stops below it, after the "takes" line: `The goal, <Profession> <skill> and one
+  <recipe>, costs about <gold> more.`, which replaces the next stop's line when that stop is the goal. A skill
+  target next to it: `<Profession> is not planned with this budget: it goes to the <Profession> goal.`
+  Another of your characters who can make an item the route buys on the AH for less, by the craft margin:
+  `Your <Person> <Name> can make the <n> <item> for about <gold> less than the AH and mail them; the gold to
+  bring doesn't count that.` (after the budget lines). With a recipe target the plan command prints these
+  lines after the comparison too (once, or after `Least gold:` and `Least total value:` when the routes
+  differ).
 - Two professions one at a time: the intro says `Level one profession at a time: <first> first, then <second>.`
   instead of "Level both professions side by side".

@@ -723,6 +723,13 @@ def _bill(plan, gd, market, stock, rows) -> list[tuple[str, int | str, str, floa
     return out
 
 
+def ah_buys(plan, gd, market, stock) -> dict[int, tuple[int, float]]:
+    """item -> (count, cost in copper) of what the shopping list buys on the AH (its own lines, as _bill counts them)."""
+    owned = {i: float(n) for i, n in stock.items.items()}
+    split = _bought(_split(route_rows(plan, gd), plan, gd, owned, _mail(plan, whole_pool=True)))
+    return {i: (n, _cost(gd, market, i, src, n)) for (i, src), n in split.items() if src != "vendor"}
+
+
 def gold_to_bring(plan, gd, market, stock) -> float:
     """The shopping list's "Gold to bring", in copper: whole crafts with the buffer, patterns and fees."""
     return sum(cost for *_line, cost in _bill(plan, gd, market, stock, route_rows(plan, gd)))

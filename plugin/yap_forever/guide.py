@@ -833,6 +833,52 @@ def _money(out, plan, stock) -> None:
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 
+def alt_suggestions(plan, gd, market, stock, others, known=None) -> list[str]:
+    """#96: one line for each item the route buys on the AH that another of your characters can make for less, at
+    today's prices, by more than the craft margin at its skill (costmodel.craft_margin): "Your <Person> <Name> can make
+    the <n> <item> for about <gold> less than the AH and mail them; the gold to bring doesn't count that." Not a step,
+    and not in "Gold to bring". others: name -> the other character's config.Stock; only its [skills] count, each
+    profession's trainer and starter recipes up to that skill, from `known` (game data holding those professions; default
+    gd, the route's). A recipe's reagents are priced at the lowest of a vendor and the AH; one with a reagent priced by
+    neither is left out. The largest saving per item is named, a tie in name order."""
+    from yap_forever.costmodel import craft_margin
+    from yap_forever.shopping import ah_buys  # shopping imports this module
+    known = gd if known is None else known
+
+    def made_for(r, n):  # what n of the item cost to craft with recipe r at today's prices, or None
+        crafts = math.ceil(n / r.output[1] - 1e-9)
+        total = 0.0
+        for i, q in r.reagents.items():
+            need = q * crafts
+            opts = [p * need for p in (known.vendor_prices.get(i),) if p]
+            if (ah := market.buy_cost(i, math.ceil(need - 1e-9))) is not None:
+                opts.append(ah)
+            if not opts:
+                return None
+            total += min(opts)
+        return total
+
+    out = []
+    for item, (n, ah) in sorted(ah_buys(plan, gd, market, stock).items(), key=lambda x: gd.name(x[0])):
+        best = None  # (saving, name, profession)
+        for name in sorted(others):
+            for line, skill in others[name].skills.items():
+                for r in known.recipes.values():
+                    if (r.skill_line != line or not r.output or r.output[0] != item
+                            or r.source not in ("trainer", "starter") or r.required_skill > skill):
+                        continue
+                    cost = made_for(r, n)
+                    if cost is not None and cost < craft_margin(skill) * ah - 1e-9 and (best is None
+                                                                                        or ah - cost > best[0]):
+                        best = (ah - cost, name, line)
+        if best:
+            saving, name, line = best
+            person = trainer_text.PERSON.get(line, PROFESSIONS.get(line, str(line)))
+            out.append(f"Your {person} {name} can make the {n} {gd.name(item)} for about {gold(saving)} less than the "
+                       "AH and mail them; the gold to bring doesn't count that.")
+    return out
+
+
 def vendor_counted(plan) -> str:
     """Whether the vendor money was counted in choosing the route: a budget's fallback route (Plan.vendor_credit
     False, budget.cut) was chosen without it."""

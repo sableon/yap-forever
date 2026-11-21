@@ -167,10 +167,19 @@ With two professions, `budget_order` (or `--order even|NAME,NAME`) says how to s
 A profession that can't advance (rank cap, level gate, no recipe) gets none of the gold, and the
 guide says why. The guide and the report say what the budget reaches and what each next stop costs
 on top ([list-layout.md](list-layout.md), "Budget"); the report's budget line adds "planned to your
-20g budget". A budget with a recipe target (craft once) is not applied: the recipe target is planned
-in full, and so is the other profession's skill target when two are planned. The plan output, the
-guide header and the report verdict then say `The <budget> budget is not applied: a recipe target is
-planned in full.` Both routes (least gold, least total value) are cut by their own gold.
+20g budget". Both routes (least gold, least total value) are cut by their own gold.
+
+A budget with a recipe target (craft once) covers that profession's goal: its stops are the rank caps
+below the recipe's skill, then the goal, that skill with the recipe crafted once (only the goal's
+route crafts it). The plan output, the guide header and the report verdict say what it covers or
+how far it gets, and what the goal costs on top. A second profession with a skill target is not
+planned with the budget: the gold goes to the recipe goal. It stays at its skill in `[skills]`, and
+its trainer recipes up to that skill (assumed known) may make one of the goal's reagents when that
+costs less than buying by the craft margin ("Craft or buy" in [list-layout.md](list-layout.md)): the
+route row says `first craft <n> <item> (your <Profession>)`. Two recipe targets are cut like two skill
+targets (`budget_order`). Your other characters of the same ruleset and faction with `[skills]` in
+their `stock.toml` are named when they can make an item the route buys on the AH for less: a
+suggestion only, not counted in "Gold to bring".
 
 **Green crafts.** `keep_greens` (default `false`) matters only when the plan has no Enchanting.
 With `true`, green crafts that can be disenchanted are kept for another character's Enchanting
