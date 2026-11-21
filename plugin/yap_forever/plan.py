@@ -1,6 +1,6 @@
 """Plan a character's professions: the least-gold and least-total-value routes, guides and reports."""
 import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -30,7 +30,8 @@ class PlanInputs:
     """What every planning round of one character reads: game data, prices, stock, Favor, the targets
     (caps: profession -> skill; craft_once: profession -> recipe crafted once at the end), the quest
     recipes, and the character's Working Overtime rank and how it reads (see costmodel.skillup_chance);
-    order: raise the professions one at a time in this order (None: side by side; see planner.plan)."""
+    order: raise the professions one at a time in this order (None: side by side; see planner.plan);
+    fixed: profession -> skill of a profession not planned whose recipes may craft reagents (planner.plan, #96)."""
     gd: gamedata.GameData
     market: Market
     stock: Stock
@@ -41,6 +42,7 @@ class PlanInputs:
     overtime: int = 0
     reading: str = "relative"
     order: tuple[int, ...] | None = None
+    fixed: dict[int, int] = field(default_factory=dict)
 
 
 def home_capital(stage_caps: dict[tuple[int, int], int], plan, character,
@@ -80,7 +82,8 @@ def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full, vendor_credit=T
     for _ in range(REUSE_ROUNDS):
         p = plan(gd, valuer, inputs.stock, inputs.favor, quests=inputs.quests, reuse=reuse, caps=inputs.caps,
                  craft_once=inputs.craft_once, exclude=exclude, one_time_in_full=one_time_in_full,
-                 overtime=inputs.overtime, reading=inputs.reading, order=inputs.order, vendor_credit=vendor_credit)
+                 overtime=inputs.overtime, reading=inputs.reading, order=inputs.order, vendor_credit=vendor_credit,
+                 fixed=inputs.fixed)
         out.append(p)
         used: dict[int, float] = {}
         for st in p.steps:
@@ -203,14 +206,6 @@ def saving_line(copper: float) -> str:
             f"could cost about {gold(copper)} less.")
 
 
-def budget_dropped(goals: dict, target) -> str:
-    """The line the plan command prints when write_reports won't apply `target` (a config.Budget or None) because a
-    goal is a recipe (config.Goal.recipe), or ""."""
-    if target is None or all(g.recipe is None for g in goals.values()):
-        return ""
-    return budget_cut.not_applied(target)
-
-
 def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, character=None,
                   reading: str = "relative", faction: str = "",
                   profile_names=(), study_hint_gold_per_point: float = 100,
@@ -224,8 +219,10 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     group: the shared.Group of the character: the mailable items of its other characters join the plan, and
     the report's budget line is the group's shared gold (without it, the stock's own `cash_gold`).
     target: a config.Budget to plan to (each route cut at the last stop it reaches; see budget.cut), or None. With a
-    recipe goal it is not applied (every target planned in full) and the guide and the report say so
-    (budget_dropped); the caller prints it too.
+    recipe goal (#96) the budget covers the recipe goals: the profession with a skill target next to one is not
+    planned (budget.not_planned), held at its skill for its trainer recipes to craft reagents (PlanInputs.fixed), and
+    the comparison returned ends with the budget lines (once, or one for each route when they differ), which the guide
+    and the report also say.
     Trainer recipes are planned at their inferred requirement, the safe one (gamedata.safe_requirements).
     The files are named for the character (see profile.report_name; profile_names: every character in the
     profile); without a character they keep the plain names."""
@@ -243,21 +240,26 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     favor = no_favor() if faction == "horde" else load_favor(standing)  # the Favor list is Alliance's
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
-    dropped = []
-    if line := budget_dropped(goals, target):  # a recipe goal wins over a budget: planned in full, and said
-        target, dropped = None, [line]
+    fixed: dict[int, int] = {}
+    aside: list[str] = []  # the budget lines' word on a profession left out
+    if target is not None and once:  # #96: the budget covers the recipe goals; a skill target next to one waits
+        fixed = {q: max(1, stock.skills.get(q, 1)) for q in caps if q not in once}
+        aside = [budget_cut.not_planned(q, next(iter(once))) for q in fixed]
+        caps = {p: s for p, s in caps.items() if p in once}
     inputs = PlanInputs(gd=gd, market=market, stock=stock, favor=favor, caps=caps, craft_once=once,
-                        quests=quests, overtime=overtime, reading=reading, order=target.order if target else None)
+                        quests=quests, overtime=overtime, reading=reading, order=target.order if target else None,
+                        fixed=fixed)
     routes, same = settle_routes(candidates(inputs), caps)
     per_mode = {m: inputs for m in routes}  # each route's own targets: a budget cuts each at its own stops
     cuts: dict[str, budget_cut.BudgetCut] = {}
 
     gold_of = budget_cut.gold_measure(target, gd, market, stock)  # the cut, its free skips and its spent alike
     if target is not None:
-        cache = {budget_cut.key(caps): (routes, same, None)}  # the routes without vendor credit: planned if needed
+        cache = {budget_cut.key(caps, once): (routes, same, None)}  # without vendor credit: planned if needed
         cuts = {m: budget_cut.cut(inputs, m, target, gold_of, cache) for m in routes}
         routes = {m: c.plan for m, c in cuts.items()}
-        per_mode = {m: dataclasses.replace(inputs, caps=c.planned_caps) for m, c in cuts.items()}
+        per_mode = {m: dataclasses.replace(inputs, caps=c.planned_caps, craft_once=c.planned_once)
+                    for m, c in cuts.items()}
     trainer_trips = character.trainer_trips if character else "as_needed"
     # #98: where each route's stages are levelled (its home capital), fixed before free skips so every route a skip
     # compares is counted with the same home; without trainer data or a faction, none (RF2)
@@ -285,8 +287,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     level_note = [favor_suggest.NO_LEVEL_NOTE] if favor.recipes and not stock.level_set else []
     if cuts:  # once per set of caps the cuts landed on
         savings = {}
-        for k in {budget_cut.key(c.planned_caps) for c in cuts.values()}:
-            modes = [m for m, c in cuts.items() if budget_cut.key(c.planned_caps) == k]
+        for k in {budget_cut.key(c.planned_caps, c.planned_once) for c in cuts.values()}:
+            modes = [m for m, c in cuts.items() if budget_cut.key(c.planned_caps, c.planned_once) == k]
             savings.update(listed_savings(per_mode[modes[0]], {m: routes[m] for m in modes}))
     else:
         savings = listed_savings(inputs, routes)
@@ -297,6 +299,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     files: dict[str, Path] = {}
     who = f"{report_name(character.name, profile_names)}-" if character else ""
     alts_of: dict[str, dict] = {}
+    said_of: dict[str, list[str]] = {}
     for m, route in routes.items():
         caps = per_mode[m].caps
         left = left_out[m][1]
@@ -310,7 +313,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         skips = [free_skip_line(t, gd, trainer_info, homes[m]) for t in left]
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
-        said = budget_cut.lines(cuts[m], target) if m in cuts else dropped
+        said = [*budget_cut.lines(cuts[m], target), *aside] if m in cuts else []
+        said_of[m] = said
         empty = m in cuts and cuts[m].below_first_stop
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,
@@ -330,4 +334,15 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                                     *level_note]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
+    if once and cuts:  # #96: the plan command prints what the budget covers, after the guides have the table
+        table += "\n\n" + _said_once(said_of)
     return table, files
+
+
+def _said_once(said_of: dict[str, list[str]]) -> str:
+    """Each route's budget lines for the plan command: once when both routes say the same, else each after its name,
+    as in the comparison table (C44)."""
+    texts = {m: " ".join(lines) for m, lines in said_of.items()}
+    if len(set(texts.values())) == 1:
+        return next(iter(texts.values()))
+    return "\n\n".join(f"{ROUTE_NAMES[m]}: {t}" for m, t in texts.items())

@@ -610,7 +610,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
             groups.setdefault(stage(p, s.skill_from, False), []).append(s)
         for k, group in groups.items():
             for r in _ranges(group, gd, whole):
-                line = _range_line(r, gd, used_by, for_de, plan.kept_greens, sales, on_ah)
+                line = _range_line(r, gd, used_by, for_de, plan.kept_greens, sales, on_ah, plan.other_crafts)
                 lines.setdefault((k, p), []).append((r["from"], 1, line + (hint.note(p, r) if hint else "")))
         for s in plan.steps:
             if s.profession == p and s.skill_from == s.skill_to:  # the goal recipe, crafted once
@@ -757,9 +757,10 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
     return out
 
 
-def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None) -> str:
+def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None, others=None) -> str:
     """One route row. sales: the render's costmodel.Valuer, whose rule says where its crafts are sold (None: no
-    prices, so to a vendor). on_ah: see _vendor_back (None: a row on its own)."""
+    prices, so to a vendor). on_ah: see _vendor_back (None: a row on its own). others: Plan.other_crafts, an
+    intermediate crafted with a profession the route doesn't plan -> the recipe, whose profession the row names (#96)."""
     # Disenchants are an expected count of greens you already have, not a buffered shopping count.
     n = max(1, round(r["crafts"]) if r["spell"] == DE_SPELL else math.ceil(r["crafts"] - 1e-6))
     mats = [f"{count(q)} {gd.name(i)}" for i, q in r["mats"].items()] + \
@@ -768,7 +769,10 @@ def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None
     if mats:
         line += " — " + ", ".join(mats)
     if r.get("here"):  # intermediates still missing, crafted on the spot from the materials listed
-        line += "; first craft " + ", ".join(f"{count(q)} {gd.name(i)}" for i, q in r["here"].items())
+        line += "; first craft " + ", ".join(
+            f"{count(q)} {gd.name(i)}" + (f" (your {PROFESSIONS[gd.recipes[others[i]].skill_line]})"
+                                          if i in (others or {}) and others[i] in gd.recipes else "")
+            for i, q in r["here"].items())
     return line + _sold(r, gd, used_by, for_de, kept, sales, {} if on_ah is None else on_ah)[0]
 
 

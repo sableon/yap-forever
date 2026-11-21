@@ -500,45 +500,44 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("The next stop, Enchanting", guide)
         self.assertIn("Level both professions side by side", guide)
 
-    def test_plan_with_a_budget_and_a_recipe_target_plans_the_recipe_in_full(self):
-        self.ready_home()
-        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:2660",
-                         "--budget", "0"], self.paths)
-        self.assertEqual(code, 0, out)
-        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
-        report = next(self.paths.reports.glob("*-plan-gold.md")).read_text(encoding="utf-8")
-        self.assertNotIn("doesn't reach", guide + report)
-        self.assertNotIn("planned to your", report)
-        self.assertIn("once", guide)
-        line = "The 0g budget is not applied: a recipe target is planned in full."
-        self.assertIn(line, out)  # said in the plan output, the guide header and the report verdict
-        verdict = report[report.index("## Verdict"):].split("\n## ")[0]
-        self.assertIn(line, verdict)
-        self.assertIn(line, guide[:guide.index("## ")])
-        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:2660"], self.paths)
-        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
-        self.assertNotIn("budget is not applied", out + guide)  # no budget, nothing to say
-
-    def test_a_budget_next_to_a_recipe_goal_says_it_is_not_applied(self):
-        # the other profession's skill target is not cut either; the saved [goals] budget is the likely case
-        stock = self.ready_home()
+    def test_cli_prints_budget_lines(self):
+        # #96: a budget covers a recipe goal; the plan command prints the budget lines after the comparison, as the
+        # guide header and the report verdict say them (once: both routes say the same), and no "not applied"
+        self.ready_home()  # Rough Sharpening Stone (2660) is a recipe at 1: its one stop is the craft, 20c of stone
+        me = ["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:2660"]
+        for budget, line in (("0", "0g doesn't reach the first stop: nothing is planned yet. The goal, Blacksmithing 1 "
+                                   "and one Rough Sharpening Stone, costs about 20c more."),
+                             ("1000", "1000g covers Blacksmithing to 1 and one Rough Sharpening Stone (20c).")):
+            code, out = run(me + ["--budget", budget], self.paths)
+            self.assertEqual(code, 0, out)
+            self.assertEqual(out.count(line), 1, out)
+            self.assertNotIn("not applied", out)
+            for m in ("gold", "value"):
+                guide = next(self.paths.reports.glob(f"*-guide-{m}.md")).read_text(encoding="utf-8")
+                report = next(self.paths.reports.glob(f"*-plan-{m}.md")).read_text(encoding="utf-8")
+                self.assertEqual(guide[:guide.index("## ")].count(line), 1, m)
+                verdict = report[report.index("## Verdict"):].split("\n## ")[0]
+                self.assertEqual(verdict.count(line), 1, m)
+                self.assertIn("planned to your", report)
+                self.assertEqual("once" in guide, budget == "1000", m)
+        # the saved [goals] budget with a skill target next to the recipe goal: that profession is not planned
+        stock = self.paths.character("Firstname Lastname") / "stock.toml"
         stock.write_text('level = 20\n[items]\n\n[goals]\nbudget = 12.5\nblacksmithing = "2660"\nenchanting = 20\n',
                          encoding="utf-8")
         code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
         self.assertEqual(code, 0, out)
-        line = "The 12.5g budget is not applied: a recipe target is planned in full."
+        line = ("12.5g covers Blacksmithing to 1 and one Rough Sharpening Stone (20c). Enchanting is not planned with "
+                "this budget: it goes to the Blacksmithing goal.")
         self.assertEqual(out.count(line), 1, out)
-        for m in ("gold", "value"):
-            guide = next(self.paths.reports.glob(f"*-guide-{m}.md")).read_text(encoding="utf-8")
-            report = next(self.paths.reports.glob(f"*-plan-{m}.md")).read_text(encoding="utf-8")
-            self.assertEqual(guide.count(line), 1, m)
-            self.assertEqual(report.count(line), 1, m)
-            self.assertNotIn("planned to your", report)
-            self.assertNotIn(" takes ", guide)
+        self.assertNotIn("Enchanting gets none of it", out)
         code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20",
-                         "--prof", "enchanting:20"], self.paths)  # skill targets only: the budget is applied
+                         "--prof", "enchanting:20"], self.paths)  # skill targets only: the comparison as before
         self.assertEqual(code, 0, out)
-        self.assertNotIn("not applied", out)
+        self.assertNotIn("12.5g", out)
+        stock.write_text("level = 20\n[items]\n", encoding="utf-8")
+        code, out = run(me, self.paths)  # no budget, nothing to say
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("covers", out)
 
     def test_plan_passes_the_characters_own_faction(self):
         # C20: the faction write_reports names trainers and capitals for is the character's own, else the profile's.

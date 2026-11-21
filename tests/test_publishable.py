@@ -237,9 +237,6 @@ class PublishableTests(unittest.TestCase):
                      "The <budget> budget is not applied: a recipe target is planned in full."):
             self.assertIn(line, layout)
         self.assertIn("The <budget> budget is not applied: a recipe target is planned in full.", setup)
-        from yap_forever.budget import not_applied
-        from yap_forever.config import Budget
-        self.assertEqual(not_applied(Budget(12.5)), "The 12.5g budget is not applied: a recipe target is planned in full.")
 
     def test_docs_promise_trainer_ranks(self):
         """#82: game-rules.md gives the rank caps trips.recipe_rank_cap uses and the Truesilver Rod sighting of

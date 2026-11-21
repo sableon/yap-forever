@@ -986,3 +986,25 @@ class VendorCashbackTests(unittest.TestCase):
         gd = self.gamedata([toy.recipe(1, "BS gear", BS, {toy.COPPER_BAR: 1}, (self.PLATE, 1), t=(1, 10, 15, 30))])
         gd.items[self.PLATE] = toy.item(self.PLATE, "Test Plate", sell=300)
         return gd, toy.market({toy.COPPER_BAR: [(1000, 100000)]}), toy.stock()
+
+
+class FixedProfessionTests(unittest.TestCase):
+    """#96, C43: a profession the route doesn't plan, held at its skill (plan's `fixed`), crafts the route's reagents
+    with its trainer recipes up to that skill when that beats buying by the craft margin, and is never planned or
+    reached."""
+
+    def test_fixed_profession_crafts_and_is_never_reached(self):
+        dye = 7900
+        gd = toy.gamedata([toy.recipe(3, "BS dyed", BS, {dye: 1}),
+                           toy.recipe(4, "Ench dye", ENCH, {toy.SHARD: 1}, (dye, 1), req=40, fee=500)])
+        gd.items[dye] = toy.item(dye, "Test Dye", sell=5)
+        m = toy.market({dye: [(100, 100000)], toy.SHARD: [(50, 100000)]})
+        st = toy.stock(skills={ENCH: 50})
+        held = plan(gd, Valuer(m, gd, st, mode="gold"), st, toy.NO_FAVOR, caps={BS: 20}, fixed={ENCH: 50})
+        self.assertEqual((held.final_skill, held.other_crafts, held.crafted), ({BS: 20}, {dye: 4}, {dye: 19}))
+        self.assertEqual({s.profession for s in held.steps}, {BS})
+        self.assertEqual((held.fees, held.learn_log[1:]), (0, []))  # only BS dyed is learned (no fee in the toy)
+        low = plan(gd, Valuer(m, gd, st, mode="gold"), st, toy.NO_FAVOR, caps={BS: 20}, fixed={ENCH: 39})
+        self.assertEqual((low.other_crafts, low.bought), ({}, {dye: 19}))  # below the recipe's skill: bought
+        bare = plan(gd, Valuer(m, gd, st, mode="gold"), st, toy.NO_FAVOR, caps={BS: 20})
+        self.assertEqual((bare.other_crafts, bare.bought), ({}, {dye: 19}))

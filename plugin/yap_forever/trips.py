@@ -376,9 +376,11 @@ def alternatives(base, inputs, mode, cache: dict | None = None, trainer_trips: s
     recipes = sorted((t for t in found if t.kind == "recipe" and t.key not in goal_trips), key=lambda t: -t.cost)
     cache = {} if cache is None else cache
     credit = base.vendor_credit
+    caps = tuple(sorted(inputs.caps.items()))
+    targets = (caps, tuple(sorted(inputs.craft_once.items()))) if inputs.craft_once else caps  # as budget.key
     for t in patterns[:MAX_TRIP_ALTS] + recipes[:MAX_TRIP_ALTS]:
         left = frozenset(excluded) | t.recipes
-        k = (mode, tuple(sorted(inputs.caps.items())), left, credit)
+        k = (mode, targets, left, credit)
         if k not in cache:
             cache[k] = plan_route(inputs, mode, exclude=left, vendor_credit=credit)
         alt = cache[k]
@@ -395,7 +397,8 @@ def trip_alternatives(base, inputs, mode, cache: dict | None = None, trainer_tri
     price; a Favor trip is always a target's, never measured), and apart from them the costliest
     MAX_TRIP_ALTS recipe trips (by their fees); a recipe trip for the goal recipe is always None.
     inputs: the plan.PlanInputs the route was planned from. cache: routes planned without some recipes, kept
-    by the caller across calls (by mode, targets, the recipes left out and the vendor credit), so none is planned twice.
+    by the caller across calls (by mode, targets with the goal recipes crafted once (a budget's lower stop has none,
+    #96), the recipes left out and the vendor credit), so none is planned twice.
     trainer_trips: see visits; a "one_go" route has no recipe trips inside a remote rank's stretch to skip.
     excluded: the recipes the route was planned without (free skips): every route planned here leaves them out too.
     capitals, home: see visits; a stop in the home capital is keyed and measured as the trip it was."""

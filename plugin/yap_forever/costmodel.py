@@ -84,6 +84,8 @@ class Pools:
     crafted: dict[int, float] = field(default_factory=dict)  # intermediates crafted on the way
     tools: set[int] = field(default_factory=set)
     mail: dict[int, float] = field(default_factory=dict)  # mailable items of your other characters
+    crafted_by: dict[tuple[int, int], float] = field(default_factory=dict)  # (intermediate, the recipe that crafted
+    # it) -> count, as `crafted`
 
     @classmethod
     def from_stock(cls, stock) -> "Pools":
@@ -289,7 +291,9 @@ class Valuer:
         return Cost(0, n * v, n * v), qty - n
 
     def _craft(self, item, need, pools, skills, move, depth, learned):
-        """(cost, recipe) of crafting `need` of item with a known recipe and the tools at hand, or None."""
+        """(cost, recipe) of crafting `need` of item with a known recipe and the tools at hand, or None. Known: a
+        starter recipe, or one in `learned`, at the skill `skills` gives its profession (a profession the route doesn't
+        plan may be there at a fixed skill, its trainer recipes up to it in `learned`: planner.plan's `fixed`, #96)."""
         held = pools.held()
         for r in self.gd.recipes.values():
             if not r.output or r.output[0] != item:
@@ -310,6 +314,7 @@ class Valuer:
                 sub = sub + c
             if sub is not None:
                 move(pools.crafted, item, need)
+                move(pools.crafted_by, (item, r.spell_id), need)
                 return sub, r
         return None
 
