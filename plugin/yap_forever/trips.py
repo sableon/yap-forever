@@ -205,10 +205,11 @@ def before_start(plan, gd, start_skills: dict[int, int]) -> dict[int, list[int]]
 
 
 def step_place(plan, v: Visit) -> int:
-    """Where a visit comes in route order: the index in plan.steps of its profession's first levelling step from its
-    skill on (len(plan.steps) after the last)."""
+    """Where a visit comes in route order: the index in plan.steps of its profession's levelling step that starts at its
+    skill, or that its skill falls in (a run of one recipe is one step: the other profession's skill is then read where
+    the run starts, never later); len(plan.steps) after the last."""
     return next((j for j, st in enumerate(plan.steps)
-                 if st.profession == v.profession and st.skill_from < st.skill_to and st.skill_from >= v.skill),
+                 if st.profession == v.profession and st.skill_from < st.skill_to and st.skill_to > v.skill),
                 len(plan.steps))
 
 

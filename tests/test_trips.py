@@ -723,6 +723,16 @@ class JoinStopTests(unittest.TestCase):
         # the visits handed in are left as they were
         self.assertEqual([v.joined for v in found], [[], []])
 
+    def test_a_stop_inside_a_run_is_placed_at_the_run(self):
+        # Alchemy's run 80–95 is one step: its stop at 91 is made while Engineering is still at 80, not at 95
+        from yap_forever.planner import Step
+        from yap_forever.trips import join_stops
+        p, gd = join_route()
+        p.steps = [Step(ALCH, 80, 95, 71, "Alch draught", 15, 0, 0), Step(ENG, 80, 95, 81, "Eng contact", 15, 0, 0),
+                   Step(ALCH, 95, 110, 71, "Alch draught", 15, 0, 0), Step(ENG, 95, 110, 81, "Eng contact", 15, 0, 0)]
+        found = [stop(ALCH, 91, [71]), stop(ENG, 91, [81])]
+        self.assertEqual(joins(join_stops(found, p, gd, IRONFORGE, self.hosts())), [(ALCH, 91, []), (ENG, 91, [])])
+
 
 if __name__ == "__main__":
     unittest.main()
