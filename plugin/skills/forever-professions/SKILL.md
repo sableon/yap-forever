@@ -66,7 +66,9 @@ when a question or answer needs it.
    (<Profession A>'s <Rank>) or <City B> (<Profession B>'s <Rank>)?** (for example: **Start in
    Ironforge (Engineering's Artisan) or Darnassus (Alchemy's Artisan)?**) with each capital's tip
    ([game-rules.md](references/game-rules.md), "Trainers and ranks"), then, for the other one, **level that
-   stage there in one go, or go as needed?** Save the answers as `capital` and `trainer_trips` under
+   stage there in one go, or go as needed?** When the character already has `trainer_trips`, don't ask
+   that again: say what it is set to, since changing it changes the trips to the remote trainers too. Save
+   the answers as `capital` and `trainer_trips` under
    `[characters."Name"]` in `profile.toml` ([setup.md](references/setup.md), step 2). One
    `trainer_trips` answer covers both kinds of trip: the other capital and the remote trainers (every
    Master, the Artisan Enchanters); tell the player so when you ask, and step 5 doesn't ask again. With
