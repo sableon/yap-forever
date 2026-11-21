@@ -32,8 +32,8 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(verdict(Plan(farm={2770: 250}), toy.stock()), "Not yet")
 
 
-AUCTIONATOR_LINE = ("Prices: Auctionator scan of 2026-11-18 (one price per item, no listing depth: costs are a "
-                    "lower bound and AH sale limits are approximate).")
+AUCTIONATOR_LINE = ("Prices: Auctionator scan of 2026-11-18 (one price and one count per item, no listing depth: "
+                    "costs are a lower bound, and the supplier note and buyout flag use that one count).")
 
 
 class PricesHeaderTests(unittest.TestCase):
@@ -389,6 +389,21 @@ class AhSalesReportTests(unittest.TestCase):
         self.assertIn(note.format(2) + "\n", self.render([(115790, 1)])[0])
         self.assertIn(note.format(1.5) + "\n", self.render([(115790, 1)], ah_premium=1.5)[0])
         self.assertNotIn("gear counts at most 5", self.render([(115790, 1)])[0])
+
+    def test_crafts_above_material_cost_follow_the_ah_rule(self):
+        # the list prices a craft as the route rows do: at its AH net only when the AH pays well above a vendor
+        gd = toy.gamedata([toy.recipe(1, "BS scarce", BS, {toy.COPPER_BAR: 1}, (self.GEAR, 1)),
+                           toy.recipe(2, "BS dead", BS, {toy.COPPER_BAR: 1}, (7778, 1))])
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=10000)
+        gd.items[7778] = toy.item(7778, "Dull Gear", sell=10000)
+        st = toy.stock()
+        m = toy.market({toy.COPPER_BAR: [(100, 1000)], self.GEAR: [(115790, 50)], 7778: [(13685, 50)]})
+        p = Plan(learned=[1, 2], final_skill={BS: 20})
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 20})
+        block = text[text.index("Crafts that sell above material cost"):text.index("## Excluded recipes")]
+        self.assertIn("- BS scarce: +10g 99s 0c each", block)  # 11x: at its AH net, 110000c less 100c of material
+        self.assertIn("- BS dead: +99s 0c each", block)  # 1.3x: at its vendor price, 10000c less 100c
+        self.assertNotIn("+1g 29s 0c", block)  # not at its AH net of 13000c
 
 
 def toy_turnin():

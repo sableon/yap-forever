@@ -212,7 +212,7 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
         r = gd.recipes.get(spell)
         if not r or not r.output:
             continue
-        sell = market.net_sell(r.output[0])
+        sell = v.ah_price(r.output[0]) or v.vendor_price(r.output[0])  # as the route rows sell it (#62)
         cost = 0
         for i, q in r.reagents.items():
             opt = v.buy_option(i, q, 0)

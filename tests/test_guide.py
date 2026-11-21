@@ -26,8 +26,8 @@ def auctionator_market(scan_day="2026-11-18", dropped=0):
     return m
 
 
-LINE = ("Prices: Auctionator scan of 2026-11-18 (one price per item, no listing depth: costs are a lower "
-        "bound and AH sale limits are approximate).")
+LINE = ("Prices: Auctionator scan of 2026-11-18 (one price and one count per item, no listing depth: costs are "
+        "a lower bound, and the supplier note and buyout flag use that one count).")
 
 
 class PricesHeaderTests(unittest.TestCase):
