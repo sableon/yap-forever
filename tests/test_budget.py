@@ -224,5 +224,75 @@ class RenderTests(unittest.TestCase):
             self.assertNotIn("Nothing to craft within this budget.", text)
 
 
+class FeaturesTogetherTests(unittest.TestCase):
+    """End to end through write_reports, on made-up game data: a budget, trainer_trips "one_go" and bag_slots at once.
+    Blacksmithing from 150: the Artisan rank (a remote trainer) at 150, a pattern from the AH learned at 180, an
+    Artisan trainer recipe at 200 (a trip back as needed), the Master rank at 200 for 300. 1g reaches 225."""
+
+    def setUp(self):
+        import contextlib
+        import io
+        import json
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from yap_forever import cli, settings
+        self._tmp = tempfile.TemporaryDirectory()
+        self.paths = settings.paths(Path(self._tmp.name) / "home")
+        with contextlib.redirect_stdout(io.StringIO()):
+            cli.main(["init"], self.paths)
+        shutil.copytree(Path(__file__).parent / "fixtures" / "gamedata", self.paths.gamedata)
+        c, i, scroll = toy.COPPER_BAR, toy.IRON_BAR, toy.SCROLL
+        listings = {str(c): [[10, 100000]], str(i): [[100, 100000]], str(scroll): [[50, 1]]}
+        self.paths.prices.write_text(json.dumps({"snapshot_time": "t", "listings": listings}), encoding="utf-8")
+        self.gd = toy.gamedata([
+            toy.recipe(71, "BS low", BS, {i: 1}, t=(150, 300, 300, 300), req=150),
+            toy.recipe(72, "BS pattern", BS, {c: 2}, t=(180, 300, 300, 300), req=180, source="scroll", scroll=scroll),
+            toy.recipe(73, "BS trainer", BS, {c: 1}, t=(200, 300, 300, 300), req=200, fee=100)])
+        self.gd.trainer_ranks[BS] = self.gd.trainer_ranks[BS] + [Rank(300, 9000, 200, 35)]
+        for item in (c, i):
+            self.gd.items[item].stack = 20
+        self.stock = self.paths.character("Alt") / "stock.toml"
+        self.stock.parent.mkdir(parents=True)
+        self.stock.write_text("level = 60\nbag_slots = 12\n[items]\n\n[skills]\nblacksmithing = 150\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def reports(self, trainer_trips):
+        from unittest import mock
+
+        from yap_forever import gamedata, plan as plan_mod, profile
+        from yap_forever.config import Goal
+        with mock.patch.object(gamedata, "load_gamedata", return_value=self.gd):
+            table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", {BS: Goal(skill=300)},
+                                                  profile.Character("Alt", trainer_trips=trainer_trips),
+                                                  target=Budget(1))
+        return table, {k: v.read_text(encoding="utf-8") for k, v in files.items()}
+
+    def test_budget_one_go_and_bags_agree(self):
+        import re
+        table, texts = self.reports("one_go")
+        guide, report = texts["guide-gold"], texts["plan-gold"]
+        self.assertEqual(guide.splitlines()[0], "# Blacksmithing to 225 — least gold route")  # the cut
+        spent = re.search(r"1g takes Blacksmithing to 225 \((.+?)\)\. The next stop, Blacksmithing 300, costs about",
+                          guide).group(1)
+        self.assertIn(f"**Gold to bring: {spent}**", guide)  # the shopping list is the budget line's gold
+        self.assertIn("planned to your 1g budget", report)
+        (trip,) = [line for line in guide.splitlines() if line.startswith("- **Trip:**")]  # the trip back is folded
+        self.assertIn("Blacksmithing rank to 225", trip)
+        self.assertIn("Learn at the trainer as you reach them: BS trainer at 200.", trip)
+        self.assertIn("1 Plans: Something (from the AH): enough to craft to 225 at the trainer (7 bag slots)", trip)
+        self.assertTrue(trip.endswith("This needs 17 free slots and you have 12: get bigger bags, bank what this "
+                                      "stretch doesn't need, or set a lower goal (for example 180) so it fits."), trip)
+        self.assertIn("| Trips away | 1 | 1 |", table)
+        _table, texts = self.reports("as_needed")  # the same budget as needed: the trip back is a trip
+        trips = [line for line in texts["guide-gold"].splitlines() if line.startswith("- **Trip:**")]
+        self.assertEqual(len(trips), 2)
+        self.assertIn("at 200 for BS trainer (1s 0c)", trips[1])
+        self.assertNotIn("Plans: Something (from", trips[0])
+
+
 if __name__ == "__main__":
     unittest.main()

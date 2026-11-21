@@ -14,7 +14,7 @@ from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.guide import gold
 from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.shared import allocate
-from yap_forever.trips import AS_NEEDED, ONE_GO, stretch_end, visits
+from yap_forever.trips import AS_NEEDED, ONE_GO, stretch_end, stretch_patterns, visits
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
 BRING_POINTS = 25  # without a bag count, bring enough for this many points (or to the stage end)
@@ -346,6 +346,8 @@ def mailed(plan, gd, stock) -> dict[int, list[tuple[str, int]]]:
 
 YOURS = "yours"  # a bring-list source: your own crafts and disenchants from before the trip
 LATER = "later:"  # a bring-list source "later:<profession>": made by your other profession later on the route
+PATTERN = "pattern:"  # a bring-list source "pattern:<how>": a pattern bought on the AH, from a vendor or with Favor
+PATTERN_FROM = {"ah": "from the AH", "vendor": "from a pattern vendor", "favor": "from the Merchant's Favor vendor"}
 _DE_EVENT = re.compile(r"^Enchanting (\d+): disenchant ([\d.]+) (.+)$")
 
 
@@ -502,12 +504,24 @@ def _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start
     return rows, left, mail, ctx
 
 
+def _pattern_source(plan, gd, spell, how) -> str:
+    """Where a bring-list pattern comes from: "bank", "from:<Name>" or "pattern:<how>" (see PATTERN_FROM)."""
+    if how == "owned":
+        return "bank"
+    if how == "mail":
+        who = plan.used_mail.get(gd.recipes[spell].scroll_item)
+        return f"{MAIL_FROM}{who[0][0]}" if who else "mail"
+    return f"{PATTERN}{how}"
+
+
 def _bring_items(plan, gd, rows, left, mail, trainer_trips, ctx, trip) -> list[tuple[int, int, str]]:
     split = _split(rows, plan, gd, left, mail)
     out = [(i, n, src) for (i, src), n in sorted(split.items())]
-    if trainer_trips == ONE_GO:  # nothing to fetch on the way back: your own crafts come along
+    if trainer_trips == ONE_GO:  # nothing to fetch on the way back: your own crafts and the patterns come along
         yours, later = _own_sources(plan, gd, *ctx, rows, trip)
         out += [(i, n, YOURS) for i, n in yours.items()]
+        out += [(gd.recipes[spell].scroll_item, 1, _pattern_source(plan, gd, spell, how))
+                for _s, spell, how in stretch_patterns(plan, gd, trip.profession, trip.skill, rows[-1]["st"].skill_to)]
         out += [(i, n, f"{LATER}{prof}") for prof, items in sorted(later.items()) for i, n in items.items()]
     return out
 
@@ -523,7 +537,8 @@ def bring_list(plan, gd, trip, bag_slots: int | None, owned: dict | None = None,
     profession's next visit for trainer recipes (trips.visits): the player levels at home and comes back.
     trainer_trips "one_go": the list covers the whole stretch (trips.stretch_end), however many bag slots it takes,
     and what it uses of your own crafts and disenchants: from before the trip (source "yours"), or made later on the
-    route by your other profession (source "later:<profession>", see _own_sources)."""
+    route by your other profession (source "later:<profession>", see _own_sources), and the patterns the stretch learns
+    (trips.stretch_patterns), one each: source "pattern:<how>" for the AH, a vendor or Favor, "bank" or "from:<Name>"."""
     rows, left, mail, ctx = _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills,
                                         trainer_trips)
     if not rows:
@@ -581,7 +596,8 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
     if not items:
         return ""
     reach = rows[-1]["st"].skill_to
-    where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor", YOURS: "yours"}
+    where = {"mail": "from the mail", "bank": "from the bank", "vendor": "from a vendor", YOURS: "yours",
+             **{f"{PATTERN}{how}": text for how, text in PATTERN_FROM.items()}}
     parts = [f"{n} {gd.name(i)} ({where[src] if src in where else 'mail from ' + from_character(src)})"
              for i, n, src in items if made_later_by(src) is None]
     total, stack, split = _carried(gd, items, reagents, reagent_slots)  # what is made later is carried too

@@ -141,7 +141,9 @@ A profession that can't advance (rank cap, level gate, no recipe) gets none of t
 guide says why. The guide and the report say what the budget reaches and what each next stop costs
 on top ([list-layout.md](list-layout.md), "Budget"); the report's budget line adds "planned to your
 20g budget". A budget with a recipe target (craft once) is not applied: the recipe target is planned
-in full. Both routes (least gold, least total value) are cut by their own gold.
+in full, and so is the other profession's skill target when two are planned. The plan output, the
+guide header and the report verdict then say `The <budget> budget is not applied: a recipe target is
+planned in full.` Both routes (least gold, least total value) are cut by their own gold.
 
 **Green crafts.** `keep_greens` (default `false`) matters only when the plan has no Enchanting.
 With `true`, green crafts that can be disenchanted are kept for another character's Enchanting

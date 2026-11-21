@@ -79,6 +79,14 @@ Write it for that.
   buy them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
   of the items has no AH price. These items count in the bag slots too. The other profession's rows stay
   where they are. A recipe trip with no remote rank training before it on the route stays a trip.
+  The patterns the stretch learns are on the bring list too: from the trip's skill up to where its bring
+  list ends, a goal pattern learned at the end of the route included, and one learned at the next rank
+  training left to that trip's list. One slot each, named by where they come from as on the shopping
+  list: `1 <pattern> (from the AH)`, `(from a pattern vendor)` (the data doesn't name the vendor), `(from
+  the Merchant's Favor vendor)`, `(from the bank)` for one you own, `(mail from <Name>)` for one another character mails. A vendor or
+  Merchant's Favor pattern on that list gets no `**Trip:**` row of its own: it is bought before you go. A
+  pattern trip outside every stretch stays a trip. As needed, the bring list has no patterns: the shopping
+  list carries them.
 - With bag slots in the stock (`bag_slots`, and `reagent_slots` for reagents), a trip's bring list that
   doesn't fit them (10 slots kept free for crafting, as for mailbox trips) ends with `This needs <N>
   free slots and you have <M>: get bigger bags, bank what this stretch doesn't need, or set a lower goal
@@ -105,7 +113,8 @@ Write it for that.
   the route needs it, and later recipes of that rank with a required skill at or below that skill
   join it: a recipe needed at 240 and used then, and one at 245, make two rows; when the first isn't
   used before 245, one visit teaches both. The recipes of a trip or a capital stop are listed with
-  their fees (`<recipe> (<fee>)`). An Artisan or Master recipe is a trip:
+  their fees (`<recipe> (<fee>)`, to the copper as on the route's `Learn` rows: `(4s 50c)`, `(10s 0c)`).
+  An Artisan or Master recipe is a trip:
   `- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>`, then `; or skip it: +<gold>
   for the route without it` (the route planned again without those recipes) or `; there is no other
   way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
@@ -191,5 +200,8 @@ and the report in its verdict, what the gold reaches, in one paragraph:
   full stop. No line when the budget reaches the target.
 - `<budget>` is the gold as given (`30g`, `12.5g`). The report's budget line ends with
   `; planned to your <budget> budget`.
+- A recipe target wins over the budget ([setup.md](setup.md)): with a budget set and a recipe target, the
+  guide (under the comparison) and the report (in its verdict) say only `The <budget> budget is not applied:
+  a recipe target is planned in full.`, and the plan command prints the same line.
 - Two professions one at a time: the intro says `Level one profession at a time: <first> first, then <second>.`
   instead of "Level both professions side by side".

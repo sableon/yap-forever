@@ -120,6 +120,14 @@ def saving_line(copper: float) -> str:
             f"could cost about {gold(copper)} less.")
 
 
+def budget_dropped(goals: dict, target) -> str:
+    """The line the plan command prints when write_reports won't apply `target` (a config.Budget or None) because a
+    goal is a recipe (config.Goal.recipe), or ""."""
+    if target is None or all(g.recipe is None for g in goals.values()):
+        return ""
+    return budget_cut.not_applied(target)
+
+
 def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, character=None,
                   reading: str = "relative", faction: str = "",
                   profile_names=(), study_hint_gold_per_point: float = 100,
@@ -132,7 +140,9 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     gets a Dedicated Study hint (profile.toml, default 100).
     group: the shared.Group of the character: the mailable items of its other characters join the plan, and
     the report's budget line is the group's shared gold (without it, the stock's own `cash_gold`).
-    target: a config.Budget to plan to (each route cut at the last stop it reaches; see budget.cut), or None.
+    target: a config.Budget to plan to (each route cut at the last stop it reaches; see budget.cut), or None. With a
+    recipe goal it is not applied (every target planned in full) and the guide and the report say so
+    (budget_dropped); the caller prints it too.
     Trainer recipes are planned at their inferred requirement, the safe one (gamedata.safe_requirements).
     The files are named for the character (see profile.report_name; profile_names: every character in the
     profile); without a character they keep the plain names."""
@@ -150,8 +160,9 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     favor = no_favor() if faction == "horde" else load_favor(standing)  # the Favor list is Alliance's
     caps, once = resolve_goals(goals, gd, favor, quests)
     market = Market.load(paths.prices)
-    if once:  # a recipe goal wins over a budget: planned in full, the budget line as without a budget goal
-        target = None
+    dropped = []
+    if line := budget_dropped(goals, target):  # a recipe goal wins over a budget: planned in full, and said
+        target, dropped = None, [line]
     inputs = PlanInputs(gd=gd, market=market, stock=stock, favor=favor, caps=caps, craft_once=once,
                         quests=quests, overtime=overtime, reading=reading, order=target.order if target else None)
     routes, same = settle_routes(candidates(inputs), caps)
@@ -189,7 +200,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         alts_of[m] = alts
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
-        said = budget_cut.lines(cuts[m], target) if m in cuts else []
+        said = budget_cut.lines(cuts[m], target) if m in cuts else dropped
         empty = m in cuts and cuts[m].below_first_stop
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,

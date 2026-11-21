@@ -5,7 +5,7 @@ import tomllib
 from dataclasses import dataclass
 
 from yap_forever.config import STATIC_DIR
-from yap_forever.costmodel import BARS, ORES, STONES
+from yap_forever.costmodel import BARS, ORES, STONES, money
 from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, reached_lines, step_factor
 from yap_forever import trainer_text
@@ -284,9 +284,10 @@ def _groups(spells, v) -> list[list[int]]:
 
 
 def _names(spells, gd, fees) -> str:
-    """'A (10s), B (25s)' (fees: with each recipe's trainer fee, when it has one)."""
+    """'A (10s 0c), B (4s 50c)' (fees: with each recipe's trainer fee, when it has one, to the copper as on the route's
+    "Learn" rows)."""
     rs = [(s, gd.recipes[s]) for s in spells]
-    return ", ".join(recipe_name(s, r.name, gd) + (f" ({gold(r.fee)})" if fees and r.fee else "") for s, r in rs)
+    return ", ".join(recipe_name(s, r.name, gd) + (f" ({money(r.fee)})" if fees and r.fee else "") for s, r in rs)
 
 
 def _other(spells, v, trainer_info) -> str:
@@ -296,7 +297,7 @@ def _other(spells, v, trainer_info) -> str:
 
 
 def _recipes_text(spells, v, gd, trainer_info, fees) -> str:
-    """'A (10s), B (25s) (if <trainer> doesn't list them: <who else>)': each group of recipes below the visit
+    """'A (10s 0c), B (4s 50c) (if <trainer> doesn't list them: <who else>)': each group of recipes below the visit
     trainer's rank says once who else teaches them (see _groups)."""
     who = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
     parts = []

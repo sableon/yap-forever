@@ -63,6 +63,8 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
     reached = reached_lines(plan)
     if len(reached) >= len(caps or (BS, ENCH)):  # every target already reached: no verdict to give
         out += reached
+        if budget_lines:  # a budget a recipe target doesn't apply (a cut budget says nothing here)
+            out += ["", " ".join(budget_lines)]
     elif nothing_in_budget:  # the budget reaches no stop: nothing to judge
         out += [" ".join(budget_lines)]
     else:

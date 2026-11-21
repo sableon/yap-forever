@@ -510,6 +510,35 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("doesn't reach", guide + report)
         self.assertNotIn("planned to your", report)
         self.assertIn("once", guide)
+        line = "The 0g budget is not applied: a recipe target is planned in full."
+        self.assertIn(line, out)  # said in the plan output, the guide header and the report verdict
+        verdict = report[report.index("## Verdict"):].split("\n## ")[0]
+        self.assertIn(line, verdict)
+        self.assertIn(line, guide[:guide.index("## ")])
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:2660"], self.paths)
+        guide = next(self.paths.reports.glob("*-guide-gold.md")).read_text(encoding="utf-8")
+        self.assertNotIn("budget is not applied", out + guide)  # no budget, nothing to say
+
+    def test_a_budget_next_to_a_recipe_goal_says_it_is_not_applied(self):
+        # the other profession's skill target is not cut either; the saved [goals] budget is the likely case
+        stock = self.ready_home()
+        stock.write_text('level = 20\n[items]\n\n[goals]\nbudget = 12.5\nblacksmithing = "2660"\nenchanting = 20\n',
+                         encoding="utf-8")
+        code, out = run(["plan", "--character", "Firstname Lastname"], self.paths)
+        self.assertEqual(code, 0, out)
+        line = "The 12.5g budget is not applied: a recipe target is planned in full."
+        self.assertEqual(out.count(line), 1, out)
+        for m in ("gold", "value"):
+            guide = next(self.paths.reports.glob(f"*-guide-{m}.md")).read_text(encoding="utf-8")
+            report = next(self.paths.reports.glob(f"*-plan-{m}.md")).read_text(encoding="utf-8")
+            self.assertEqual(guide.count(line), 1, m)
+            self.assertEqual(report.count(line), 1, m)
+            self.assertNotIn("planned to your", report)
+            self.assertNotIn(" takes ", guide)
+        code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20",
+                         "--prof", "enchanting:20"], self.paths)  # skill targets only: the budget is applied
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("not applied", out)
 
 
 if __name__ == "__main__":
