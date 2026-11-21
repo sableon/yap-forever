@@ -13,12 +13,13 @@ from yap_forever.favor import FavorData, load_favor, no_favor
 from yap_forever.guide import free_skip_line, gold, render_guide
 from yap_forever.planner import DISENCHANT, measure, plan, resolve_goals
 from yap_forever.prices import Market
-from yap_forever.profile import report_name
+from yap_forever.profile import CAPITAL_NAMES, report_name
 from yap_forever.quests import QuestPlan, load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
 from yap_forever.shopping import gold_to_bring, render_shopping
-from yap_forever.trips import AS_NEEDED, FREE_SKIP, MAX_TRIP_ALTS, Trip, alternatives, trip_alternatives, visit_count
+from yap_forever.trips import (AS_NEEDED, FREE_SKIP, MAX_TRIP_ALTS, Trip, alternatives, route_capitals,
+                               trip_alternatives, visit_count)
 
 REUSE_ROUNDS = 4
 MIN_SAVING = 100  # copper: below 1 silver the gap is noise from the greedy planner, not a saving to name
@@ -40,6 +41,18 @@ class PlanInputs:
     overtime: int = 0
     reading: str = "relative"
     order: tuple[int, ...] | None = None
+
+
+def home_capital(stage_caps: dict[tuple[int, int], int], plan, character,
+                 start_skills: dict[int, int] | None = None) -> int | None:
+    """The capital zone the guide starts in and levels its stages in (#98): the character's `capital`, else the only
+    capital the route's stages need, else the one whose stage the route reaches first (trips.route_capitals).
+    None without stage capitals (no trainer data or faction, RF2) or when the route has no stage in a capital."""
+    if not stage_caps:
+        return None
+    if character is not None and character.capital:
+        return CAPITAL_NAMES[character.capital]
+    return next(iter(route_capitals(stage_caps, plan, start_skills or {})), None)
 
 
 def unit_value(item: int, gd, market) -> float:

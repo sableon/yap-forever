@@ -37,6 +37,19 @@ Fill in `profile.toml` with the player:
   to the next rank or the target, learning those recipes there as the skill reaches them; the bring
   list covers the whole stretch ([list-layout.md](list-layout.md), "Trainer stages and trips"). The
   skill asks once per character (SKILL.md, step 5).
+- Optional per character: `capital`, the capital the guide starts in (every capital has an AH,
+  mailbox and bank): `"stormwind"`, `"ironforge"` or `"darnassus"` for Alliance, `"orgrimmar"`,
+  `"thunder_bluff"` or `"undercity"` for Horde; another faction's capital, or any other value, is
+  refused. A stage of the route needs a capital when all its rank's trainers stand there (the
+  Artisan Engineer in Ironforge, say). Left out (default), the guide starts in the only capital the
+  route's stages need, or, when two professions point to two capitals, in the one whose stage the
+  route reaches first, and it says how to start in the other. In that capital the guide levels the
+  stage: the stage starts with a line naming its trainer, and the rank training and the visits back
+  for recipes are capital stops, not trips, with no bring list, whatever `trainer_trips`. The other
+  capital follows `trainer_trips`; its trips have no bring list either (buy there). Remote trainers
+  (every Master, the Artisan Enchanters) stay trips. "Trips away" counts the trips outside the
+  capital the guide starts in. Without the trainer data or a faction, or with no stage in a capital,
+  the guide names no capital, as before.
 - Optional, once at the top of the file: `working_overtime_reading = "relative"` (default) or
   `"points"`, how the player reads the Working Overtime bonus: `relative` adds 4% of the base
   chance per rank, `points` adds 4 percentage points per rank. `plan` uses the rank for every

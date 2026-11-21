@@ -541,6 +541,25 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("not applied", out)
 
 
+    def test_plan_passes_the_characters_own_faction(self):
+        # C20: the faction write_reports names trainers and capitals for is the character's own, else the profile's.
+        # The group check refuses a character on another faction's prices today, so it is bypassed here.
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod, profile
+        self.ready_home()
+        with mock.patch.object(plan_mod, "write_reports", return_value=("table", {})) as w:
+            run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"], self.paths)
+            self.assertEqual(w.call_args.kwargs["faction"], "alliance")
+            text = self.paths.profile.read_text(encoding="utf-8")
+            self.paths.profile.write_text(text + 'faction = "horde"\ncapital = "undercity"\n', encoding="utf-8")
+            with mock.patch.object(profile.Profile, "group_of", return_value=(2, "alliance")):
+                code, out = run(["plan", "--character", "Firstname Lastname", "--prof", "blacksmithing:20"],
+                                self.paths)
+            self.assertEqual(code, 0, out)
+            self.assertEqual(w.call_args.kwargs["faction"], "horde")
+            self.assertEqual(w.call_args.args[4].capital, "undercity")
+
 class FreeSkipReportTests(unittest.TestCase):
     """#90 through write_reports: a trip whose route-without costs the same is planned without and said, before the
     mailbox trips, the listed saving, the table and the skip clauses shown."""

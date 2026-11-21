@@ -388,6 +388,32 @@ class PublishableTests(unittest.TestCase):
         self.assertIn("never used to level", coverage)
         self.assertIn("You could also make", coverage)
 
+    def test_docs_promise_capital_key(self):
+        """#98 (C25): setup.md gives the `capital` key, its six values by faction (profile.CAPITAL_NAMES, capital_names)
+        and its default (plan.home_capital; tests/test_profile.py, test_trips.py HomeCapitalTests and
+        CapitalStopTests, test_guide.py CapitalGuideTests, test_compare.py)."""
+        from yap_forever.profile import Character, capital_names
+
+        setup = " ".join((SKILL / "references" / "setup.md").read_text(encoding="utf-8").split())
+
+        def choices(faction):
+            names = [f'`"{n}"`' for n in capital_names(faction)]
+            return ", ".join(names[:-1]) + " or " + names[-1]
+        self.assertEqual(len(capital_names("alliance") + capital_names("horde")), 6)
+        self.assertIsNone(Character("Ana Brightforge").capital)
+        for line in ("Optional per character: `capital`, the capital the guide starts in (every capital has an AH, "
+                     "mailbox and bank):",
+                     f"{choices('alliance')} for Alliance, {choices('horde')} for Horde; another faction's capital, "
+                     "or any other value, is refused.",
+                     "Left out (default), the guide starts in the only capital the route's stages need",
+                     "or, when two professions point to two capitals, in the one whose stage the route reaches first, "
+                     "and it says how to start in the other",
+                     "are capital stops, not trips, with no bring list, whatever `trainer_trips`",
+                     "The other capital follows `trainer_trips`",
+                     "Remote trainers (every Master, the Artisan Enchanters) stay trips.",
+                     '"Trips away" counts the trips outside the capital the guide starts in.'):
+            self.assertIn(line, setup)
+
 
 if __name__ == "__main__":
     unittest.main()

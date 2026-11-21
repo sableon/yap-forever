@@ -422,5 +422,50 @@ class FreeSkipTests(unittest.TestCase):
         self.assertEqual([t.spells for t in left], [(3,)])
 
 
+
+ALCH, ENG = 171, 202
+DARNASSUS, IRONFORGE = 1657, 1537
+STAGE_CAPS = {(ALCH, 225): DARNASSUS, (ENG, 225): IRONFORGE, (BS, 225): IRONFORGE}
+
+
+class HomeCapitalTests(unittest.TestCase):
+    """#98: the capital the guide starts in: the character's `capital`, else the only capital the route's stages need,
+    else the one whose stage the route reaches first."""
+
+    def home(self, ranks, start=None, final=None, capital=None, caps=STAGE_CAPS):
+        from yap_forever.plan import home_capital
+        from yap_forever.profile import Character
+        p = Plan(ranks=[(prof, s, cap, 500) for prof, s, cap in ranks],
+                 final_skill=final or {prof: 225 for prof, _s, _c in ranks})
+        return home_capital(caps, p, Character("Ana Brightforge", capital=capital), start or {})
+
+    def test_default_one_capital(self):
+        self.assertEqual(self.home([(ENG, 50, 150), (ENG, 125, 225)]), IRONFORGE)
+        self.assertEqual(self.home([(ALCH, 130, 225), (ENCH, 125, 225)]), DARNASSUS)
+
+    def test_default_two_capitals_first_in_route_order(self):
+        # Engineering trains Artisan at 125, Alchemy at 130: Ironforge
+        self.assertEqual(self.home([(ENG, 125, 225), (ALCH, 130, 225)]), IRONFORGE)
+        # one profession at a time, Alchemy first: the route reaches Darnassus's stage first, whatever the skills say
+        self.assertEqual(self.home([(ALCH, 130, 225), (ENG, 125, 225)]), DARNASSUS)
+
+    def test_default_takes_the_stage_the_route_starts_in(self):
+        # Blacksmithing starts at 184, its Artisan rank already trained: that stage is Ironforge's
+        self.assertEqual(self.home([(BS, 225, 300)], start={BS: 184}, final={BS: 300}), IRONFORGE)
+        self.assertEqual(self.home([(BS, 225, 300), (ALCH, 130, 225)], start={BS: 184, ALCH: 1},
+                                   final={BS: 300, ALCH: 225}), IRONFORGE)
+        # a profession the route doesn't raise has no stage on it
+        self.assertEqual(self.home([(ALCH, 130, 225)], start={BS: 184, ALCH: 1}, final={BS: 184, ALCH: 225}),
+                         DARNASSUS)
+
+    def test_capital_key_wins(self):
+        self.assertEqual(self.home([(ENG, 125, 225), (ALCH, 130, 225)], capital="darnassus"), DARNASSUS)
+        self.assertEqual(self.home([(ENG, 125, 225)], capital="stormwind"), 1519)
+
+    def test_no_capital_stage_no_home(self):
+        self.assertIsNone(self.home([(ENCH, 125, 225), (BS, 50, 150)]))
+        self.assertIsNone(self.home([(ENG, 125, 225)], caps={}))  # no trainer data (RF2)
+        self.assertIsNone(self.home([(ENG, 125, 225)], caps={}, capital="ironforge"))
+
 if __name__ == "__main__":
     unittest.main()

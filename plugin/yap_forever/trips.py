@@ -47,6 +47,22 @@ class Visit:
     as_reached: list[tuple[int, int]] = field(default_factory=list)
 
 
+def route_capitals(stage_caps: dict[tuple[int, int], int], plan, start_skills: dict[int, int]) -> dict[int, list[int]]:
+    """capital zone -> the professions whose stages on the route are trained there (stage_caps:
+    trainer_text.stage_capitals), in route order: a stage the route starts in (its rank already trained) comes first,
+    then each rank training in the order the route trains it (plan.ranks)."""
+    stages = [(p, recipe_rank_cap(max(1, start_skills.get(p, 1)))) for p, end in plan.final_skill.items()
+              if end > max(1, start_skills.get(p, 1))]
+    stages += [(p, cap) for p, _s, cap, _fee in plan.ranks]
+    out: dict[int, list[int]] = {}
+    for stage in stages:
+        if stage in stage_caps:
+            profs = out.setdefault(stage_caps[stage], [])
+            if stage[0] not in profs:
+                profs.append(stage[0])
+    return out
+
+
 def stretch_end(plan, profession: int, skill: int) -> int:
     """Where levelling at a remote rank trainer from `skill` ends with trainer_trips "one_go": the profession's next
     rank training (a trip of its own), else the end of its route (the target, or the next rank's cap)."""
