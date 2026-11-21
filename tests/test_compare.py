@@ -141,6 +141,15 @@ class SettleRoutesTests(unittest.TestCase):
         routes, _ = settle_routes([a, b], {BS: 20})
         self.assertEqual(routes["gold"], b)
 
+    def test_settle_by_net_gold(self):
+        # #97: least gold is the gold out of pocket less what vendors pay back for the crafts
+        from yap_forever.compare import settle_routes
+        a = Plan(cash_total=100000, economic_total=90000, final_skill={BS: 20})
+        b = Plan(cash_total=110000, vendor_back=30000, economic_total=95000, final_skill={BS: 20})
+        routes, same = settle_routes([a, b], {BS: 20})
+        self.assertEqual((routes["gold"], routes["value"], same), (b, a, False))
+        self.assertEqual(b.net_gold, 80000)
+
 
 class OneTimeInFullTests(unittest.TestCase):
     def test_gold_variant_charges_patterns_in_full(self):

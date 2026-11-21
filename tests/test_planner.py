@@ -850,3 +850,81 @@ class VendorCashbackTests(unittest.TestCase):
                 p = self.plan(rs[:2], listings, mode)  # neither is credited: the cheaper reagents win
                 self.assertEqual(self.spells(p), {71})
                 self.assertIn(self.MISSING, p.leftovers)
+
+    def test_vendor_back_and_ah_extra(self):
+        # 10 Test Plates left over, 20s at a vendor, AH-worthy (net 95s): 5 on the AH, all 10 counted at the vendor
+        rs = [toy.recipe(42, "B plate", BS, {toy.IRON_BAR: 1}, (self.PLATE, 1))]
+        listings = {toy.IRON_BAR: [(2000, 100000)], self.PLATE: [(10000, 50)]}
+        p = self.plan(rs, listings, "value", caps={BS: 11})
+        self.assertAlmostEqual(p.leftovers[self.PLATE], 10)
+        self.assertAlmostEqual(p.vendor_back, 10 * 2000)
+        self.assertAlmostEqual(p.sale_proceeds, 5 * 9500 + 5 * 2000)
+        self.assertAlmostEqual(p.ah_extra, p.sale_proceeds - p.vendor_back)
+        self.assertAlmostEqual(p.net_gold, p.cash_total - 10 * 2000)
+        self.assertAlmostEqual(p.economic_total, 10 * 2000 - 10 * 2000)  # vendor sales only: the AH's extra is out
+
+    def test_vendor_back_leaves_kept_items_out(self):
+        import dataclasses
+        belt = [toy.recipe(1, "BS belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1))]
+        kept = self.plan(belt, BARS, "value", stock=dataclasses.replace(toy.stock(), keep_greens=True))
+        self.assertGreater(kept.kept_greens.get(toy.BELT, 0), 0)
+        self.assertEqual(kept.vendor_back, 0)
+        # held for disenchanting: Enchanting stalls at 30, below the belt's gate of 150, so the belts stay held
+        held_rs = belt + [toy.recipe(2, "Ench start", ENCH, {toy.ROD: 1}, t=(1, 30, 30, 30))]
+        gd = self.gamedata(held_rs)
+        gd.items[toy.BELT].item_level = 48
+        held = self.plan(held_rs, {**BARS, 11176: [(5000, 1000)]}, "value", caps={BS: 10, ENCH: 150}, gd=gd)
+        self.assertIn(toy.BELT, held.held_for_de)
+        self.assertEqual(held.vendor_back, 0)
+
+    def test_score_and_vendor_back_count_the_same_units(self):
+        # C38: the units the score credits as sold are the ones vendor_back counts
+        rs = [toy.recipe(42, "B plate", BS, {toy.IRON_BAR: 1}, (self.PLATE, 1), t=(1, 5, 15, 30))]
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                p = self.plan(rs, {toy.IRON_BAR: [(2000, 100000)]}, mode, caps={BS: 20})
+                made = sum(s.crafts for s in p.steps)
+                self.assertGreater(made, 19)  # yellow and green points: more crafts than points
+                self.assertAlmostEqual(p.vendor_back, made * 2000)
+
+    def test_value_measure_ignores_ah_resale(self):
+        # the same route where the Test Plate sells on the AH and where it doesn't: equal in total value, so settling
+        # keeps whichever comes first
+        from yap_forever.compare import settle_routes
+        rs = [toy.recipe(42, "B plate", BS, {toy.IRON_BAR: 1}, (self.PLATE, 1))]
+        ah = self.plan(rs, {toy.IRON_BAR: [(2000, 100000)], self.PLATE: [(10000, 50)]}, "value")
+        none = self.plan(rs, {toy.IRON_BAR: [(2000, 100000)]}, "value")
+        self.assertGreater(ah.ah_extra, 0)
+        self.assertEqual(none.ah_extra, 0)
+        self.assertAlmostEqual(ah.economic_total, none.economic_total)
+        for first, second in ((none, ah), (ah, none)):
+            routes, _same = settle_routes([first, second], {BS: 10})
+            self.assertIs(routes["value"], first)
+
+    def test_gold_to_bring_unchanged(self):
+        # "Gold to bring" is the gold up front: the vendor's cashback arrives after crafting. Literal from main (4870ca5).
+        from yap_forever.shopping import gold_to_bring
+        gd, m, st = self.gear_data()
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                p = plan(gd, Valuer(m, gd, st, mode=mode), st, toy.NO_FAVOR, caps={BS: 20})
+                self.assertGreater(p.vendor_back, 0)
+                self.assertEqual(gold_to_bring(p, gd, m, st), 25000)
+
+    def test_study_hint_unchanged(self):
+        # the Dedicated Study hint stays on the row's own cost: 23000c over 19 points, not net of the vendor's 6712c.
+        # Text from main (4870ca5).
+        from yap_forever.guide import render_guide
+        gd, m, st = self.gear_data()
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                p = plan(gd, Valuer(m, gd, st, mode=mode), st, toy.NO_FAVOR, caps={BS: 20})
+                text = render_guide(p, gd, m, st, {BS: 20}, mode=mode, study_hint_gold_per_point=0.01)
+                (row,) = [line for line in text.splitlines() if "× BS gear" in line]
+                self.assertIn("— 25 Copper Bar → sell to a vendor — about 12s a point here: Dedicated Study", row)
+
+    def gear_data(self):
+        """(game data, market, stock) of a one-recipe route, 1–20, whose crafts sell to a vendor for 3s each."""
+        gd = self.gamedata([toy.recipe(1, "BS gear", BS, {toy.COPPER_BAR: 1}, (self.PLATE, 1), t=(1, 10, 15, 30))])
+        gd.items[self.PLATE] = toy.item(self.PLATE, "Test Plate", sell=300)
+        return gd, toy.market({toy.COPPER_BAR: [(1000, 100000)]}), toy.stock()

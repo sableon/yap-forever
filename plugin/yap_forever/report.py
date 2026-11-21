@@ -185,7 +185,8 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out.append(f"- **Expected sales of crafted leftovers:** {money(plan.sale_proceeds)}.")
     out.append(f"- Leftover disenchant materials worth {money(plan.leftover_value)}.")
     out.append(f"- **Full economic cost:** {money(plan.economic_total)} "
-               "(cash + your stock and farmed bars at what they'd sell for − sales − leftovers).")
+               "(cash + your stock and farmed bars at what they'd sell for − crafts sold, at their vendor price "
+               "− leftovers).")
 
     # Sell now
     section("Sell now")

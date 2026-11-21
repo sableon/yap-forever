@@ -775,8 +775,8 @@ def _money(out, plan, stock) -> None:
             "trainer ranks. It is spread over the whole route, and sales come in as you go.",
             f"- **Back from selling crafts:** about {gold(plan.sale_proceeds)}.",
             f"- **Net:** about {gold(abs(plan.economic_total))} "
-            f"{'cost' if plan.economic_total > 0 else 'profit'}, counting your bank and mined bars "
-            "at what they would sell for.",
+            f"{'cost' if plan.economic_total > 0 else 'profit'} (crafts sold at their vendor price), counting your bank "
+            "and mined bars at what they would sell for.",
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 

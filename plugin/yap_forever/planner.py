@@ -75,8 +75,19 @@ class Plan:
     crafted: dict[int, float] = field(default_factory=dict)  # intermediates crafted for reagents
     cash_total: float = 0
     economic_total: float = 0
-    sale_proceeds: float = 0
+    sale_proceeds: float = 0  # what the leftovers sold bring: on the AH up to the sale limit, the rest to a vendor
     leftover_value: float = 0
+    vendor_back: float = 0  # the leftovers sold, every one at its vendor price, whatever the AH pays (#97)
+
+    @property
+    def ah_extra(self) -> float:
+        """What AH sales of the crafts bring on top of their vendor price: never counted in choosing the route."""
+        return self.sale_proceeds - self.vendor_back
+
+    @property
+    def net_gold(self) -> float:
+        """Gold out of pocket less what vendors pay back for the crafts: the least-gold measure."""
+        return self.cash_total - self.vendor_back
 
     def sold(self, item: int) -> bool:
         """A leftover the route sells: not held for disenchanting, not a green kept for another character's
@@ -92,10 +103,11 @@ def reached_lines(plan) -> list[str]:
 
 
 def measure(mode: str):
-    """The measure a route of `mode` is chosen and compared by, as a function of a Plan: gold out of pocket for
-    "gold", total value for "value". Settling the routes, the skip alternatives, free skips and the listed saving
-    all use it."""
-    return (lambda p: p.cash_total) if mode == "gold" else (lambda p: p.economic_total)
+    """The measure a route of `mode` is chosen and compared by, as a function of a Plan: for "gold" the gold out of
+    pocket less what vendors pay back for the crafts (Plan.net_gold), for "value" the total value (crafts sold at
+    their vendor price; AH resale never counts). Settling the routes, the skip alternatives, free skips and the
+    listed saving all use it."""
+    return (lambda p: p.net_gold) if mode == "gold" else (lambda p: p.economic_total)
 
 
 def resolve_goals(goals: dict, gd, favor=None, quests: dict | None = None) -> tuple[dict[int, int], dict[int, int]]:
@@ -703,7 +715,6 @@ class _Route:
         p.shared = {name: dict(items) for name, items in self.stock.shared.items()}
         p.used_mail = mail_used(p.shared, self.pools.mail)
         de_mats = set(p.de_materials)
-        keep_greens = getattr(self.stock, "keep_greens", False) and not self.has_ench
         for item, n in list(self.pools.made.items()) + list(self.held.items()):
             if n < 1e-9:
                 continue
@@ -712,13 +723,18 @@ class _Route:
                 continue  # kept for disenchanting, not sold
             if item in de_mats:
                 p.leftover_value += n * self.valuer.owned_value(item)
-            elif keep_greens and (de := self.valuer.output_options(item, 0).get("de")):
-                p.kept_greens[item] = n  # for another character's Enchanting: worth its materials
-                p.leftover_value += n * de
-            else:
-                p.sale_proceeds += sale_value(self.valuer, self.gd, item, n)
+                continue
+            opts = self.valuer.output_options(item, 0)
+            _reused, kept, sold = self._output_fate(item, n, opts, hold=False)  # as the score counts them
+            if kept:
+                p.kept_greens[item] = kept  # for another character's Enchanting: worth its materials
+                p.leftover_value += kept * opts["de"]
+            if sold:
+                p.sale_proceeds += sale_value(self.valuer, self.gd, item, sold)
+                p.vendor_back += sold * self.valuer.vendor_price(item)
         p.cash_total = self.spent.cash
-        p.economic_total = self.spent.economic - p.sale_proceeds - p.leftover_value
+        # crafts sold count at their vendor price only: what the AH pays on top never chooses the route
+        p.economic_total = self.spent.economic - p.vendor_back - p.leftover_value
         return p
 
 

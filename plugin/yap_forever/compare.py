@@ -46,7 +46,8 @@ def reaches(plan, caps: dict) -> bool:
 
 def settle_routes(candidates: list, caps: dict) -> tuple[dict, bool]:
     """Among candidate routes that reach every target (or, if none does, those that get furthest):
-    least gold is the lowest gold out of pocket, least total value the lowest total value. The
+    least gold is the lowest gold out of pocket less what vendors pay back for the crafts, least total value the
+    lowest total value (crafts sold at their vendor price: AH resale never chooses), by planner.measure. The
     planner chooses one skill point at a time, so no single mode is sure to win its own measure."""
     pool = [p for p in candidates if reaches(p, caps)]
     if not pool:
