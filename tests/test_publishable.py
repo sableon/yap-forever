@@ -449,7 +449,7 @@ class PublishableTests(unittest.TestCase):
                      "Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no Engineering one."):
             self.assertIn(line, rules)
         coverage = read("coverage.md")
-        self.assertIn("an Artisan stage in the home capital is levelled there, its visits capital stops, not trips away",
+        self.assertIn("an Artisan stage in the home capital is levelled there, its visits are capital stops, not trips away",
                       coverage)
 
 
