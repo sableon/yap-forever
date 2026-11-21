@@ -435,6 +435,37 @@ class UncreditedFallbackTests(unittest.TestCase):
             c = budget.cut(i, "gold", Budget(1), lambda p: p.cash_total)
         self.assertEqual((c.caps, c.credited, c.next_stop), ({BS: 1}, True, {BS: (75, 20000)}))
 
+    def test_uncredited_route_at_a_stop_below_the_target(self):
+        # two stops, 75 and 150 (its rank 4s 50c): with 1g neither route reaches 150, and 75 fits only without the
+        # credit (0.888g against 1.184g), so the cut stops at 75 on that route; the next stop costs the cheaper route's
+        # 1.833g less the 0.888g spent
+        i = gear_inputs({BS: 150})
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                c = cut(i, 1, mode=mode)
+                self.assertEqual((c.caps, c.spent, c.credited, c.plan.vendor_credit), ({BS: 75}, 8880, False, False))
+                self.assertEqual(spells(c.plan), {62})
+                self.assertEqual(c.next_stop, {BS: (150, 18330 - 8880)})
+
+    def test_uncredited_route_that_gets_further_says_so(self):
+        # the credited route stalls at 60 below the target of 75 and misses the budget; the one without the credit
+        # reaches 75 and fits: the cut reaches 75, with no stall to report
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.planner import Plan
+
+        def planned(sub, vendor_credit=True):
+            cap = sub.caps[BS]
+            if vendor_credit:
+                why = {BS: "Blacksmithing: no usable recipe at 60"} if cap > 60 else {}
+                return [Plan(final_skill={BS: min(60, cap)}, stall_reasons=why, cash_total=0 if cap == 1 else 20000)]
+            return [Plan(final_skill={BS: cap}, cash_total=500, vendor_credit=False)]
+        i = inputs(bs_only(), {BS: 75})
+        with mock.patch.object(plan_mod, "candidates", side_effect=planned):
+            c = budget.cut(i, "gold", Budget(1), lambda p: p.cash_total)
+        self.assertEqual((c.caps, c.credited, c.stops_early, c.stalled, c.next_stop), ({BS: 75}, False, {}, {}, {}))
+
 
 if __name__ == "__main__":
     unittest.main()

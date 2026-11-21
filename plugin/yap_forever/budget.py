@@ -105,13 +105,14 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
     def routes(caps, credited=True):
         """mode -> the route to caps, planned with the vendor credit or without it (filled in when first asked)."""
         k = key(caps)
-        sub = dataclasses.replace(inputs, caps=dict(caps))
         if k not in cache:
+            sub = dataclasses.replace(inputs, caps=dict(caps))
             cache[k] = (*settle_routes(candidates(sub), sub.caps), None)
         settled, same, bare = cache[k]
         if credited:
             return settled
         if bare is None:
+            sub = dataclasses.replace(inputs, caps=dict(caps))
             bare = settle_routes(candidates(sub, vendor_credit=False), sub.caps)[0]
             cache[k] = (settled, same, bare)
         return bare
@@ -122,15 +123,20 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
             cache[k] = gold_of(routes(caps, credited)[mode])
         return cache[k]
 
-    full = routes(target)[mode]
-    stops, stalled, early = {}, {}, {}
-    for p, t in target.items():
-        end = full.final_skill.get(p, start[p])
-        stops[p] = stops_for(start[p], min(t, end))
-        if not stops[p] and start[p] < t and p in full.stall_reasons:
-            stalled[p] = full.stall_reasons[p]
-        elif stops[p] and end < t and p in full.stall_reasons:
-            early[p] = (end, full.stall_reasons[p])
+    def ends(full):
+        """(each profession's stops on the route to the targets, the professions it can't advance, where it stalls
+        below the target)."""
+        stops, stalled, early = {}, {}, {}
+        for p, t in target.items():
+            end = full.final_skill.get(p, start[p])
+            stops[p] = stops_for(start[p], min(t, end))
+            if not stops[p] and start[p] < t and p in full.stall_reasons:
+                stalled[p] = full.stall_reasons[p]
+            elif stops[p] and end < t and p in full.stall_reasons:
+                early[p] = (end, full.stall_reasons[p])
+        return stops, stalled, early
+
+    stops, stalled, early = ends(routes(target)[mode])
 
     def caps_at(level):
         """level: profession -> stops taken. With all of them the cap is the target, so a profession the
@@ -153,6 +159,9 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
     level = {p: len(stops[p]) for p in target}
     plan, spent = plan_at(level)
     if spent <= limit:
+        if not plan.vendor_credit:  # the route without the credit may get further than the one the stops came from
+            stops, stalled, early = ends(plan)
+            level = {p: len(stops[p]) for p in target}
         return BudgetCut(reached(level), plan, spent, {}, stalled, caps_at(level), start, early, plan.vendor_credit)
 
     level = {p: 0 for p in target}
