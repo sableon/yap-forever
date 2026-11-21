@@ -398,6 +398,8 @@ def _supply_text(v, plan, gd, stock, found) -> str:
     (shopping.row_splits). "" when they buy nothing from a vendor."""
     from yap_forever.shopping import route_rows, row_splits, vendor_counts  # shopping imports this module
     place, shown = step_place(plan, v), _shown_at(found, plan)
+    # the windows rely on one profession's shown visit skills strictly increasing in route order (learn-ahead in
+    # trips._visits: a later visit of a profession is at a higher skill), so "the next above the start" is the next one
     window = {}  # profession -> (its skill at the stop, its next visit's skill or None)
     for x in (v, *v.joined):
         start = v.skill if x.profession == v.profession else skill_at(plan, x.profession, place)
@@ -425,10 +427,10 @@ def _joined_stop(v, gd, trainer_info, planned, said, alts, home, supply="") -> s
 
     def who(x, then=""):  # then: what the row says of the recipes next, inside the flag's parenthesis
         rank, flag = RANK_BY_CAP[x.rank_cap], trainer_text.unconfirmed(trainer_info, x.profession, x.rank_cap, zone)
-        said = f"{_a(rank)} {rank} {trainer_text.person(x.profession)}"
+        phrase = f"{_a(rank)} {rank} {trainer_text.person(x.profession)}"
         if flag and then:
-            return f"{said} ({flag.strip().removeprefix('(').removesuffix(')')}; {then})"
-        return f"{said}{flag}" + (f" ({then})" if then else "")
+            return f"{phrase} ({flag.strip().removeprefix('(').removesuffix(')')}; {then})"
+        return f"{phrase}{flag}" + (f" ({then})" if then else "")
     if v.kind == "rank":
         head = (f"train {PROFESSIONS.get(v.profession, v.profession)} to {v.rank_cap}"
                 + (f" and learn {_names(v.learn, gd, True)}" if v.learn else "") + f" at {who(v)}")
