@@ -9,6 +9,8 @@ from yap_forever.trips import trips
 
 ROUTE_NAMES = {"gold": "Least gold", "value": "Least total value"}
 THIN_SHARE = 0.5  # buying at least half of what is listed moves the price
+LEAST_GOLD_NOTE = ("Least gold is the gold out of pocket less what vendors pay back for the crafts. AH sales of crafts "
+                   "are not counted in choosing a route.")
 
 
 def _to_sell(plan, gd, market) -> str:
@@ -90,5 +92,7 @@ def compare(routes: dict, gd, market, stock, mailbox_trips: dict | None = None, 
         row("Mailbox trips", mail),
         row("Trips away", away),
         row("Thin markets", lambda p, _m: _thin(p, gd, market, sales)),
+        "",
+        LEAST_GOLD_NOTE,
     ] + (["", "The least-total-value route also spends the least gold, so both guides are the same route."]
          if same else []))
