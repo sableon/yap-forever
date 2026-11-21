@@ -714,10 +714,10 @@ class RecipeGoalReportsTests(unittest.TestCase):
                                                   target=target, group=group)
         return table, {k: v.read_text(encoding="utf-8") for k, v in files.items()}
 
-    def dyes(self, skills):
+    def dyes(self, skills, shard=50):
         """The Blacksmithing goal levelled with "BS dyed" (a Test Dye a point, 90c on the AH), planned for Bram
         Ironhide, whose group mate Ana Brightforge has `skills`; Alchemy's "Alch dye" (trainer, required 100) makes a
-        dye from a Small Glimmering Shard at 50c. (table, texts)."""
+        dye from a Small Glimmering Shard at `shard` copper. (table, texts)."""
         import json
 
         from yap_forever.config import Goal
@@ -725,7 +725,7 @@ class RecipeGoalReportsTests(unittest.TestCase):
         self.gd = dye_inputs(50).gd
         self.gd.recipes[4] = toy.recipe(4, "Alch dye", ALCH, {toy.SHARD: 1}, (DYE, 1), req=100)
         del self.gd.recipes[5]
-        listings = {str(DYE): [[90, 100000]], str(toy.SHARD): [[50, 100000]], str(toy.COPPER_BAR): [[100, 100000]]}
+        listings = {str(DYE): [[90, 100000]], str(toy.SHARD): [[shard, 100000]], str(toy.COPPER_BAR): [[100, 100000]]}
         self.paths.prices.write_text(json.dumps({"snapshot_time": "t", "listings": listings}), encoding="utf-8")
         group = Group(2, "alliance", others={"Ana Brightforge": toy.stock(skills=skills)})
         return self.reports(Budget(3), {BS: Goal(recipe="BS goal")}, group, "Bram Ironhide")
@@ -739,6 +739,9 @@ class RecipeGoalReportsTests(unittest.TestCase):
         for text in texts.values():
             self.assertEqual(text.count(line), 1)
         self.assertIn("| Test Dye | 99 | AH |", texts["guide-gold"])  # still bought: a suggestion, not a step
+        # a shard at 84c is cheaper than the dye's 90c but within the margin at Alchemy 150 (0.925 x 90c = 83.2c)
+        table, texts = self.dyes({ALCH: 150}, shard=84)
+        self.assertNotIn("can make the", table + "".join(texts.values()))
 
     def test_no_suggestion_without_skills(self):
         from yap_forever.config import Goal
@@ -788,6 +791,24 @@ class RecipeGoalReportsTests(unittest.TestCase):
         self.assertIn("Blacksmithing 100, Enchanting 150", table)
         self.assertNotIn(aside, table)
         self.assertNotIn("covers", table)
+
+    def test_replans_keep_the_stops_goal_craft(self):
+        # P23: the skip alternatives, free skips and the listed saving replan each route with the craft its stop has: none
+        # at a lower stop (no "did not reach" there), the goal recipe at the goal
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Goal
+        for limit, once in ((1, {}), (2, {BS: GOAL})):
+            with self.subTest(limit=limit), \
+                    mock.patch.object(plan_mod, "trip_alternatives", wraps=plan_mod.trip_alternatives) as alts, \
+                    mock.patch.object(plan_mod, "take_free_skips", wraps=plan_mod.take_free_skips) as skips, \
+                    mock.patch.object(plan_mod, "listed_savings", wraps=plan_mod.listed_savings) as listed:
+                self.reports(Budget(limit), {BS: Goal(recipe="BS goal")})
+                for made, at in ((alts, 1), (skips, 1), (listed, 0)):  # where each takes the route's PlanInputs
+                    crafts = [c.args[at].craft_once for c in made.call_args_list]
+                    self.assertEqual(crafts, [once] * len(crafts))
+                    self.assertTrue(crafts)
 
     def test_said_once_labels_routes_that_differ(self):
         from yap_forever.plan import _said_once
