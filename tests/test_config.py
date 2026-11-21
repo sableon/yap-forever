@@ -219,6 +219,34 @@ class GoalsTests(unittest.TestCase):
                 self.assertIn("goals.budget", msg)
                 self.assertNotIn("unknown profession", msg)
 
+    def test_pay_key_and_flag(self):
+        # #97 part 3: [goals] pay = "upfront" (the default) or "as_you_go", and plan --pay over it; it goes with a budget
+        from yap_forever.cli import _budget_target
+        with tempfile.TemporaryDirectory() as d:
+            s = config.load_stock(write(d, "stock.toml", STOCK + '\n[goals]\nbudget = 7\npay = "as_you_go"\n'
+                                        'budget_order = ["enchanting", "blacksmithing"]\n'))
+            plain = config.load_stock(write(d, "plain.toml", STOCK + '\n[goals]\nbudget = 7\n'))
+            for text in ('pay = "later"', "pay = 1", 'pay = "as you go"'):
+                path = write(d, "bad.toml", STOCK + f"\n[goals]\nbudget = 7\n{text}\n")
+                with self.subTest(text=text), self.assertRaises(ValueError) as cm:
+                    config.load_stock(path)
+                self.assertIn(str(path), str(cm.exception))
+                self.assertIn('goals.pay: use "upfront" or "as_you_go"', str(cm.exception))
+            path = write(d, "alone.toml", STOCK + '\n[goals]\npay = "as_you_go"\n')
+            with self.assertRaisesRegex(ValueError, "goals.pay goes with goals.budget"):
+                config.load_stock(path)
+        self.assertEqual(s.budget, config.Budget(gold=7, order=(333, 164), pay="as_you_go"))
+        self.assertEqual((plain.budget.pay, config.Budget(3).pay), ("upfront", "upfront"))
+        self.assertEqual(s.goals, {})  # pay is not a profession
+        goals = {164: config.Goal(skill=225)}
+        self.assertEqual(_budget_target(s.budget, None, None, goals), config.Budget(7, None, "as_you_go"))
+        self.assertEqual(_budget_target(s.budget, None, None, goals, "upfront"), config.Budget(7, None, "upfront"))
+        self.assertEqual(_budget_target(plain.budget, "5", None, goals, "as_you_go"), config.Budget(5, None, "as_you_go"))
+        self.assertEqual(_budget_target(None, "5", None, goals), config.Budget(5, None, "upfront"))
+        for saved, pay, said in ((s.budget, "later", "--pay"), (None, "as_you_go", "--pay goes with a budget")):
+            with self.subTest(pay=pay), self.assertRaisesRegex(ValueError, said):
+                _budget_target(saved, None, None, goals, pay)
+
 
 class CredentialTests(unittest.TestCase):
     def test_credentials_repr_masks(self):

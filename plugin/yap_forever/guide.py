@@ -551,9 +551,10 @@ class _StudyHint:
         return text
 
 
-def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, trainer_trips="as_needed",
-           market=None, capitals=None, home=None) -> None:
-    sales = Valuer(market, gd, stock) if market is not None else None  # where crafts are sold (#62)
+def _selling(plan, gd, market, stock) -> tuple:
+    """What the route rows' "→ ..." clauses go by: (where crafts are sold, a costmodel.Valuer or None without prices
+    (#62); item -> the recipes that use it later; the names of the items kept for disenchanting)."""
+    sales = Valuer(market, gd, stock) if market is not None else None
     used_by: dict[int, list[str]] = {}
     for s in plan.steps:
         for item in s.used_made:
@@ -562,7 +563,29 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
                 used_by[item].append(name)
     disenchanted = {m.group(3) for e in plan.events if (m := EVENT.match(e))}
     disenchanted = {t.split(" ", 2)[2] for t in disenchanted if t.startswith("disenchant ")}
-    held = {gd.name(i) for i in plan.held_for_de}
+    return sales, used_by, disenchanted | {gd.name(i) for i in plan.held_for_de}
+
+
+def row_vendor_back(plan, gd, market, stock, rows) -> list[float]:
+    """What a vendor pays for each shopping row's crafts (shopping.route_rows, in route order), in copper: the amount its
+    route row says (": about <gold> back", the same _sold), with the AH's units going to each item's first rows as in
+    the guide; 0 for a row that keeps its crafts, sells them all on the AH or crafts the goal recipe once."""
+    sales, used_by, for_de = _selling(plan, gd, market, stock)
+    whole = {id(st): r for r in rows for st in r["parts"]}
+    on_ah: dict[int, float] = {}
+    out = []
+    for row in rows:
+        if row["st"].skill_from >= row["st"].skill_to:  # the goal recipe, crafted once: its row says nothing of selling
+            out.append(0.0)
+            continue
+        out.append(sum(_sold(r, gd, used_by, for_de, plan.kept_greens, sales, on_ah)[1]
+                       for r in _ranges(row["parts"], gd, whole)))
+    return out
+
+
+def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, trainer_trips="as_needed",
+           market=None, capitals=None, home=None) -> None:
+    sales, used_by, for_de = _selling(plan, gd, market, stock)
 
     trained = {p: sorted(s for q, s, _c, _f in plan.ranks if q == p) for p in caps}
     rank_caps = {p: [c for _s, c in sorted((s, c) for q, s, c, _f in plan.ranks if q == p)] for p in caps}
@@ -587,7 +610,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
             groups.setdefault(stage(p, s.skill_from, False), []).append(s)
         for k, group in groups.items():
             for r in _ranges(group, gd, whole):
-                line = _range_line(r, gd, used_by, disenchanted | held, plan.kept_greens, sales, on_ah)
+                line = _range_line(r, gd, used_by, for_de, plan.kept_greens, sales, on_ah)
                 lines.setdefault((k, p), []).append((r["from"], 1, line + (hint.note(p, r) if hint else "")))
         for s in plan.steps:
             if s.profession == p and s.skill_from == s.skill_to:  # the goal recipe, crafted once
@@ -746,29 +769,29 @@ def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None
         line += " — " + ", ".join(mats)
     if r.get("here"):  # intermediates still missing, crafted on the spot from the materials listed
         line += "; first craft " + ", ".join(f"{count(q)} {gd.name(i)}" for i, q in r["here"].items())
+    return line + _sold(r, gd, used_by, for_de, kept, sales, {} if on_ah is None else on_ah)[0]
+
+
+def _sold(r, gd, used_by, for_de, kept, sales, on_ah) -> tuple[str, float]:
+    """A route row's " → ..." clause (kept for a later recipe or for disenchanting, else where it is sold, with what a
+    vendor pays back), and that vendor money in copper (0 when the row keeps its crafts or the AH takes them all).
+    The vendor money: the vendor price x the row's crafts (the planner's expected crafts, in whole crafts: the rows add
+    up to Money's "from vendors" within a craft each) x the output, less the crafts the AH takes, which go to the
+    item's first rows. on_ah: craft -> how many more the AH takes (its sale limit before the first row), updated for
+    the next row."""
     recipe = gd.recipes.get(r["spell"])
-    if recipe and recipe.output:
-        item = recipe.output[0]
-        if item in used_by:
-            line += f" → keep for {', '.join(used_by[item])}"
-        elif gd.name(item) in for_de:
-            line += " → keep for disenchanting"
-        elif item in kept:
-            line += " → keep for disenchanting on another character"
-        else:
-            clause = _sell_clause(item, gd, sales)
-            if clause.endswith("to a vendor"):  # an AH-only quest item says nothing more
-                clause += _vendor_back(r, recipe, gd, sales, {} if on_ah is None else on_ah)
-            line += clause
-    return line
-
-
-def _vendor_back(r, recipe, gd, sales, on_ah) -> str:
-    """': about <gold> back' for a row whose crafts go to a vendor, or "" when it brings nothing: the vendor price x
-    the row's crafts (the planner's expected crafts, in whole crafts: the rows add up to Money's "from vendors" within
-    a craft each) x the output, less the crafts the AH takes, which go to the item's first rows. on_ah: craft -> how
-    many more the AH takes (its sale limit before the first row), updated for the next row."""
+    if not (recipe and recipe.output):
+        return "", 0.0
     item = recipe.output[0]
+    if item in used_by:
+        return f" → keep for {', '.join(used_by[item])}", 0.0
+    if gd.name(item) in for_de:
+        return " → keep for disenchanting", 0.0
+    if item in kept:
+        return " → keep for disenchanting on another character", 0.0
+    clause = _sell_clause(item, gd, sales)
+    if not clause.endswith("to a vendor"):  # an AH-only quest item says nothing more
+        return clause, 0.0
     made = math.ceil(r["expected"] - 1e-6) * recipe.output[1]
     if item not in on_ah:
         ah = sales.ah_price(item) if sales is not None else None
@@ -776,7 +799,7 @@ def _vendor_back(r, recipe, gd, sales, on_ah) -> str:
     to_ah = min(made, on_ah[item])
     on_ah[item] -= to_ah
     back = (made - to_ah) * vendor_price(gd, item)  # what Plan.vendor_back counts a unit at
-    return f": about {gold(back)} back" if round(back) >= 1 else ""
+    return clause + (f": about {gold(back)} back" if round(back) >= 1 else ""), back
 
 
 def _sell_clause(item, gd, sales) -> str:
@@ -806,10 +829,17 @@ def _money(out, plan, stock) -> None:
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 
+def vendor_counted(plan) -> str:
+    """Whether the vendor money was counted in choosing the route: a budget's fallback route (Plan.vendor_credit
+    False, budget.cut) was chosen without it."""
+    return "counted in choosing the route" if plan.vendor_credit else "left out in choosing this route, to fit the budget"
+
+
 def _back_line(plan) -> str:
-    """Money's "Back from selling crafts": what vendors pay back (Plan.vendor_back, counted in choosing the route) and
-    what AH sales add on top (Plan.ah_extra), that clause left out when there are none."""
-    vendor = f"{gold(plan.vendor_back)} from vendors (counted in choosing the route)"
+    """Money's "Back from selling crafts": what vendors pay back (Plan.vendor_back, counted in choosing the route, or
+    left out on a budget's fallback route: vendor_counted) and what AH sales add on top (Plan.ah_extra), that clause
+    left out when there are none."""
+    vendor = f"{gold(plan.vendor_back)} from vendors ({vendor_counted(plan)})"
     if round(plan.ah_extra) < 1:
         return f"- **Back from selling crafts:** about {vendor}."
     return (f"- **Back from selling crafts:** about {gold(plan.sale_proceeds)}: {vendor} and about "

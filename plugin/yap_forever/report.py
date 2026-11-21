@@ -6,7 +6,7 @@ from yap_forever.budget import amount
 from yap_forever.costmodel import AH_UNIT_CAP, MIN_AH_MARGIN, Valuer, money
 from yap_forever.favor_suggest import levels_known
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
-from yap_forever.guide import NOTHING_IN_BUDGET, gold
+from yap_forever.guide import NOTHING_IN_BUDGET, gold, vendor_counted
 from yap_forever.planner import DISENCHANT, reached_lines, step_factor
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, Budget, mail_text
@@ -27,8 +27,10 @@ def verdict(plan, stock) -> str:
 
 def _budget_text(cash: float, stock, budget: Budget | None, goal=None) -> str:
     """Whether the route's cash fits the gold: the group's shared gold, or this character's own `cash_gold`
-    when the caller names no group. goal: the config.Budget the route was planned to, said after it."""
-    planned = f"; planned to your {amount(goal)} budget" if goal is not None else ""
+    when the caller names no group. goal: the config.Budget the route was planned to, said after it (with pay
+    "as_you_go", that crafts are sold to a vendor as you go: the cash before any sales can be over the budget)."""
+    planned = "" if goal is None else f"; planned to your {amount(goal)} budget" + (
+        ", selling crafts to a vendor as you go" if goal.pay == "as_you_go" else "")  # its cash can be over the gold
     if budget is None or not budget.shared:
         have = stock.cash if budget is None else budget.copper
         over = cash - have
@@ -182,7 +184,7 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out.append(f"- **Cash needed:** {money(plan.cash_total)} ({_budget_text(plan.cash_total, stock, budget, goal)}), "
                "before any sales.")
     out.append(f"- Trainer fees included: {money(plan.fees)}.")
-    out.append(f"- Back from vendors: {money(plan.vendor_back)} (counted in choosing the route).")
+    out.append(f"- Back from vendors: {money(plan.vendor_back)} ({vendor_counted(plan)}).")
     out.append(f"- AH sales on top: {money(plan.ah_extra)} (not counted).")
     out.append(f"- Leftover disenchant materials worth {money(plan.leftover_value)}.")
     out.append(f"- **Full economic cost:** {money(plan.economic_total)} "

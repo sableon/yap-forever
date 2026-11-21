@@ -11,12 +11,15 @@ import re
 
 from yap_forever.disenchant import ESSENCE_PAIRS, de_yield
 from yap_forever.gamedata import ENCH, PROFESSIONS
-from yap_forever.guide import gold
+from yap_forever.guide import gold, row_vendor_back
 from yap_forever.planner import DISENCHANT, step_factor
 from yap_forever.shared import allocate
-from yap_forever.trips import AS_NEEDED, ONE_GO, capital_trip, stretch_end, stretch_patterns, visits
+from yap_forever.trips import (AS_NEEDED, ONE_GO, capital_trip, step_at, step_place, stretch_end, stretch_patterns,
+                               visits)
 
 CRAFT_ROOM = 10  # slots a trip leaves free for crafts and intermediates
+AS_YOU_GO_LINE = ("If you sell crafts to a vendor as you go and buy each row's reagents when you reach it, about {} is "
+                  "enough up front ({} less).")  # under "Gold to bring" when gold_as_you_go is lower
 BRING_POINTS = 25  # without a bag count, bring enough for this many points (or to the stage end)
 
 
@@ -659,32 +662,55 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
             f"{town}buy and collect before you go.{_made_later_text(gd, items, market)}{warn}")
 
 
+def _pattern_cost(gd, market, spell, how) -> float | None:
+    """What the shopping list pays for a learn_log pattern: its scroll's lowest AH price or vendor price; None for a
+    recipe that is not bought (a trainer's, Favor, your own, mailed)."""
+    r = gd.recipes.get(spell)
+    if how not in ("ah", "vendor") or not (r and r.scroll_item):
+        return None
+    return (market.min_price(r.scroll_item) or 0) if how == "ah" else gd.vendor_prices.get(r.scroll_item, 0)
+
+
 def _patterns(plan, gd, market) -> list[tuple[str, str, float]]:
     out = []
     for _p, _s, spell, how in plan.learn_log:
-        r = gd.recipes.get(spell)
-        if how in ("ah", "vendor") and r and r.scroll_item:
-            cost = (market.min_price(r.scroll_item) or 0) if how == "ah" else gd.vendor_prices.get(r.scroll_item, 0)
-            out.append((gd.name(r.scroll_item), "AH" if how == "ah" else "vendor", cost))
+        if (cost := _pattern_cost(gd, market, spell, how)) is not None:
+            out.append((gd.name(gd.recipes[spell].scroll_item), "AH" if how == "ah" else "vendor", cost))
     return out
+
+
+def _cost(gd, market, i, src, n, before=0, of=None) -> float:
+    """What buying n of item i costs from src ("vendor", else the AH), the shopping list's way: a vendor's price each,
+    the AH's listings cheapest first, or its lowest price for each when fewer are listed. before, of: the n are the
+    ones after the first `before` of the `of` the route buys there (row_spend), so the rows add up to the list's cost."""
+    if src == "vendor":
+        return (gd.vendor_prices.get(i) or (gd.items[i].buy_price if i in gd.items else 0)) * n
+    of = n if of is None else of
+    if market.buy_cost(i, of) is None:  # not enough listed: the lowest price for each
+        return (market.min_price(i) or 0) * n
+    return (market.buy_cost(i, before + n) or 0) - (market.buy_cost(i, before) or 0)
+
+
+def _bought(split) -> dict:
+    """The (item, source) -> count a _split buys: not the bank's, not your other characters'."""
+    return {k: n for k, n in split.items() if k[1] != "bank" and from_character(k[1]) is None}
+
+
+def _fees(plan, gd) -> float:
+    return plan.fees + sum(gd.recipes[s].fee for _p, _s, s, how in plan.learn_log if how == "trainer")
 
 
 def _bill(plan, gd, market, stock, rows) -> list[tuple[str, int | str, str, float]]:
     """The shopping list's lines, (item, count, where, cost): what to buy for the route's rows, the
     patterns and the trainer's ranks and recipes."""
     owned = {i: float(n) for i, n in stock.items.items()}  # the buffer comes from the bank while it lasts
-    split = _split(rows, plan, gd, dict(owned), _mail(plan, whole_pool=True))
+    split = _bought(_split(rows, plan, gd, dict(owned), _mail(plan, whole_pool=True)))
     out = []
     for (i, src), n in sorted(split.items(), key=lambda x: (x[0][1], gd.name(x[0][0]))):
-        if src == "bank" or from_character(src) is not None:  # nothing to buy
-            continue
-        cost = ((gd.vendor_prices.get(i) or (gd.items[i].buy_price if i in gd.items else 0)) * n if src == "vendor"
-                else market.buy_cost(i, n) or (market.min_price(i) or 0) * n)
-        out.append((gd.name(i), n, "vendor" if src == "vendor" else "AH", cost))
+        out.append((gd.name(i), n, "vendor" if src == "vendor" else "AH", _cost(gd, market, i, src, n)))
     for name, where, cost in _patterns(plan, gd, market):
         out.append((name, 1, where, cost))
-    fees = plan.fees + sum(gd.recipes[s].fee for _p, _s, s, how in plan.learn_log if how == "trainer")
-    if fees:
+    if fees := _fees(plan, gd):
         out.append(("Trainer: ranks and recipes", "", "trainer", fees))
     return out
 
@@ -692,6 +718,63 @@ def _bill(plan, gd, market, stock, rows) -> list[tuple[str, int | str, str, floa
 def gold_to_bring(plan, gd, market, stock) -> float:
     """The shopping list's "Gold to bring", in copper: whole crafts with the buffer, patterns and fees."""
     return sum(cost for *_line, cost in _bill(plan, gd, market, stock, route_rows(plan, gd)))
+
+
+def row_spend(plan, gd, market, stock, rows) -> list[float]:
+    """What each route row (route_rows) costs when you buy it as you reach it, in copper: its share of the shopping list
+    (row_splits: the bank and your other characters' mail used up in route order, the AH's listings cheapest first),
+    the patterns learned and the trainer fees paid where the route meets them (a rank's fee at its training, a trainer
+    recipe's at the visit that teaches it, trips.visits). A cost met before a row, or between a run's first step and
+    the next row, is counted with the row before it (the first row for one before every row). The rows add up to
+    "Gold to bring"."""
+    if not rows:
+        return []
+    owned = {i: float(n) for i, n in stock.items.items()}
+    splits = [_bought(x) for x in row_splits(plan, gd, rows, owned)]
+    total = _sum(splits)
+    out, done = [], {}
+    for split in splits:
+        spend = 0.0
+        for (i, src), n in split.items():
+            spend += _cost(gd, market, i, src, n, done.get((i, src), 0), total[(i, src)])
+            done[(i, src)] = done.get((i, src), 0) + n
+        out.append(spend)
+    at = {id(st): j for j, st in enumerate(plan.steps)}
+    begins = [at[id(r["parts"][0])] for r in rows]
+
+    def row_at(place):  # the last row begun at or before this place in plan.steps (the first row before them all)
+        return max([k for k, b in enumerate(begins) if b <= place], default=0)
+
+    for p, s, spell, how in plan.learn_log:
+        if (cost := _pattern_cost(gd, market, spell, how)) is not None:
+            out[row_at(step_at(plan, p, s))] += cost
+    fees = _fees(plan, gd)
+    for v in visits(plan, gd, stock.skills):
+        fee = sum(f for q, s, cap, f in plan.ranks if v.kind == "rank" and (q, s, cap) == (v.profession, v.skill,
+                                                                                            v.rank_cap))
+        fee += sum(gd.recipes[spell].fee for spell in v.learn + v.if_missing)
+        out[row_at(step_place(plan, v))] += fee
+        fees -= fee
+    out[0] += fees  # what no visit pays (recipes known before the start): before the first row
+    return out
+
+
+def gold_as_you_go(plan, gd, market, stock, rows=None) -> float:
+    """The gold enough up front when you sell crafts to a vendor as you go and buy each row's reagents when you reach
+    it, in copper: the most you are short at any row, its spend and everything before it (row_spend) less what vendors
+    paid for the crafts of the rows before it (guide.row_vendor_back, the amounts the route rows say, which round each
+    row up to whole crafts: their sum is capped at Plan.vendor_back). AH sales and disenchant materials never count.
+    Never above "Gold to bring". It assumes each row's reagents are bought when you reach it: a remote trip's bring
+    list buys its stretch before the trip. rows: route_rows, when the caller has them."""
+    rows = route_rows(plan, gd) if rows is None else rows
+    upfront = sum(cost for *_line, cost in _bill(plan, gd, market, stock, rows))
+    short, spent, back = 0.0, 0.0, 0.0
+    for spend, sold in zip(row_spend(plan, gd, market, stock, rows), row_vendor_back(plan, gd, market, stock, rows),
+                           strict=True):
+        spent += spend
+        short = max(short, spent - back)
+        back = min(back + sold, plan.vendor_back)
+    return min(short, upfront) if rows else upfront
 
 
 def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
@@ -705,7 +788,11 @@ def render_shopping(plan, gd, market, stock) -> tuple[list[str], int | None]:
              "| Item | Count | Where | Cost |", "|---|---:|---|---:|"]
     bill = _bill(plan, gd, market, stock, rows)
     lines += [f"| {name} |{f' {n} ' if n != '' else ' '}| {where} | {gold(cost)} |" for name, n, where, cost in bill]
-    lines += ["", f"**Gold to bring: {gold(sum(cost for *_line, cost in bill))}**", ""]
+    upfront = sum(cost for *_line, cost in bill)
+    lines += ["", f"**Gold to bring: {gold(upfront)}**", ""]
+    as_you_go = gold_as_you_go(plan, gd, market, stock, rows)
+    if gold(as_you_go) != gold(upfront):  # as printed: never "about 15.0g" under "Gold to bring: 15.0g"
+        lines += [AS_YOU_GO_LINE.format(gold(as_you_go), gold(upfront - as_you_go)), ""]
     if not stock.bag_slots:
         return lines, None
     stack = stacks(gd, {i for r in rows for i in r["need"]})

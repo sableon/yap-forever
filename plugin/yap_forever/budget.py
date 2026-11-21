@@ -1,9 +1,11 @@
 """A budget as a goal: each route ends at the last stop its gold reaches.
 
-Stops are the rank caps (75, 150, 225, 300) and each profession's own target. The gold a route needs is
-the shopping list's "Gold to bring" (whole crafts with the buffer, patterns and fees), so the cut route
-always fits the list the player shops from. A craft's vendor price makes a route cheaper in the end but can make
-it need more gold up front, so a stop the route misses may be reached by the route planned without that credit (#97).
+Stops are the rank caps (75, 150, 225, 300) and each profession's own target. The gold a route needs is, with
+Budget.pay "upfront" (the default), the shopping list's "Gold to bring" (whole crafts with the buffer, patterns and
+fees, everything bought before you start), so the cut route always fits the list the player shops from; with
+"as_you_go", the gold enough up front when crafts are sold to a vendor as you go (shopping.gold_as_you_go, the line
+under "Gold to bring"). A craft's vendor price makes a route cheaper in the end but can make it need more of that gold,
+so a stop the route misses may be reached by the route planned without that credit (#97).
 """
 import dataclasses
 from collections.abc import Callable
@@ -14,6 +16,7 @@ from yap_forever.config import Budget
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import gold
 from yap_forever.planner import Plan
+from yap_forever.shopping import gold_as_you_go, gold_to_bring
 
 STOPS = (75, 150, 225, 300)
 COPPER_PER_GOLD = 10000
@@ -79,7 +82,17 @@ def adopt(c: BudgetCut, plan: Plan, spent: float) -> BudgetCut:
                                next_stop={p: (s, extra + c.spent - spent) for p, (s, extra) in c.next_stop.items()})
 
 
-def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cache: dict | None = None) -> BudgetCut:
+def gold_measure(budget: Budget | None, gd, market, stock) -> Callable[[Plan], float]:
+    """The gold a route needs, as a budget is compared with it (copper): "Gold to bring" for pay "upfront" (and without
+    a budget), the as-you-go figure for "as_you_go". The budget's cut, its free skips and the gold the cut route spends
+    all use this one."""
+    if budget is not None and budget.pay == "as_you_go":
+        return lambda p: gold_as_you_go(p, gd, market, stock)
+    return lambda p: gold_to_bring(p, gd, market, stock)
+
+
+def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | None = None,
+        cache: dict | None = None) -> BudgetCut:
     """The `mode` route ("gold" or "value") cut at the last stops `budget` reaches.
 
     Stops are taken one at a time, each checked on a route planned again to it: with budget.order, the first
@@ -91,11 +104,15 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
     planned without it (plan.candidates(..., vendor_credit=False), settled by the same measure) when that fits; when
     neither fits, the one that needs less gold, which is what the stop costs. The one without the credit is taken only
     when it gets each profession as far as the credited one does.
+    gold_of: the gold a route needs (default gold_measure: "Gold to bring", or the as-you-go figure with budget.pay
+    "as_you_go"); every comparison here uses it, the fallback's included.
     inputs: plan.PlanInputs with the targets as caps (a recipe goal is not cut: the caller plans it in full).
-    cache: caps key -> (routes, same, the routes without the vendor credit or None) from compare.settle_routes,
+    cache: caps key -> (routes, same, the routes without the vendor credit or None) from compare.settle_routes, and
+    ("gold", mode, caps key, credited, budget.pay) -> that route's gold,
     shared by both modes' cuts (planning a set of caps takes seconds); give it the routes to the targets when the
     caller has them. The routes without the credit are planned only when a credited route misses the budget."""
     from yap_forever.plan import candidates  # plan imports this module
+    gold_of = gold_measure(budget, inputs.gd, inputs.market, inputs.stock) if gold_of is None else gold_of
     inputs = dataclasses.replace(inputs, order=budget.order)
     cache = {} if cache is None else cache
     limit = copper(budget)
@@ -118,7 +135,7 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
         return bare
 
     def gold_at(caps, credited):
-        k = ("gold", mode, key(caps), credited)
+        k = ("gold", mode, key(caps), credited, budget.pay)  # the figure the budget is compared with
         if k not in cache:
             cache[k] = gold_of(routes(caps, credited)[mode])
         return cache[k]
@@ -219,8 +236,9 @@ def lines(c: BudgetCut, budget: Budget) -> list[str]:
     moved = [p for p in c.caps if c.caps[p] > c.start.get(p, c.caps[p])]
     out = []
     if moved:
+        how = ", selling crafts to a vendor as you go" if budget.pay == "as_you_go" else ""  # c.spent's figure
         out.append(f"{b} takes " + " and ".join(f"{PROFESSIONS[p]} to {c.caps[p]}" for p in moved)
-                   + f" ({gold(c.spent)}).")
+                   + f" ({gold(c.spent)}{how}).")
     elif c.below_first_stop:
         out.append(f"{b} doesn't reach the first stop: nothing is planned yet.")
     for p, why in c.stalled.items():

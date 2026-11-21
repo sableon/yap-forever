@@ -559,6 +559,29 @@ class CliTests(unittest.TestCase):
             self.assertEqual(w.call_args.kwargs["faction"], "horde")
             self.assertEqual(w.call_args.args[4].capital, "undercity")
 
+    def test_cli_pay_flag(self):
+        # #97 part 3: plan --pay over the stock file's pay; with no budget it is refused, a bad value too
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Budget
+        stock = self.ready_home()
+        stock.write_text('level = 20\n[items]\n\n[goals]\nbudget = 9\npay = "as_you_go"\nblacksmithing = 20\n',
+                         encoding="utf-8")
+        me = ["plan", "--character", "Firstname Lastname"]
+        with mock.patch.object(plan_mod, "write_reports", return_value=("table", {})) as w:
+            for argv, want in (([], Budget(9, None, "as_you_go")), (["--pay", "upfront"], Budget(9, None, "upfront")),
+                               (["--budget", "4", "--pay", "as_you_go"], Budget(4, None, "as_you_go"))):
+                code, out = run(me + argv, self.paths)
+                self.assertEqual((code, w.call_args.kwargs["target"]), (0, want), out)
+        stock.write_text("level = 20\n[items]\n\n[goals]\nblacksmithing = 20\n", encoding="utf-8")
+        for bad, said in ((["--pay", "as_you_go"], "--pay goes with a budget"),
+                          (["--budget", "4", "--pay", "later"], '--pay: use "upfront" or "as_you_go"')):
+            code, out = run(me + bad, self.paths)
+            self.assertEqual(code, 1, bad)
+            self.assertIn(said, out)
+
+
 class FreeSkipReportTests(unittest.TestCase):
     """#90 through write_reports: a trip whose route-without costs the same is planned without and said, before the
     mailbox trips, the listed saving, the table and the skip clauses shown."""

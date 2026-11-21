@@ -104,6 +104,8 @@ say so.
   top" in the comparison and the report, "Back from selling crafts" in the guide) and in the
   sell-or-keep choice for greens.
 - A craft's vendor price counts in choosing the route; AH resale of crafts never does.
+- Gold to bring is the gold to buy everything before you start. Selling crafts to a vendor as you
+  go needs less up front; the shopping list says how much, and a budget can use either (pay).
 - A craft counts as sold on the AH only when the AH pays, after its 5% cut (the lowest listing less
   the cut), at least 2× its vendor price and 1s more; otherwise it goes to a vendor, or, with
   Enchanting planned, a green may be kept for disenchanting. A craft without a vendor price needs

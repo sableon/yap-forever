@@ -166,7 +166,7 @@ def plan(gd, valuer, stock, favor, caps: dict[int, int], quests: dict | None = N
     overtime, reading: the character's Working Overtime rank and how it reads (see skillup_chance);
     it raises the chance of every skill-up, disenchanting included.
     vendor_credit: False plans without the vendor price of the crafts sold in the score (a budget's fallback route,
-    which may need less gold up front; see budget.cut). The totals count what vendors pay back either way, and the
+    which may need less of the gold the budget is compared with; see budget.cut). The totals count what vendors pay back either way, and the
     plan says how it was planned (Plan.vendor_credit), so a route planned again from it is planned the same way."""
     return _Route(gd, valuer, stock, favor, caps, quests, reuse, craft_once, exclude, one_time_in_full,
                   overtime, reading, order, vendor_credit).run()

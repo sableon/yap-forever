@@ -740,6 +740,98 @@ class BringListTests(unittest.TestCase):
             self.assertIn(" Bring: ", bring_text(p, gd, capital, None, trainer_trips=trainer_trips))
 
 
+WARES = 7812  # a made-up craft a vendor pays 40s for
+
+
+def wares_route(order="first", listings=None, sell=4000, **plan_fields):
+    """(plan, gd, market, stock): "BS wares" (spell 71, 10 crafts of a Copper Bar at 1g, each a Test Wares a vendor pays
+    `sell` for, default 40s: 4g back) and "BS plain" (spell 72, 5 crafts of an Iron Bar at 1g, nothing back), all
+    orange; order "first": the wares row first, "last": after the plain row. plan_fields: more Plan fields (ranks,
+    learn_log, held_for_de...); vendor_back defaults to the 10 wares at `sell`, as the planner counts them."""
+    gd = toy.gamedata([toy.recipe(71, "BS wares", BS, {S: 1}, (WARES, 1)), toy.recipe(72, "BS plain", BS, {T: 1})])
+    gd.items[WARES] = toy.item(WARES, "Test Wares", sell=sell)
+    plan_fields.setdefault("vendor_back", 10 * sell)
+    wares, plain = (71, "BS wares", 10, {S: 10}), (72, "BS plain", 5, {T: 5})
+    steps, skill = [], 1
+    for spell, name, n, mats in (wares, plain) if order == "first" else (plain, wares):
+        steps.append(Step(BS, skill, skill + n, spell, name, n, 0, 0, mats))
+        skill += n
+    p = orange(Plan(steps=steps, bought={S: 10, T: 5}, final_skill={BS: skill}, **plan_fields))
+    return p, gd, toy.market(listings or {S: [(10000, 100)], T: [(10000, 100)]}), toy.stock()
+
+
+class AsYouGoTests(unittest.TestCase):
+    """#97 part 3 (owner, 2026-11-21): the gold enough up front when you sell crafts to a vendor as you go and buy each
+    row's reagents when you reach it: the most you are short at any row (spend through it less what vendors paid for
+    the crafts of the rows before it), never above "Gold to bring"."""
+
+    LINE = ("If you sell crafts to a vendor as you go and buy each row's reagents when you reach it, about {} is enough "
+            "up front ({} less).")
+
+    def test_as_you_go_peak(self):
+        # rows spend 10g then 5g; the first one's crafts bring 4g back: short 10g after it, 15g - 4g = 11g after the next
+        from yap_forever.shopping import gold_as_you_go, gold_to_bring, render_shopping
+        p, gd, m, st = wares_route()
+        self.assertEqual((gold_to_bring(p, gd, m, st), gold_as_you_go(p, gd, m, st)), (150000, 110000))
+        lines = render_shopping(p, gd, m, st)[0]
+        at = lines.index("**Gold to bring: 15.0g**")
+        self.assertEqual(lines[at + 1:at + 4], ["", self.LINE.format("11.0g", "4.0g"), ""])
+
+    def test_as_you_go_line_absent_when_equal(self):
+        # the wares row last: its 4g come back after everything is bought, so the most you are short is the whole bill
+        from yap_forever.shopping import gold_as_you_go, gold_to_bring, render_shopping
+        p, gd, m, st = wares_route("last")
+        self.assertEqual(gold_as_you_go(p, gd, m, st), gold_to_bring(p, gd, m, st))
+        text = "\n".join(render_shopping(p, gd, m, st)[0])
+        self.assertIn("**Gold to bring: 15.0g**", text)
+        self.assertNotIn("as you go", text)
+
+    def test_as_you_go_ignores_ah_and_held(self):
+        # AH sales never count: the AH takes 5 of the 10 wares (at 2g, well over 2x the 40s vendor price), so only 5
+        # bring vendor money (2g: 13g); wares held for disenchanting or kept as greens bring none (15g)
+        from yap_forever.shopping import gold_as_you_go
+        ah = {S: [(10000, 100)], T: [(10000, 100)], WARES: [(20000, 3)]}
+        p, gd, m, st = wares_route(listings=ah, vendor_back=20000)
+        self.assertEqual(gold_as_you_go(p, gd, m, st), 130000)
+        for fields in ({"held_for_de": {WARES: (10, 0)}}, {"kept_greens": {WARES: 10}}):
+            with self.subTest(fields=fields):
+                p, gd, m, st = wares_route(vendor_back=0, **fields)  # the planner sells none of them
+                self.assertEqual(gold_as_you_go(p, gd, m, st), 150000)
+
+    def test_as_you_go_pays_fees_and_patterns_where_the_route_meets_them(self):
+        # a 3g rank at 11 (with the plain row) and a 2g pattern on the AH for the wares, learned at 1 (with the wares
+        # row): short 12g after the wares, 20g - 4g = 16g after the plain row and its rank, against 20g to bring. The
+        # vendor amounts are the ones the guide's route rows say
+        import re
+        from yap_forever.guide import render_guide, row_vendor_back
+        from yap_forever.shopping import gold_as_you_go, gold_to_bring, route_rows, row_spend
+        listings = {S: [(10000, 100)], T: [(10000, 100)], toy.SCROLL: [(20000, 1)]}
+        p, gd, m, st = wares_route(listings=listings, ranks=[(BS, 11, 150, 30000)], fees=30000,
+                                   learn_log=[(BS, 1, 71, "ah")])
+        gd.recipes[71] = toy.recipe(71, "BS wares", BS, {S: 1}, (WARES, 1), scroll=toy.SCROLL)
+        self.assertEqual((gold_to_bring(p, gd, m, st), gold_as_you_go(p, gd, m, st)), (200000, 160000))
+        rows = route_rows(p, gd)
+        self.assertEqual(row_spend(p, gd, m, st, rows), [120000, 80000])
+        backs = row_vendor_back(p, gd, m, st, rows)
+        self.assertEqual(backs, [40000, 0])
+        guide = render_guide(p, gd, m, st, {BS: 16})
+        self.assertEqual(re.findall(r"about (\S+) back", guide), [gold(b) for b in backs if round(b) >= 1])
+
+    def test_as_you_go_line_absent_when_it_prints_the_same(self):
+        # wares a vendor pays 40c for: 4s back makes 14.96g as you go, which prints as the 15.0g to bring: no line
+        from yap_forever.shopping import gold_as_you_go, gold_to_bring, render_shopping
+        p, gd, m, st = wares_route(sell=40)
+        self.assertEqual((gold_to_bring(p, gd, m, st), gold_as_you_go(p, gd, m, st)), (150000, 149600))
+        self.assertNotIn("as you go", "\n".join(render_shopping(p, gd, m, st)[0]))
+
+    def test_as_you_go_back_capped_at_vendor_back(self):
+        # the rows round each one up to whole crafts, so their vendor money can be above what the planner counts
+        # (Plan.vendor_back): what they add up to is capped at it, 3g here, so 15g - 3g = 12g
+        from yap_forever.shopping import gold_as_you_go
+        p, gd, m, st = wares_route(vendor_back=30000)
+        self.assertEqual(gold_as_you_go(p, gd, m, st), 120000)
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -1012,7 +1104,7 @@ class ReagentBagTests(unittest.TestCase):
             self.assertEqual(group_trips(rows, cap, stack, reagent_items(gd), 0), group_trips(rows, cap, stack))
         m = toy.market({S: [(10, 1000)], T: [(50, 100)]})
         lines, _trips = render_shopping(p, gd, m, dataclasses.replace(toy.stock(), bag_slots=40, reagent_slots=0))
-        self.assertNotIn("reagent", "\n".join(lines))
+        self.assertNotIn("reagent bag", "\n".join(lines))  # "each row's reagents" is the as-you-go line (#97)
 
     def test_mailbox_trips_one_with_reagent_bag_two_without(self):
         import dataclasses
