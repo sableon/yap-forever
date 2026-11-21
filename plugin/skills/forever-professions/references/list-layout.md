@@ -102,7 +102,9 @@ Write it for that.
   `- **Before you start**, make sure you know: <recipes> (any <Rank> <Person> teaches them).`
   A recipe learned at a visit or before the start is not learned again where the route first uses it:
   that row reads `*At <skill>: start crafting <recipe> (learned at <trainer>)*` or `(learned before you
-  start)`, with no second fee, and comes after the visit's row at the same skill.
+  start)`, with no second fee, and comes after the visit's row at the same skill. A recipe listed as `If
+  you don't have them yet` may already be known, so its row reads `(learn it at <trainer> if you don't
+  have it)` and keeps the `; listed from ...` note when there is one.
 - The recipes of a row keep route order (the order the route learns them), whatever their rank:
   a trainer teaches every recipe up to its rank's cap, so no row names a second trainer for a lower
   recipe.
@@ -117,9 +119,9 @@ Write it for that.
   way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
   their own three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip
   for the goal recipe always says there is no other way. Below Artisan it is a stop in a capital:
-  `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`.
+  `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
-  later stops of that rank read `Learn <recipes> at any <Rank> <Person> in a capital.` Without
+  later stops of that rank read `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital.` Without
   the faction or the trainer in the data the row says so (`back to the Master Enchanter in a set
   town (the planner doesn't say where yet)`) and still lists the recipes.
 - Name the trainer from the data, for the character's faction (the profile's `faction`; without it

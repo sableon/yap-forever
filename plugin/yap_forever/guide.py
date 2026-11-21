@@ -316,7 +316,7 @@ def _city_stop(v, gd, trainer_info, planned, said, named) -> str | None:
             row = f"Train {PROFESSIONS.get(v.profession, v.profession)} to {v.rank_cap} at any {rank} {person} in a capital."
         more = _visit_text(v, gd)
     else:  # "city": a stop only to learn recipes
-        lead = f"Learn {_names(v.learn, gd, True)}"
+        lead = f"At {v.skill}, learn {_names(v.learn, gd, True)}"
         row = (trainer_text.city_row(trainer_info, v.profession, v.rank_cap, planned, said, lead, named, True)
                or f"{lead} at any {rank} {person} in a capital.")
         more = _visit_text(v, gd, learn=False)
@@ -501,13 +501,15 @@ def _listed_notes(plan, gd) -> dict[tuple[int, int, str], str]:
 
 def _learned_at(plan, gd, trainer_info, start_skills, trainer_trips="as_needed") -> dict[tuple[int, int, str], str]:
     """(profession, skill, recipe name) -> where a trainer recipe the route learns there was learned instead:
-    "learned at <trainer>" (a visit that learns it ahead, or lists it as "if you don't have it yet") or
+    "learned at <trainer>" (a visit that learns it ahead), "learn it at <trainer> if you don't have it" (a visit
+    that lists it as "If you don't have it yet": the stock doesn't say whether the character knows it) or
     "learned before you start" (trips.before_start). Recipes a "one_go" visit learns as the skill reaches them
     (Visit.as_reached) keep their own "Learn" row, with the fee."""
     where: dict[int, str] = {}
     for v in visits(plan, gd, start_skills, trainer_trips):
         label = trainer_text.visit_trainer(trainer_info, v.profession, v.rank_cap, v.remote)
-        where.update({s: f"learned at {label}" for s in v.learn + v.if_missing})
+        where.update({s: f"learned at {label}" for s in v.learn})
+        where.update({s: f"learn it at {label} if you don't have it" for s in v.if_missing})
     for spells in before_start(plan, gd, start_skills).values():
         where.update({s: "learned before you start" for s in spells})
     return {(prof, at, gd.recipes[spell].name): where[spell] for prof, at, spell, how in plan.learn_log
