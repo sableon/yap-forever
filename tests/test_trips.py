@@ -19,7 +19,7 @@ def setup(prof, recipes, ranks=(), learns=()):
 
 
 def shape(vs):
-    return [(v.profession, v.skill, v.rank_cap, v.remote, v.kind, v.learn, v.if_missing, v.fallback) for v in vs]
+    return [(v.profession, v.skill, v.rank_cap, v.remote, v.kind, v.learn, v.if_missing) for v in vs]
 
 
 class VisitTests(unittest.TestCase):
@@ -29,20 +29,20 @@ class VisitTests(unittest.TestCase):
                       learns=[(1, 231), (2, 240), (3, 252), (4, 252), (5, 266)])
         start = {ENCH: 225}
         self.assertEqual(shape(visits(p, gd, start)),
-                         [(ENCH, 225, 300, True, "rank", [], [1, 2, 3, 4, 5], {s: 225 for s in range(1, 6)})])
+                         [(ENCH, 225, 300, True, "rank", [], [1, 2, 3, 4, 5])])
         self.assertEqual(before_start(p, gd, start), {})
 
     def test_later_master_recipes_make_recipe_visits(self):
         # the literal rule: a visit at skill s teaches every later recipe of its rank with required skill <= s
         p, gd = setup(ENCH, [(1, 240), (2, 245)], ranks=[(225, 300)], learns=[(1, 250), (2, 251)])
         self.assertEqual(shape(visits(p, gd, {ENCH: 225})),
-                         [(ENCH, 225, 300, True, "rank", [], [], {}),
-                          (ENCH, 250, 300, True, "recipe", [1, 2], [], {})])
+                         [(ENCH, 225, 300, True, "rank", [], []),
+                          (ENCH, 250, 300, True, "recipe", [1, 2], [])])
         p, gd = setup(ENCH, [(1, 240), (2, 245)], ranks=[(225, 300)], learns=[(1, 240), (2, 251)])
         self.assertEqual(shape(visits(p, gd, {ENCH: 225})),
-                         [(ENCH, 225, 300, True, "rank", [], [], {}),
-                          (ENCH, 240, 300, True, "recipe", [1], [], {}),
-                          (ENCH, 251, 300, True, "recipe", [2], [], {})])
+                         [(ENCH, 225, 300, True, "rank", [], []),
+                          (ENCH, 240, 300, True, "recipe", [1], []),
+                          (ENCH, 251, 300, True, "recipe", [2], [])])
 
     def test_before_start_for_recipe_used_first(self):  # RF3
         p, gd = setup(BS, [(1, 160)], learns=[(1, 184)])
@@ -51,21 +51,21 @@ class VisitTests(unittest.TestCase):
 
     def test_city_visit_for_expert_recipe(self):
         p, gd = setup(BS, [(1, 140)], learns=[(1, 142)])
-        self.assertEqual(shape(visits(p, gd, {BS: 100})), [(BS, 142, 150, False, "city", [1], [], {})])
+        self.assertEqual(shape(visits(p, gd, {BS: 100})), [(BS, 142, 150, False, "city", [1], [])])
         self.assertEqual(before_start(p, gd, {BS: 100}), {})
 
     def test_recipe_joins_a_rank_visit_it_is_reached_by(self):
         p, gd = setup(BS, [(1, 130), (2, 210)], ranks=[(140, 225)], learns=[(1, 145), (2, 212)])
         self.assertEqual(shape(visits(p, gd, {BS: 100})),
-                         [(BS, 140, 225, True, "rank", [1], [], {1: 150}),
-                          (BS, 212, 225, True, "recipe", [2], [], {})])
+                         [(BS, 140, 225, True, "rank", [1], []),
+                          (BS, 212, 225, True, "recipe", [2], [])])
 
     def test_higher_recipe_does_not_join_a_lower_trainer_visit(self):
         # an Expert stop at 160 (for a 140 recipe) can't teach a 155 recipe: that one needs an Artisan
         p, gd = setup(BS, [(1, 140), (2, 155)], learns=[(1, 160), (2, 170)])
         self.assertEqual(shape(visits(p, gd, {BS: 130})),
-                         [(BS, 160, 150, False, "city", [1], [], {}),
-                          (BS, 170, 225, True, "recipe", [2], [], {})])
+                         [(BS, 160, 150, False, "city", [1], []),
+                          (BS, 170, 225, True, "recipe", [2], [])])
 
     def test_recipes_from_other_sources_make_no_visits(self):
         p, gd = setup(BS, [(1, 140)], learns=[(1, 142)])
@@ -174,15 +174,15 @@ class OneGoTests(unittest.TestCase):
 
     def test_one_go_stretch_ends_at_the_next_rank(self):
         # Artisan at 140 (stretch to the Master training at 200), Master at 200 (stretch to the end, 260); an Expert
-        # recipe's capital stop inside the Artisan stretch is folded too, with its fallback
+        # recipe's capital stop inside the Artisan stretch is folded too
         p, gd = setup(BS, [(1, 160), (2, 230), (3, 145)], ranks=[(140, 225), (200, 300)],
                       learns=[(1, 170), (2, 240), (3, 146)])
         p.final_skill = {BS: 260}
         start = {BS: 130}
         self.assertEqual([v.kind for v in visits(p, gd, start)], ["rank", "city", "recipe", "rank", "recipe"])
         got = visits(p, gd, start, "one_go")
-        self.assertEqual([(v.skill, v.kind, v.as_reached, v.fallback) for v in got],
-                         [(140, "rank", [(3, 146), (1, 170)], {3: 150}), (200, "rank", [(2, 240)], {})])
+        self.assertEqual([(v.skill, v.kind, v.as_reached) for v in got],
+                         [(140, "rank", [(3, 146), (1, 170)]), (200, "rank", [(2, 240)])])
 
     def test_one_go_keeps_visits_outside_a_remote_stretch(self):
         # no remote rank visit on the route (the start is past it): the trip back stays; the other profession's

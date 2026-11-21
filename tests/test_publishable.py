@@ -254,23 +254,27 @@ class PublishableTests(unittest.TestCase):
         self.assertEqual(RANK_CAPS, (75, 150, 225, 300))
         self.assertEqual(MAX_TRIP_ALTS, 3)  # "keep their own three", "only the costliest three recipe trips"
         self.assertIn("Journeyman to 75, Expert to 150, Artisan to 225, Master to 300", rules)
-        self.assertIn("one sighting", rules)
+        self.assertIn("confirmed in game (2026-11-21)", rules)
+        self.assertIn("from 1 up to", rules)
+        self.assertIn("Expert trainers stop at 150", rules)
+        self.assertNotIn("one sighting", rules)
         self.assertEqual(gamedata.load_seen_requirements()[14380], 184)
         self.assertIn("Truesilver Rod was learned at Blacksmithing 184, so it needs 175, not the inferred 200", rules)
         for line in ("While there, learn: <recipe> (<fee>), ...", "If you don't have them yet: <recipe>, ...",
                      "- **Before you start**, make sure you know: <recipes> (any <Rank> <Person> teaches them).",
-                     "(if <trainer> doesn't list it: <who>)", "any <Rank> <Person>",
+                     "any <Rank> <Person>",
                      "- **Trip:** back to <trainer>, <place>, at <skill> for <recipes>",
                      "; or skip it: +<gold> for the route without it", "; there is no other way to reach the target without it",
                      "Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).",
                      "*At <skill>: start crafting <recipe> (learned at <trainer>)*", "(learned before you start)",
-                     "(if <trainer> doesn't list <recipe>: <who>)", "Learn <recipes> at any <Rank> <Person> in a capital.",
+                     "Learn <recipes> at any <Rank> <Person> in a capital.",
                      "which keep their own three, only the costliest three recipe trips",
                      "a recipe needed at 240 and used then, and one at 245, make two rows",
                      "The bring list ends at the next rank trip, trip back for recipes or capital stop for recipes",
                      "(learned at <trainer>; listed from <skill> in the Forever data:",
                      "(learned before you start; listed from ...)"):
             self.assertIn(line, layout)
+        self.assertNotIn("doesn't list", layout)  # a higher rank teaches every lower recipe: no fallback clause
         self.assertIn("trips back to them for recipes", coverage)
 
     def test_docs_promise_trainer_trips(self):

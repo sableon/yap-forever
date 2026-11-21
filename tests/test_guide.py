@@ -797,21 +797,9 @@ class VisitRowTests(unittest.TestCase):
     def test_if_missing_line(self):
         text = self.render(190, [(225, 300)], [(13, 180, 1000), (14, 185, 1000)], [(13, 230), (14, 240)])
         row = self.row(text, "- **Trip:**", "rank to 300")
-        self.assertIn(" If you don't have them yet: Recipe 13, Recipe 14 (if Brakka Ironfold doesn't list them: ", row)
+        self.assertTrue(row.endswith(" If you don't have them yet: Recipe 13, Recipe 14."), row)
         self.assertNotIn("While there", row)
         self.assertNotIn("Before you start", text)
-
-    def test_fallback_names_lower_trainer(self):
-        text = self.render(200, [(225, 300)], [(13, 210, 1000)], [(13, 230)])
-        row = self.row(text, "- **Trip:**", "rank to 300")
-        self.assertIn("While there, learn: Recipe 13 (10s 0c) (if Brakka Ironfold doesn't list it: Thessa Hammerlow "
-                      "(Artisan, Stormwind City) or Wandering Smith (Artisan, Ironforge)).", row)
-        # below the remote ranks the fallback is any trainer of the recipe's rank
-        text = self.render(140, [(150, 225)], [(15, 145, 500), (16, 120, 500)], [(15, 160), (16, 170)], final=225)
-        row = self.row(text, "- **Trip:**", "rank to 225")
-        self.assertIn("While there, learn: Recipe 15 (5s 0c) (if the Artisan Blacksmith doesn't list it: any Expert "
-                      "Blacksmith). If you don't have it yet: Recipe 16 (if the Artisan Blacksmith doesn't list it: "
-                      "any Expert Blacksmith).", row)
 
     def test_before_start_line(self):  # RF3
         text = self.render(184, [(225, 300)], [(17, 160, 1000)], [(17, 184)])
@@ -839,7 +827,7 @@ class VisitRowTests(unittest.TestCase):
                            faction="horde", data=data)
         row = self.row(text, "- **Trip:**", "rank to 300")
         self.assertIn("the planner has no Master Blacksmith trainer for your faction in its data. While there, learn: "
-                      "Recipe 13 (10s 0c) (if the Master Blacksmith doesn't list it: any Artisan Blacksmith).", row)
+                      "Recipe 13 (10s 0c).", row)
         self.assertIn("- **Trip:** back to the Master Blacksmith (the planner has no Master Blacksmith trainer for "
                       "your faction in its data), at 240 for Recipe 18 (10s 0c).", text)
         text = self.render(200, [(225, 300)], [(13, 210, 1000), (18, 240, 1000)], [(13, 230), (18, 240)], faction="")
@@ -891,14 +879,6 @@ class VisitRowTests(unittest.TestCase):
                                 "- Learn Recipe 21 (5s 0c) at any Expert Blacksmith in a capital.",
                                 "- Learn Recipe 22 (5s 0c) at any Expert Blacksmith in a capital."])
 
-    def test_capital_stop_fallback_comes_after_the_place(self):
-        # a Journeyman recipe (70) joins an Expert stop: its fallback note follows the place
-        text = self.render(60, [], [(21, 140, 500), (22, 74, 100)], [(21, 142), (22, 145)], faction="horde",
-                           data=self.grom(), final=150)
-        self.assertIn("- Learn Recipe 21 (5s 0c), Recipe 22 (1s 0c) at any Expert Blacksmith in a capital (for example "
-                      "Grom Anvilhand, Orgrimmar) (if the Expert Blacksmith doesn't list Recipe 22: any Journeyman "
-                      "Blacksmith).", text)
-
     def test_if_missing_on_a_recipe_trip_and_a_capital_stop(self):
         text = self.render(200, [], [(13, 210, 1000), (14, 190, 1000)], [(13, 212), (14, 220)])
         self.assertIn("- **Trip:** back to Thessa Hammerlow, Stormwind City (60.5, 40.2) or Wandering Smith, Ironforge "
@@ -932,19 +912,18 @@ class VisitRowTests(unittest.TestCase):
         self.assertIn("- *At 251: Learn Recipe 19 (trainer 1s)*", text)
         self.assertIn("back to Brakka Ironfold", self.render(*args))  # as needed: the trips back
 
-    def test_one_go_learn_list_names_the_fallback(self):
+    def test_one_go_learn_list_without_trainer_data(self):
         text = self.render(130, [(140, 225)], [(21, 145, 500), (22, 160, 500)], [(21, 146), (22, 170)], final=225,
                            trainer_trips="one_go")
         row = self.row(text, "- **Trip:**", "rank to 225")
-        self.assertIn(" Learn at the trainer as you reach them: Recipe 21 at 146 (if the Artisan Blacksmith doesn't "
-                      "list it: any Expert Blacksmith), Recipe 22 at 170.", row)
+        self.assertIn(" Learn at the trainer as you reach them: Recipe 21 at 146, Recipe 22 at 170.", row)
         self.assertNotIn("in a capital", text[text.index("## Route"):].replace(row, ""))
         # without trainer data (no faction) the row still lists them
         text = self.render(130, [(140, 225)], [(21, 145, 500), (22, 160, 500)], [(21, 146), (22, 170)], final=225,
                            trainer_trips="one_go", faction="")
         row = self.row(text, "- **Trip:**", "rank to 225")
-        self.assertIn("(the planner doesn't say where yet). Learn at the trainer as you reach them: Recipe 21 at 146 "
-                      "(if the Artisan Blacksmith doesn't list it: any Expert Blacksmith), Recipe 22 at 170.", row)
+        self.assertIn("(the planner doesn't say where yet). Learn at the trainer as you reach them: Recipe 21 at 146, "
+                      "Recipe 22 at 170.", row)
 
     def test_one_go_skill_agrees_with_the_learn_row(self):
         text = self.render(225, [(225, 300)], [(18, 240, 1000), (19, 245, 1000), (20, 250, 1000)],
@@ -952,3 +931,29 @@ class VisitRowTests(unittest.TestCase):
         row = self.row(text, "- **Trip:**", "rank to 300")
         self.assertIn("Learn at the trainer as you reach them: Recipe 18 at 240, Recipe 19 at 251, Recipe 20 at 270.", row)
         self.assertIn("- *At 270: Learn Recipe 20 (trainer 1s)*", text)
+
+    def test_no_fallback_clause(self):
+        # a trainer teaches every recipe from 1 up to its rank's cap (confirmed in game, 2026-11-21): no row says
+        # "if <trainer> doesn't list it", whatever the recipe's rank
+        texts = [self.render(200, [(225, 300)], [(13, 210, 1000)], [(13, 230)]),  # Artisan recipe, Master visit
+                 self.render(200, [(225, 300)], [(13, 210, 1000)], [(13, 230)], faction=""),
+                 self.render(140, [(150, 225)], [(15, 145, 500), (16, 120, 500)], [(15, 160), (16, 170)], final=225),
+                 self.render(130, [(140, 225)], [(21, 145, 500), (22, 160, 500)], [(21, 146), (22, 170)], final=225,
+                             trainer_trips="one_go"),
+                 self.render(60, [], [(21, 140, 500), (22, 74, 100)], [(21, 142), (22, 145)], faction="horde",
+                             data=self.grom(), final=150)]
+        for text in texts:
+            self.assertNotIn("doesn't list", text)
+            self.assertNotIn("Wandering Smith (Artisan", text)
+        self.assertIn("While there, learn: Recipe 13 (10s 0c).", self.row(texts[0], "- **Trip:**", "rank to 300"))
+        self.assertIn("- Learn Recipe 21 (5s 0c), Recipe 22 (1s 0c) at any Expert Blacksmith in a capital (for example "
+                      "Grom Anvilhand, Orgrimmar).", texts[4])
+
+    def test_lists_keep_route_order(self):
+        # Recipe 15 is an Expert recipe on an Artisan visit, Recipe 11 an Artisan one: they were grouped by rank
+        # (the visit's own rank first); now "While there, learn:" lists them as the route learns them
+        for learns, listed in (([(15, 205), (11, 215)], "Recipe 15 (5s 0c), Recipe 11 (10s 0c)"),
+                               ([(11, 205), (15, 215)], "Recipe 11 (10s 0c), Recipe 15 (5s 0c)")):
+            text = self.render(140, [(200, 225)], [(15, 145, 500), (11, 170, 1000)], learns, final=225)
+            row = self.row(text, "- **Trip:**", "rank to 225")
+            self.assertIn(f"While there, learn: {listed}.", row)

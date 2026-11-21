@@ -20,9 +20,8 @@ RANK_CAPS = tuple(sorted(RANK_BY_CAP))  # 75, 150, 225, 300: Journeyman, Expert,
 
 def recipe_rank_cap(required_skill: int) -> int:
     """The cap of the lowest trainer rank that teaches a recipe: the lowest rank cap at or above its required
-    skill (75, 150, 225 or 300). A trainer teaches the recipes up to its own cap, lower ranks' included
-    (one sighting: an Expert trainer lacks a 175 recipe that an Artisan teaches); this is the one place
-    that says so."""
+    skill (75, 150, 225 or 300). A trainer teaches every recipe from 1 up to its own cap, lower ranks' included
+    (confirmed in game, 2026-11-21; Expert stops at 150); this is the one place that says so."""
     return next((c for c in RANK_CAPS if c >= required_skill), RANK_CAPS[-1])
 
 
@@ -34,7 +33,6 @@ class Visit:
     in a capital). rank_cap: the cap of the trainer's rank. learn: trainer recipes the route needs later
     whose required skill is reached by `skill` (learn ahead). if_missing: recipes already reachable at the
     start skill (the stock doesn't say which are known), listed at the first visit that teaches them.
-    fallback: spell -> the cap of the lowest rank that teaches it, for recipes below this trainer's rank.
     as_reached: (spell, skill) for a remote rank visit with trainer_trips "one_go": the recipes of the visits it
     replaces in its stretch, learned at this trainer at the skill the route learns them (plan.learn_log)."""
     profession: int
@@ -44,7 +42,6 @@ class Visit:
     kind: str
     learn: list[int] = field(default_factory=list)
     if_missing: list[int] = field(default_factory=list)
-    fallback: dict[int, int] = field(default_factory=dict)
     as_reached: list[tuple[int, int]] = field(default_factory=list)
 
 
@@ -74,7 +71,7 @@ def stretch_patterns(plan, gd, profession: int, lo: int, hi: int | None = None) 
             and spell in gd.recipes and gd.recipes[spell].scroll_item]
 
 
-def _one_go(out: list[Visit], plan, gd) -> list[Visit]:
+def _one_go(out: list[Visit], plan) -> list[Visit]:
     """The visits with every visit back for recipes (a trip, or a capital stop) inside a remote rank visit's stretch
     folded into that rank visit: its recipes go to `as_reached` with the skill the route learns them at (learn_log),
     and those it was to check go to `if_missing`."""
@@ -91,10 +88,6 @@ def _one_go(out: list[Visit], plan, gd) -> list[Visit]:
         if (home is not None and v.kind != "rank"
                 and home.skill <= v.skill <= stretch_end(plan, home.profession, home.skill)
                 and v.rank_cap <= home.rank_cap):
-            for spell in v.learn + v.if_missing:
-                rank = recipe_rank_cap(gd.recipes[spell].required_skill)
-                if rank < home.rank_cap:
-                    home.fallback[spell] = rank
             home.as_reached += [(spell, learned_at.get(spell, v.skill)) for spell in v.learn]
             home.if_missing += v.if_missing
             continue
@@ -114,11 +107,6 @@ def _visits(plan, gd, start_skills: dict[int, int],
     def first(prof, req, rank, at):
         return next((v for v in out if v.profession == prof and req <= v.skill <= at and v.rank_cap >= rank), None)
 
-    def add(v, into, spell, rank):
-        into.append(spell)
-        if rank < v.rank_cap:
-            v.fallback[spell] = rank
-
     for prof, s, spell, req in learns:
         if req <= max(1, start_skills.get(prof, 1)):  # reachable at the start: never a visit of its own
             known.append((prof, s, spell, req))
@@ -129,7 +117,7 @@ def _visits(plan, gd, start_skills: dict[int, int],
             v = Visit(prof, s, rank, rank >= REMOTE_RANK, "recipe" if rank >= REMOTE_RANK else "city")
             out.append(v)
             out.sort(key=lambda v: v.skill)  # stable: a visit made at a rank training's skill comes after it
-        add(v, v.learn, spell, rank)
+        v.learn.append(spell)
     before: dict[int, list[int]] = {}
     for prof, s, spell, req in known:
         rank = recipe_rank_cap(req)
@@ -137,8 +125,8 @@ def _visits(plan, gd, start_skills: dict[int, int],
         if v is None:
             before.setdefault(prof, []).append(spell)
         else:
-            add(v, v.if_missing, spell, rank)
-    return (_one_go(out, plan, gd) if trainer_trips == ONE_GO else out), before
+            v.if_missing.append(spell)
+    return (_one_go(out, plan) if trainer_trips == ONE_GO else out), before
 
 
 def visits(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED) -> list[Visit]:

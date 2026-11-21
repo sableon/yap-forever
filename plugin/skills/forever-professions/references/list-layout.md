@@ -70,8 +70,7 @@ Write it for that.
   trainer to the profession's next rank training or the end of its route, whichever comes first.
   The trips back for recipes and capital stops inside that stretch are left out: their recipes end
   the rank row as `Learn at the trainer as you reach them: <recipe> at <skill>, ...` (in skill order,
-  `<skill>` where the route learns it; a recipe below the trainer's rank adds `(if <trainer> doesn't
-  list it: <who>)`), and each keeps its `*At <skill>: Learn <recipe> (trainer <fee>)*` row. The bring list
+  `<skill>` where the route learns it), and each keeps its `*At <skill>: Learn <recipe> (trainer <fee>)*` row. The bring list
   covers the whole stretch, whatever the bags hold. What the stretch uses of your own crafts and
   disenchants made before the trip (in route order, either profession) is listed as `<count> <item>
   (yours)`. What your other profession makes later on the route is listed apart, after the bring list:
@@ -104,11 +103,9 @@ Write it for that.
   A recipe learned at a visit or before the start is not learned again where the route first uses it:
   that row reads `*At <skill>: start crafting <recipe> (learned at <trainer>)*` or `(learned before you
   start)`, with no second fee, and comes after the visit's row at the same skill.
-- A recipe below the visit trainer's rank says where else to learn it, since the lower ranks are
-  unconfirmed: `(if <trainer> doesn't list it: <who>)` after the recipes it is for (`them` for
-  several), where `<trainer>` is the one trainer the row names or `the <Rank> <Person>`, and `<who>`
-  names the Artisan or Master trainers of the recipe's rank (`<name> (<Rank>, <zone>)`) or reads
-  `any <Rank> <Person>` below them.
+- The recipes of a row keep route order (the order the route learns them), whatever their rank:
+  a trainer teaches every recipe up to its rank's cap, so no row names a second trainer for a lower
+  recipe.
 - A trainer recipe that no earlier visit of its rank can teach gets a visit of its own at the skill
   the route needs it, and later recipes of that rank with a required skill at or below that skill
   join it: a recipe needed at 240 and used then, and one at 245, make two rows; when the first isn't
@@ -120,8 +117,7 @@ Write it for that.
   way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
   their own three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip
   for the goal recipe always says there is no other way. Below Artisan it is a stop in a capital:
-  `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`, with a
-  recipe below the stop's rank noted after the place: `(if <trainer> doesn't list <recipe>: <who>)`.
+  `Learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`.
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
   later stops of that rank read `Learn <recipes> at any <Rank> <Person> in a capital.` Without
   the faction or the trainer in the data the row says so (`back to the Master Enchanter in a set
