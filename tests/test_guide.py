@@ -439,23 +439,6 @@ class TrainerRowTests(unittest.TestCase):
             (row,) = self.lines(text, "- **Trip:**")
             self.assertIn("Zarn Runeweaver, inside Uldaman. Go with a group from about level 37, " + tail, row)
 
-    def test_faction_note_shown_to_its_faction(self):
-        from yap_forever import trainer_notes
-        from yap_forever.trainer_notes import Notes
-        brikk = trainer_notes.load_notes().trainers[2836]  # the shipped note, on the fixture's Master Blacksmith
-        notes = Notes({90001: brikk}, {})
-        ranks = [(60, 150), (200, 225), (275, 300)]
-        for faction, said, hidden in (("alliance", "A long first trip for Alliance.", "Horde"),
-                                      ("horde", None, "Alliance")):
-            (row,) = [l for l in self.lines(self.route(ranks, faction=faction, notes=notes), "- **Trip:**")
-                      if "rank to 300" in l]
-            self.assertIn("A safe neutral town.", row)
-            self.assertNotIn(hidden, row)
-            if said:
-                self.assertIn("A safe neutral town. " + said, row)
-            else:
-                self.assertNotIn("long first trip", row)
-
     def test_city_row_says_the_cities_tip(self):
         from yap_forever.trainer_notes import Notes
         text = self.route([(60, 150)], faction="alliance", notes=Notes({}, {1519: "A tip."}),
@@ -606,6 +589,23 @@ class TrainerRowTests(unittest.TestCase):
         self.assertEqual(text.count("Trainer names are left out"), 1)
         self.assertLess(text.index("Trainer names are left out"), text.index("## Keep while levelling"))
         self.assertIn("set town", text)
+
+    def test_faction_note_shown_to_its_faction(self):
+        from yap_forever import trainer_notes
+        from yap_forever.trainer_notes import Notes
+        brikk = trainer_notes.load_notes().trainers[2836]  # the shipped note, on the fixture's Master Blacksmith
+        notes = Notes({90001: brikk}, {})
+        ranks = [(60, 150), (200, 225), (275, 300)]
+        for faction, said, hidden in (("alliance", "A long first trip for Alliance.", "Horde"),
+                                      ("horde", None, "Alliance")):
+            (row,) = [l for l in self.lines(self.route(ranks, faction=faction, notes=notes), "- **Trip:**")
+                      if "rank to 300" in l]
+            self.assertIn("A safe neutral town.", row)
+            self.assertNotIn(hidden, row)
+            if said:
+                self.assertIn("A safe neutral town. " + said, row)
+            else:
+                self.assertNotIn("long first trip", row)
 
 
 class KeepGreensGuideTests(unittest.TestCase):

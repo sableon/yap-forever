@@ -216,8 +216,8 @@ def _named(info: TrainerInfo | None, profession: int, cap: int, limit: int) -> l
 
 
 def visit_trainer(info: TrainerInfo | None, profession: int, cap: int, remote: bool) -> str:
-    """The trainer of a visit, for "if <it> doesn't list it": the name when the row names one trainer,
-    else "the <Rank> <Person>"."""
+    """The trainer of a visit, for the "learned at <it>" and "learn it at <it> if you don't have it" pointers: the
+    name when the row names one trainer, else "the <Rank> <Person>"."""
     named = _named(info, profession, cap, MAX_REMOTE) if remote else []
     return named[0][0].name if len(named) == 1 else f"the {RANK_BY_CAP[cap]} {person(profession)}"
 
