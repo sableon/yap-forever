@@ -622,10 +622,12 @@ class _Route:
 
     def _merge_step(self, prof, s, r, crafts, step_cost, parts):
         """The skill point from s to s + 1 joins the last step when that crafts the same recipe up to s,
-        or starts a new step."""
+        or starts a new step. A rank trained at s ends the profession's step there: no step spans a training."""
         mats, from_stock, used_made, extra, bought, from_mail, tools_mailed = parts
         last = self.p.steps[-1] if self.p.steps else None
-        if last and last.profession == prof and last.spell_id == r.spell_id and last.skill_to == s:
+        trained_here = any(p == prof and sk == s for p, sk, _cap, _fee in self.p.ranks)
+        if (last and last.profession == prof and last.spell_id == r.spell_id and last.skill_to == s
+                and not trained_here):
             last.skill_to = s + 1
             last.crafts += crafts
             last.buffered += crafts * buffer_factor(crafts)

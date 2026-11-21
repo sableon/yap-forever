@@ -614,3 +614,36 @@ class GreensForDisenchantingTests(unittest.TestCase):
         p = plan(gd, Valuer(toy.market(listings), gd, st), st, toy.NO_FAVOR, caps={BS: 20, ENCH: 20})
         self.assertEqual(p.final_skill[ENCH], 20)
         self.assertNotIn(toy.BELT, p.held_for_de)
+
+
+class RankCutTests(unittest.TestCase):
+    """A rank training ends the profession's Step: no Step spans the skill a rank was trained at."""
+
+    def master_route(self, recipes=None):
+        return toy.master_route_data(recipes)[0]
+
+    def test_step_never_spans_a_rank_training(self):
+        p = self.master_route()
+        self.assertEqual([(s, cap) for _p, s, cap, _f in p.ranks], [(75, 150), (150, 225), (225, 300)])
+        steps = [s for s in p.steps if s.profession == BS and s.spell_id == 1]
+        for _prof, trained, _cap, _fee in p.ranks:
+            self.assertFalse([s for s in steps if s.skill_from < trained < s.skill_to], trained)
+            self.assertTrue(any(s.skill_to == trained for s in steps), trained)  # one Step ends there
+            self.assertTrue(any(s.skill_from == trained for s in steps), trained)  # and one starts there
+        self.assertEqual([(s.skill_from, s.skill_to) for s in steps], [(1, 75), (75, 150), (150, 225), (225, 300)])
+
+    def test_totals_unchanged_by_the_cut(self):
+        # a yellow-then-grey recipe so crafts and buffers differ; the literals are what main (df91a1e) gives
+        rs = [toy.recipe(1, "BS yellow", BS, {toy.COPPER_BAR: 2}, (toy.STONE, 1), t=(1, 60, 150, 320)),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        p = self.master_route(rs)
+        self.assertEqual([(s.skill_from, s.skill_to) for s in p.steps], [(1, 75), (75, 150), (150, 225), (225, 300)])
+        self.assertEqual(p.cash_total, 157950)
+        self.assertAlmostEqual(p.economic_total, 156510.11866886253, places=6)
+        self.assertAlmostEqual(sum(s.crafts for s in p.steps), 719.9406655687324, places=6)
+        self.assertAlmostEqual(sum(s.buffered for s in p.steps), 818.9317654040408, places=6)
+        self.assertEqual(p.fees, 13950)
+        self.assertEqual(sum(s.cash for s in p.steps), 144000)  # what the Steps carry, as on main
+        self.assertEqual(sum(s.economic for s in p.steps), 144000)
+        self.assertAlmostEqual(sum(s.materials[toy.COPPER_BAR] for s in p.steps), 1439.881331137465, places=6)
+        self.assertAlmostEqual(p.bought[toy.COPPER_BAR], 1439.8813311374647, places=6)

@@ -58,7 +58,8 @@ Write it for that.
 
 - A route is laid out in stages that end where each rank is trained. A rank can be trained
   anywhere from its required skill to the cap (50–75, 125–150, 200–225, 275–300): train it on the
-  trip that learns a trainer recipe, as written guides do.
+  trip that learns a trainer recipe, as written guides do. A run that crosses a rank training is
+  two rows, one in each stage.
 - Trips away from home are rank training to 225 and 300 (Artisan and Master trainers sit in set
   towns), trips back to them for recipes, vendor-sold patterns and the Merchant's Favor vendor. Say
   a trip is needed, how to avoid a second one (buy every vendor pattern on one visit; patterns can be

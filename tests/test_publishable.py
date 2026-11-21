@@ -314,6 +314,12 @@ class PublishableTests(unittest.TestCase):
             self.assertIn(f"({text})", layout)
         self.assertIn("in one go", coverage)
 
+    def test_docs_promise_runs_at_trainings(self):
+        """#87, #91: list-layout.md says a run that crosses a rank training is two rows, one in each stage
+        (tests/test_guide.py RunAcrossTrainingGuideTests, tests/test_shopping.py RunAtTrainingTests)."""
+        layout = " ".join((SKILL / "references" / "list-layout.md").read_text(encoding="utf-8").split())
+        self.assertIn("A run that crosses a rank training is two rows, one in each stage.", layout)
+
 
 if __name__ == "__main__":
     unittest.main()
