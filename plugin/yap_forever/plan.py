@@ -17,7 +17,7 @@ from yap_forever.profile import CAPITAL_NAMES, report_name
 from yap_forever.quests import QuestPlan, load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
-from yap_forever.shopping import gold_to_bring, render_shopping
+from yap_forever.shopping import render_shopping
 from yap_forever.trips import (AS_NEEDED, FREE_SKIP, MAX_TRIP_ALTS, Trip, alternatives, route_capitals,
                                trip_alternatives, visit_count)
 
@@ -252,8 +252,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     per_mode = {m: inputs for m in routes}  # each route's own targets: a budget cuts each at its own stops
     cuts: dict[str, budget_cut.BudgetCut] = {}
 
-    def gold_of(p):
-        return gold_to_bring(p, gd, market, stock)
+    gold_of = budget_cut.gold_measure(target, gd, market, stock)  # the cut, its free skips and its spent alike
     if target is not None:
         cache = {budget_cut.key(caps): (routes, same, None)}  # the routes without vendor credit: planned if needed
         cuts = {m: budget_cut.cut(inputs, m, target, gold_of, cache) for m in routes}

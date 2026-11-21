@@ -208,8 +208,13 @@ def step_place(plan, v: Visit) -> int:
     """Where a visit comes in route order: the index in plan.steps of its profession's levelling step that starts at its
     skill, or that its skill falls in (a run of one recipe is one step: the other profession's skill is then read where
     the run starts, never later); len(plan.steps) after the last."""
+    return step_at(plan, v.profession, v.skill)
+
+
+def step_at(plan, profession: int, skill: int) -> int:
+    """Where `profession` at `skill` comes in route order (see step_place)."""
     return next((j for j, st in enumerate(plan.steps)
-                 if st.profession == v.profession and st.skill_from < st.skill_to and st.skill_to > v.skill),
+                 if st.profession == profession and st.skill_from < st.skill_to and st.skill_to > skill),
                 len(plan.steps))
 
 

@@ -278,7 +278,7 @@ class FeaturesTogetherTests(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def reports(self, trainer_trips):
+    def reports(self, trainer_trips, target=None):
         from unittest import mock
 
         from yap_forever import gamedata, plan as plan_mod, profile
@@ -286,7 +286,7 @@ class FeaturesTogetherTests(unittest.TestCase):
         with mock.patch.object(gamedata, "load_gamedata", return_value=self.gd):
             table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", {BS: Goal(skill=300)},
                                                   profile.Character("Alt", trainer_trips=trainer_trips),
-                                                  target=Budget(1))
+                                                  target=target or Budget(1))
         return table, {k: v.read_text(encoding="utf-8") for k, v in files.items()}
 
     def test_budget_one_go_and_bags_agree(self):
@@ -310,6 +310,20 @@ class FeaturesTogetherTests(unittest.TestCase):
         self.assertEqual(len(trips), 2)
         self.assertIn("at 200 for BS trainer (1s 0c)", trips[1])
         self.assertNotIn("Plans: Something (from", trips[0])
+
+
+    def test_the_budgets_pay_measures_the_cut_and_its_skips(self):
+        # #97 part 3: write_reports takes one measure from the budget's pay, for the cut, its free skips and the gold
+        # the cut route spends
+        from unittest import mock
+
+        from yap_forever.shopping import gold_as_you_go
+        for pay in budget.PAYS:
+            with self.subTest(pay=pay), mock.patch.object(budget, "gold_measure", wraps=budget.gold_measure) as made, \
+                    mock.patch("yap_forever.budget.gold_as_you_go", wraps=gold_as_you_go) as went:
+                self.reports("as_needed", Budget(1, pay=pay))
+                self.assertEqual([c.args[0].pay for c in made.call_args_list], [pay])
+                self.assertEqual(went.called, pay == "as_you_go")
 
 
 GEAR = 7811  # a made-up craft that sells to a vendor for 2s
@@ -465,6 +479,38 @@ class UncreditedFallbackTests(unittest.TestCase):
         with mock.patch.object(plan_mod, "candidates", side_effect=planned):
             c = budget.cut(i, "gold", Budget(1), lambda p: p.cash_total)
         self.assertEqual((c.caps, c.credited, c.stops_early, c.stalled, c.next_stop), ({BS: 75}, False, {}, {}, {}))
+
+
+class PayTests(unittest.TestCase):
+    """#97 part 3 (owner, 2026-11-21): with pay = "as_you_go" a budget is compared with the gold enough up front when
+    crafts are sold to a vendor as you go (shopping.gold_as_you_go), with "upfront" (the default) with "Gold to bring"."""
+
+    def test_budget_pay_as_you_go_fits(self):
+        # the route to 16 spends 10g then 5g and the first row's crafts bring 4g back: 15g to bring, 11g as you go. A 12g
+        # budget misses the stop paying up front (nothing planned, the stop costs 15g) and reaches it as you go (11g)
+        import dataclasses
+        from unittest import mock
+
+        from tests.test_shopping import wares_route
+        from yap_forever import plan as plan_mod
+        from yap_forever.planner import Plan
+        full, gd, market, st = wares_route()
+
+        def planned(sub, vendor_credit=True):
+            p = full if sub.caps[BS] == 16 else Plan(final_skill={BS: 1})
+            return [dataclasses.replace(p, vendor_credit=vendor_credit)]
+        i = PlanInputs(gd=gd, market=market, stock=st, favor=toy.NO_FAVOR, caps={BS: 16}, craft_once={}, quests={})
+        with mock.patch.object(plan_mod, "candidates", side_effect=planned):
+            for mode in ("gold", "value"):
+                with self.subTest(mode=mode):
+                    up = budget.cut(i, mode, Budget(12))
+                    self.assertEqual((up.caps, up.spent, up.next_stop), ({BS: 1}, 0, {BS: (16, 150000)}))
+                    self.assertEqual(budget.cut(i, mode, Budget(12, pay="upfront")).caps, {BS: 1})
+                    go = budget.cut(i, mode, Budget(12, pay="as_you_go"))
+                    self.assertEqual((go.caps, go.spent, go.next_stop, go.credited), ({BS: 16}, 110000, {}, True))
+                    self.assertEqual(len(go.plan.steps), 2)
+        self.assertEqual([budget.gold_measure(Budget(12, pay=pay), gd, market, st)(full) for pay in budget.PAYS],
+                         [150000, 110000])
 
 
 if __name__ == "__main__":
