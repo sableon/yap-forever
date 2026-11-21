@@ -51,8 +51,10 @@ Write it for that.
 
 ## Crafted items
 
-- Green crafts are not sold when the player (or another of their characters) can disenchant:
-  mark them for disenchanting and leave their value out of "leftovers sell for".
+- Green crafts the route's Enchanting can disenchant are held for disenchanting or sold to a vendor,
+  whichever is worth more (held too while disenchanting still gives Enchanting skill); with no
+  Enchanting planned, `keep_greens` keeps them for another character's ([setup.md](setup.md), "Green
+  crafts"). A green held or kept is marked for disenchanting and left out of what the crafts sell for.
 - Whites are vendored or parked in the mail (send and return) until there's time to sell.
 - A route row whose crafts go to a vendor ends `→ sell to a vendor: about <gold> back`, or
   `→ sell up to <n> on the AH (about <price> each), the rest to a vendor: about <gold> back`:

@@ -599,6 +599,21 @@ class PublishableTests(unittest.TestCase):
                       "either fits.", setup)
 
 
+    def test_docs_final_review_wording(self):
+        """Final review, Minors 10 and 11: list-layout.md's greens bullet follows the rule (held or vendored, whichever
+        is worth more: planner._Route._should_hold), and coverage.md's budget bullet names a recipe goal and `pay`."""
+        def read(name):
+            return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
+        layout, coverage = read("list-layout.md"), read("coverage.md")
+        self.assertIn("Green crafts the route's Enchanting can disenchant are held for disenchanting or sold to a "
+                      "vendor, whichever is worth more", layout)
+        self.assertNotIn("Green crafts are not sold when", layout)
+        bullet = coverage[coverage.index("- A budget as a goal"):coverage.index("Not yet")]
+        for clause in ("a recipe target under a budget too, whose last stop is the recipe crafted once",
+                       "`pay` says whether the budget is the gold to buy everything up front or the gold enough "
+                       "selling crafts to a vendor as you go"):
+            self.assertIn(clause, bullet)
+
     def test_docs_promise_two_ways_to_pay(self):
         """#97 part 3: game-rules.md says what "Gold to bring" is and that selling crafts as you go needs less up front;
         setup.md gives the `pay` key and flag, list-layout.md the shopping list's line, and SKILL.md asks the question
