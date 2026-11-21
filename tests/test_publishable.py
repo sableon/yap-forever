@@ -472,7 +472,8 @@ class PublishableTests(unittest.TestCase):
                      "with each capital's tip ([game-rules.md](references/game-rules.md), \"Trainers and ranks\")",
                      "for the other one, **level that stage there in one go, or go as needed?**",
                      "Save the answers as `capital` and `trainer_trips`",
-                     "One `trainer_trips` answer covers both kinds of trip: the other capital and the remote trainers",
+                     "One `trainer_trips` answer covers both kinds of trip: the other capital and the remote trainers "
+                     "(every Master, the Artisan Enchanters); tell the player so when you ask",
                      "With one capital, say where the guide starts and ask nothing."):
             self.assertIn(line, step3)
         tips, city = load_notes().cities, {zone: key.replace("_", " ").title() for key, zone in CAPITAL_NAMES.items()}

@@ -1403,7 +1403,6 @@ class JoinedStopGuideTests(unittest.TestCase):
         self.assertNotIn("trade supplies", self.render())  # Iron Bar comes from the AH
         self.assertNotIn("trade supplies", self.render(reagent=toy.ROD, items={toy.ROD: 200}))  # all in the bank
 
-
     def test_joined_row_keeps_the_first_stops_skip_clause(self):  # P34: the first stop's own, after its trainer
         text = self.render(alts={(71, 72): 30000, (81,): 4600})
         self.assertIn("at an Expert Alchemist; or skip it: +3.0g for the route without it, and Eng contact (2s 70c) at an "

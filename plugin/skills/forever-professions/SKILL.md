@@ -69,8 +69,8 @@ when a question or answer needs it.
    stage there in one go, or go as needed?** Save the answers as `capital` and `trainer_trips` under
    `[characters."Name"]` in `profile.toml` ([setup.md](references/setup.md), step 2). One
    `trainer_trips` answer covers both kinds of trip: the other capital and the remote trainers (every
-   Master, the Artisan Enchanters), so step 5 doesn't ask again. With one capital, say where the guide
-   starts and ask nothing.
+   Master, the Artisan Enchanters); tell the player so when you ask, and step 5 doesn't ask again. With
+   one capital, say where the guide starts and ask nothing.
 4. **Refresh prices** with `<planner> prices`. If the API can't be reached, use a fallback and
    tell the player what it can't give ([setup.md](references/setup.md), step 5):
    `<planner> prices --remote` or `<planner> prices --auctionator PATH`.
