@@ -251,8 +251,8 @@ def alternatives(base, inputs, mode, cache: dict | None = None, trainer_trips: s
 def trip_alternatives(base, inputs, mode, cache: dict | None = None, trainer_trips: str = AS_NEEDED,
                       excluded: frozenset[int] = frozenset()) -> dict[int | tuple[int, ...], float | None]:
     """What the route costs more without a trip's recipes, in the route's own measure, by Trip.key; None when
-    the targets can't be reached without them. For the costliest MAX_TRIP_ALTS vendor and Favor trips (by
-    pattern price), and apart from them the costliest MAX_TRIP_ALTS recipe trips (by their fees); a recipe
+    the targets can't be reached without them. For the costliest MAX_TRIP_ALTS vendor trips (by pattern price; a
+    Favor trip is always a target's, never measured), and apart from them the costliest MAX_TRIP_ALTS recipe trips (by their fees); a recipe
     trip for the goal recipe is always None.
     inputs: the plan.PlanInputs the route was planned from. cache: routes planned without some recipes, kept
     by the caller across calls (by mode, targets and the recipes left out), so none is planned twice.

@@ -2,8 +2,9 @@
 
 Favor recipes are personal-use rewards: the route never levels with them (planner._Route._may_use), and the
 guide and the report suggest the ones the character could make now for itself. A recipe is suggested when:
-- it crafts an item whose required level is near the character's (`level_ok`); an enchant (no crafted item)
-  has no level test;
+- it crafts an item whose required level is near the character's (`level_ok`); an item with required level 0
+  (no requirement) and an enchant (no crafted item) have no level test; with no `level` in the stock file, only
+  those are suggested;
 - the character's skill is at least the recipe's Favor skill, and its Favor at least the price;
 - its materials, taken from the bank, then mailed by the group's other characters, the rest bought at today's
   AH or vendor price, cost at most the group's gold (before the route);
@@ -24,6 +25,7 @@ GUIDE_LIMIT = 6  # items, then enchants, the guide lists of each kind; the rest 
 INTRO = ("Merchant's Favor recipes to craft once for yourself, if you don't have the item yet. They are not part of "
          "the route, its shopping list or its gold.")
 HEADING = "## You could also make"
+NO_LEVEL_NOTE = "Set level in stock.toml to get Merchant's Favor item suggestions."
 WHERE = {("ah",): "on the AH", ("vendor",): "from a vendor", ("ah", "vendor"): "on the AH and from a vendor"}
 
 
@@ -33,7 +35,7 @@ class Suggestion:
     name: str
     profession: int
     skill: int  # the recipe's Favor skill
-    level: int | None  # the crafted item's required level; None for an enchant
+    level: int | None  # the crafted item's required level (0: none); None for an enchant
     favor: int  # its Favor price
     gold: float  # copper: the materials not held, at today's AH or vendor price
     from_bank: dict[int, int]  # item -> count from your bank
@@ -81,7 +83,7 @@ def suggest(gd, favor, stock, valuer, gold_copper, shared, goal_spells) -> list[
     config.Stock (skills, level, Favor and bank); valuer: prices (costmodel.Valuer.buy_option); gold_copper: the
     group's gold (shared.Budget.copper, else the stock's cash_gold); shared: the other characters' mailable items,
     by name; goal_spells: the craft-once goals, left out. Items nearest the character's level first, then by Favor
-    price; then the enchants, by Favor price."""
+    price, then the items with no level requirement, by Favor price; then the enchants, by Favor price."""
     out = []
     for spell, r in apply_favor(gd.recipes, favor).items():
         if r.source != "favor" or spell not in favor.recipes or spell in goal_spells:
@@ -93,14 +95,14 @@ def suggest(gd, favor, stock, valuer, gold_copper, shared, goal_spells) -> list[
         if r.output:
             info = gd.items.get(r.output[0])
             level = info.required_level if info else None
-            if not level_ok(stock.level, level):
+            if level != 0 and not (stock.level_set and level_ok(stock.level, level)):
                 continue
         mats = _materials(r, stock, valuer, shared)
         if mats is None or mats[0] > gold_copper:
             continue
         out.append(Suggestion(spell, recipe_name(spell, r.name, gd), r.skill_line, r.required_skill, level, price,
                               *mats))
-    out.sort(key=lambda s: (s.level is None, abs(stock.level - s.level) if s.level is not None else 0, s.favor,
+    out.sort(key=lambda s: (s.level is None, s.level == 0, abs(stock.level - s.level) if s.level else 0, s.favor,
                             s.name, s.spell))
     return out
 
@@ -112,7 +114,7 @@ def _and(parts: list[str]) -> str:
 def _row(s: Suggestion, gd, favor_owned: int) -> str:
     what = PROFESSIONS.get(s.profession, str(s.profession)) + f" {s.skill}"
     if s.level is not None:
-        what += f", for level {s.level}"
+        what += f", for level {s.level}" if s.level else ", any level"
     held = []
     if s.from_bank:
         counts = sorted((gd.name(i), n) for i, n in s.from_bank.items())
@@ -120,10 +122,10 @@ def _row(s: Suggestion, gd, favor_owned: int) -> str:
     if s.from_mail:
         held.append(mail_text(s.from_mail, gd.name))
     if s.gold > 0:
-        mats = " " + ", ".join([f"about {gold_text(s.gold)} {WHERE[s.bought]}", *held])
+        mats = "; materials " + ", ".join([f"about {gold_text(s.gold)} {WHERE[s.bought]}", *held])
     else:
-        mats = ": " + ", ".join(held)
-    return f"- **{s.name}** ({what}): {s.favor} of your {favor_owned} Favor; materials{mats}."
+        mats = "; materials: " + ", ".join(held) if held else ""  # a recipe with no reagents says none
+    return f"- **{s.name}** ({what}): {s.favor} of your {favor_owned} Favor{mats}."
 
 
 def lines(found: list[Suggestion], gd, favor_owned: int, heading: str = HEADING, limit: int | None = None) -> list[str]:

@@ -135,6 +135,26 @@ class SuggestTests(unittest.TestCase):
         case.favor.recipes[2] = 10
         self.assertEqual(case.spells(), [1])
 
+    def test_level_zero_item(self):
+        # RequiredLevel 0: no level requirement, so no level test, as for an enchant; listed with the items, by Favor
+        # price, after the level-matched ones
+        recipes = ((1, "Any staff", STAFF, 10, 0), (2, "Near orb", ORB, 60, 30), (3, "Enchant A", None, 5, None),
+                   (4, "Any wand", WAND, 5, 0))
+        case = Case(recipes=recipes, level=48)
+        self.assertEqual(case.spells(), [4, 1, 3])  # level 30 is out at 48
+        self.assertEqual(Case(recipes=recipes).spells(), [2, 4, 1, 3])
+        self.assertEqual(case.run()[0].level, 0)
+        row = lines(case.run(), case.gd, 150)[4]
+        self.assertTrue(row.startswith("- **Any wand** (Enchanting 100, any level): 5 of your 150 Favor;"), row)
+
+    def test_level_not_set(self):
+        # a stock file without `level` (it reads 1): no item with a level is suggested; level-0 items and enchants are
+        recipes = ((1, "Staff", STAFF, 10, 1), (2, "Any wand", WAND, 5, 0), (3, "Enchant A", None, 5, None))
+        case = Case(recipes=recipes, level=1)
+        self.assertEqual(case.spells(), [1, 2, 3])
+        case.stock.level_set = False
+        self.assertEqual(case.spells(), [2, 3])
+
 
 class LinesTests(unittest.TestCase):
     INTRO = ("Merchant's Favor recipes to craft once for yourself, if you don't have the item yet. They are not part "
@@ -165,6 +185,14 @@ class LinesTests(unittest.TestCase):
         rows = [Suggestion(1, "Staff of Ana", ENCH, 100, 30, 50, 1000, {}, {}, ("ah",))]
         self.assertEqual(lines(rows, gd, 150, heading="**You could also make**")[:2],
                          ["**You could also make**", ""])
+
+    def test_no_materials(self):
+        # a recipe with no reagents: no materials clause, never "materials: ."
+        case = Case()
+        case.gd.recipes[1].reagents = {}
+        found = case.run(gold=0)
+        self.assertEqual(lines(found, case.gd, 150)[4],
+                         "- **Staff of Ana** (Enchanting 100, for level 30): 50 of your 150 Favor.")
 
     def test_levels_known(self):
         case = Case()

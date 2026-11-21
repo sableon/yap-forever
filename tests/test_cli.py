@@ -679,7 +679,6 @@ class FreeSkipReportTests(unittest.TestCase):
         self.assertIn("at 240 for BS late 1.", guide)  # the trip back stays
 
 
-
 class CouldAlsoMakeWiringTests(unittest.TestCase):
     """#95 through write_reports: a Merchant's Favor recipe the character could make is suggested in both guides and
     reports, its materials from the group's mail and priced against the group's gold ([gold], not cash_gold); a Favor
@@ -713,7 +712,7 @@ class CouldAlsoMakeWiringTests(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def reports(self, goal=None, gold=1.0, alone=False):
+    def reports(self, goal=None, gold=1.0, alone=False, favor=None):
         from unittest import mock
 
         from yap_forever import gamedata, plan as plan_mod
@@ -722,7 +721,7 @@ class CouldAlsoMakeWiringTests(unittest.TestCase):
         from yap_forever.shared import Group
         group = None if alone else Group(2, "alliance", gold, {"Bram Ironhide": self.bram})
         with mock.patch.object(gamedata, "load_gamedata", return_value=self.gd), \
-                mock.patch.object(plan_mod, "load_favor", return_value=FavorData({7: 30}, {7: 25}, [])):
+                mock.patch.object(plan_mod, "load_favor", return_value=favor or FavorData({7: 30}, {7: 25}, [])):
             _table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", {164: goal or Goal(skill=40)},
                                                    group=group)
         return {k: v.read_text(encoding="utf-8") for k, v in files.items()}
@@ -754,33 +753,40 @@ class CouldAlsoMakeWiringTests(unittest.TestCase):
         self.assertNotIn("You could also make", texts["guide-gold"])
         self.assertIn("Spent 30 of 40 Favor.", texts["plan-gold"])
 
+    def test_level_not_set_says_so(self):
+        # a stock file without `level`: no item is suggested, and the guide's notes and the report's data notes say why
+        line = "- Set level in stock.toml to get Merchant's Favor item suggestions."
+        with_level = self.reports()
+        self.assertNotIn(line, with_level["guide-gold"] + with_level["plan-gold"])
+        self.stock.write_text("favor = 40\ncash_gold = 5\n[skills]\nblacksmithing = 30\n[items]\n", encoding="utf-8")
+        texts = self.reports()
+        for m in ("gold", "value"):
+            guide, report = texts[f"guide-{m}"], texts[f"plan-{m}"]
+            self.assertNotIn("Plate of Ana", guide)
+            self.assertIn(line, guide[guide.index("## Notes"):])
+            self.assertIn(line, report[report.index("## Data notes"):])
+
     def test_guide_cut_report_complete(self):
         # the guide lists at most favor_suggest.GUIDE_LIMIT of each kind (1 here), the report every suggestion
         from unittest import mock
 
         from tests import toy
         from yap_forever import favor_suggest
+        from yap_forever.favor import FavorData
         from yap_forever.gamedata import ItemInfo
         self.gd.recipes[8] = toy.recipe(8, "Helm of Ana", 164, {toy.IRON_BAR: 3}, (9002, 1), source="scroll",
                                         scroll=toy.SCROLL)
         self.gd.items[9002] = ItemInfo(9002, "Helm of Ana", 2, 25, 4, 100, 400, bonding=2, required_level=22)
-        from yap_forever import plan as plan_mod
-        favor = plan_mod.FavorData({7: 30, 8: 30}, {7: 25, 8: 25}, [])
-        with mock.patch.object(favor_suggest, "GUIDE_LIMIT", 1), mock.patch.object(plan_mod, "load_favor",
-                                                                                  return_value=favor):
-            from yap_forever import gamedata
-            from yap_forever.config import Goal
-            from yap_forever.shared import Group
-            with mock.patch.object(gamedata, "load_gamedata", return_value=self.gd):
-                _table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", {164: Goal(skill=40)},
-                                                       group=Group(2, "alliance", 1.0, {"Bram Ironhide": self.bram}))
-        guide, report = (files[k].read_text(encoding="utf-8") for k in ("guide-gold", "plan-gold"))
+        with mock.patch.object(favor_suggest, "GUIDE_LIMIT", 1):
+            texts = self.reports(favor=FavorData({7: 30, 8: 30}, {7: 25, 8: 25}, []))
+        guide, report = texts["guide-gold"], texts["plan-gold"]
         self.assertIn("- **Helm of Ana**", guide)  # level 22, the character's: first
         self.assertNotIn("- **Plate of Ana**", guide)
         self.assertIn("\n\nand 1 more.\n", guide)
         self.assertIn("- **Helm of Ana**", report)
         self.assertIn("- **Plate of Ana**", report)
         self.assertNotIn("and 1 more.", report)
+
 
 if __name__ == "__main__":
     unittest.main()

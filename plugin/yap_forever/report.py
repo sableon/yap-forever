@@ -3,8 +3,8 @@ import math
 from collections import defaultdict
 
 from yap_forever.budget import amount
-from yap_forever.favor_suggest import levels_known
 from yap_forever.costmodel import Valuer, money
+from yap_forever.favor_suggest import levels_known
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
 from yap_forever.guide import NOTHING_IN_BUDGET
 from yap_forever.planner import DISENCHANT, reached_lines, step_factor

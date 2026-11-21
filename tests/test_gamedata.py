@@ -136,9 +136,9 @@ class GameDataTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             shutil.copytree(FIX, Path(d) / "gd")
             sparse = Path(d) / "gd" / "ItemSparse.csv"
-            head, *rows = sparse.read_text().splitlines()
+            head, *rows = sparse.read_text(encoding="utf-8").splitlines()
             rows = [f"{r},{levels.get(int(r.split(',')[0]), '7')}" for r in rows]
-            sparse.write_text("\n".join([head + ",RequiredLevel", *rows]) + "\n")
+            sparse.write_text("\n".join([head + ",RequiredLevel", *rows]) + "\n", encoding="utf-8")
             gd = gamedata.load_gamedata(Path(d) / "gd")
         self.assertEqual({i: gd.items[i].required_level for i in levels}, {2840: 45, 2851: 0, 2857: None})
         self.assertEqual(gd.items[2840].bonding, 0)  # the other columns read as before

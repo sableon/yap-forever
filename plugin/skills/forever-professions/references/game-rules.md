@@ -91,13 +91,16 @@ say so.
   ([list-layout.md](list-layout.md), "You could also make"), for the character's standing, when
   the crafted item's required level is within 5 levels of the character's level (within 3 from
   character level 46): gear far below the character is outgrown, gear far above can't be worn yet.
-  An item whose required level the game data doesn't give is not suggested; an enchant, which
-  crafts no item, has no level test (a level taken from the same skill's items would hide the
-  necklace enchants from a character who made one). The character's current skill must reach the
+  An item whose required level the game data doesn't give is not suggested; an item with required
+  level 0 (no requirement) has no level test, nor has an enchant, which crafts no item (a level
+  taken from the same skill's items would hide the necklace enchants from a character who made
+  one). The character's current skill must reach the
   recipe's Favor skill, and its Favor the price. The materials come from the bank first, then by
   mail from the group's other characters, and the rest is bought at today's AH or vendor price;
   that gold must fit the group's gold, before the route. A reagent with no price that nobody holds
-  rules the recipe out. A craft-once target is not suggested: the route plans it.
+  rules the recipe out. A craft-once target is not suggested: the route plans it. Without `level` in
+  `stock.toml` only the items with no level requirement and the enchants are suggested, and the guide
+  and the report say to set it.
 
 ## Legacy talents
 

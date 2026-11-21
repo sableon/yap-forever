@@ -246,9 +246,10 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     # Favor recipes to craft once, apart from the route: the group's gold before the route, and the group's mail
     found = favor_suggest.suggest(gd, favor, stock, Valuer(market, gd, stock),
                                   budget.copper if budget is not None else stock.cash,
-                                  getattr(stock, "shared", {}), set(once.values()))
+                                  stock.shared, set(once.values()))
     could_guide = favor_suggest.lines(found, gd, stock.favor, limit=favor_suggest.GUIDE_LIMIT)  # the report: all
     could_report = favor_suggest.lines(found, gd, stock.favor, heading="**You could also make**")
+    level_note = [favor_suggest.NO_LEVEL_NOTE] if favor.recipes and not stock.level_set else []
     if cuts:  # once per set of caps the cuts landed on
         savings = {}
         for k in {budget_cut.key(c.planned_caps) for c in cuts.values()}:
@@ -278,7 +279,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         empty = m in cuts and cuts[m].below_first_stop
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,
-                               notes=group.notes() if group else (), budget_lines=said, goal=target,
+                               notes=[*(group.notes() if group else ()), *level_note], budget_lines=said, goal=target,
                                nothing_in_budget=empty, free_skips=skips, could_make=could_report),
                         encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"
@@ -289,7 +290,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                        study_hint_gold_per_point=study_hint_gold_per_point,
                                        budget_lines=said, order=inputs.order, nothing_in_budget=empty,
                                        trainer_trips=trainer_trips, free_skips=skips, could_make=could_guide,
-                                       extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else [])]),
+                                       extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else []),
+                                                    *level_note]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
     return table, files
