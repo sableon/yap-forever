@@ -320,7 +320,6 @@ class PublishableTests(unittest.TestCase):
         layout = " ".join((SKILL / "references" / "list-layout.md").read_text(encoding="utf-8").split())
         self.assertIn("A run that crosses a rank training is two rows, one in each stage.", layout)
 
-
     def test_docs_promise_free_skips(self):
         """#90: list-layout.md gives the free-skip rule of plan.take_free_skips (trips.FREE_SKIP, MAX_TRIP_ALTS rounds)
         and the lines guide.free_skip_line prints (tests/test_trips.py FreeSkipTests, tests/test_cli.py
@@ -344,6 +343,7 @@ class PublishableTests(unittest.TestCase):
         self.assertNotIn("no extra cost", layout)
         self.assertIn("one that costs nothing to skip is left out of the route", setup)
         self.assertIn("a trip that costs nothing to skip is left out of the route", coverage)
+
 
 if __name__ == "__main__":
     unittest.main()

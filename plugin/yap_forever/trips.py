@@ -179,8 +179,6 @@ def trips(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED
     trip's bring list (stretch_patterns), not a trip of its own."""
     out = []
     found = visits(plan, gd, start_skills, trainer_trips)
-    carried = {(v.profession, s, spell) for v in found if trainer_trips == ONE_GO and v.kind == "rank" and v.remote
-               for s, spell, _how in stretch_patterns(plan, gd, v.profession, v.skill)}
     for v in found:
         name = PROFESSIONS.get(v.profession, v.profession)
         if v.kind == "rank" and v.remote:
@@ -189,28 +187,38 @@ def trips(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED
                             visit=v))
         elif v.kind == "recipe":
             out.append(_recipe_trip(v, gd))
+    out += _pattern_trips(plan, gd, found, trainer_trips)
+    return sorted(out, key=lambda t: (t.skill, t.kind != "vendor" and t.kind != "favor", t.profession))
+
+
+def _pattern_trips(plan, gd, found: list[Visit], trainer_trips: str) -> list[Trip]:
+    """The vendor and Favor trips of a route whose trainer visits are `found` (visits): with "one_go", a pattern
+    learned inside a remote rank's stretch is on that trip's bring list instead (stretch_patterns)."""
+    carried = {(v.profession, s, spell) for v in found if trainer_trips == ONE_GO and v.kind == "rank" and v.remote
+               for s, spell, _how in stretch_patterns(plan, gd, v.profession, v.skill)}
+    out = []
     for prof, s, spell, how in plan.learn_log:
         if how in ("vendor", "favor") and (prof, s, spell) not in carried:
             r = gd.recipes.get(spell)
             name = r.name if r else str(spell)
             cost = gd.vendor_prices.get(r.scroll_item, 0) if r and how == "vendor" and r.scroll_item else 0
             out.append(Trip(s, prof, how, name, spell, cost))
-    return sorted(out, key=lambda t: (t.skill, t.kind != "vendor" and t.kind != "favor", t.profession))
+    return out
 
 
 def visit_count(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED) -> int:
     """What the route asks of trainers and pattern sellers: its trainer visits (visits: rank trainings, trips back
     for recipes, capital stops) and its vendor and Favor trips. A free skip makes fewer of them."""
-    return len(visits(plan, gd, start_skills, trainer_trips)) + sum(
-        1 for t in trips(plan, gd, start_skills, trainer_trips) if t.kind in ("vendor", "favor"))
+    found = visits(plan, gd, start_skills, trainer_trips)
+    return len(found) + len(_pattern_trips(plan, gd, found, trainer_trips))
 
 
 def skippable(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED) -> list[Trip]:
     """The trips a route could be planned without: a trip for each "recipe" visit (visits) and the vendor and
     Favor trips (trips), in skill order."""
-    found = [_recipe_trip(v, gd) for v in visits(plan, gd, start_skills, trainer_trips) if v.kind == "recipe"]
-    found += [t for t in trips(plan, gd, start_skills, trainer_trips) if t.kind in ("vendor", "favor")]
-    return sorted(found, key=lambda t: (t.skill, t.kind == "recipe", t.profession))
+    found = visits(plan, gd, start_skills, trainer_trips)
+    out = [_recipe_trip(v, gd) for v in found if v.kind == "recipe"] + _pattern_trips(plan, gd, found, trainer_trips)
+    return sorted(out, key=lambda t: (t.skill, t.kind == "recipe", t.profession))
 
 
 def alternatives(base, inputs, mode, cache: dict | None = None, trainer_trips: str = AS_NEEDED,

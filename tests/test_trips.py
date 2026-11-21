@@ -400,6 +400,27 @@ class FreeSkipTests(unittest.TestCase):
         self.assertIs(got, without[frozenset({3})])
         self.assertEqual([t.spells for t in left], [(3,)])
 
+    def test_a_later_round_never_costs_more_than_its_route(self):
+        # without trip 3 the route is 10c cheaper; without both it is 5c dearer than that, though still under the
+        # original: only trip 3 is left out, so each "costs the same" line is true
+        from types import SimpleNamespace
+        from unittest import mock
+        from yap_forever.plan import take_free_skips
+        gd = toy.gamedata([toy.recipe(3, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=200),
+                           toy.recipe(5, "BS later", BS, {toy.IRON_BAR: 1}, req=260, fee=100)])
+        inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills={BS: 225}), craft_once={}, caps={BS: 300})
+
+        def route(learns, cost):
+            return Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300}, cash_total=cost, economic_total=cost,
+                        learn_log=[(BS, s, spell, "trainer") for spell, s in learns])
+        base = route([(3, 240), (5, 260)], 1000)
+        without = {frozenset({3}): route([(5, 260)], 990), frozenset({5}): route([(3, 240)], 1000.4),
+                   frozenset({3, 5}): route([], 995)}
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: without[exclude]):
+            got, left = take_free_skips(base, inputs, "gold", {})
+        self.assertIs(got, without[frozenset({3})])
+        self.assertEqual([t.spells for t in left], [(3,)])
+
 
 if __name__ == "__main__":
     unittest.main()

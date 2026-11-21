@@ -67,9 +67,11 @@ def _held(caps: dict[int, int], start: dict[int, int], below) -> set[str]:
 def adopt(c: BudgetCut, plan: Plan, spent: float) -> BudgetCut:
     """The cut with `plan`, the route planned to the same caps without some trips (plan.take_free_skips), as its
     route, and spent its gold to bring: each next stop costs what it did, so its extra is counted from the new
-    gold; the professions the budget holds at their start keep no "already at" event."""
+    gold; the professions the budget holds at their start keep no "already at" event (in a copy of `plan` when it
+    has one, else `plan` itself)."""
     held = _held(c.planned_caps, c.start, c.next_stop)  # held at the start: a next stop and its start as the cap
-    plan.events = [e for e in plan.events if e not in held]
+    if held & set(plan.events):  # a copy: the plan given may be a cached one
+        plan = dataclasses.replace(plan, events=[e for e in plan.events if e not in held])
     return dataclasses.replace(c, plan=plan, spent=spent,
                                next_stop={p: (s, extra + c.spent - spent) for p, (s, extra) in c.next_stop.items()})
 

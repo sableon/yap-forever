@@ -170,13 +170,15 @@ class CutTests(unittest.TestCase):
         c = budget.BudgetCut({BS: 225, ENCH: 1}, old, 500, {ENCH: (75, 900)}, {}, {BS: 225, ENCH: 1}, {BS: 1, ENCH: 1})
         new = Plan(events=["Enchanting already at 1"])
         got = budget.adopt(c, new, 400)
-        self.assertIs(got.plan, new)
+        self.assertEqual(new.events, ["Enchanting already at 1"])  # the plan given (maybe cached, shared) is unchanged
+        self.assertEqual(got.plan.cash_total, new.cash_total)
         self.assertEqual((got.spent, got.caps), (400, c.caps))
         self.assertEqual(got.next_stop, {ENCH: (75, 1000)})  # the next stop's route costs what it did: 100c more on top
         self.assertEqual(reached_lines(got.plan), [])
         c.next_stop = {}  # Enchanting's target is 1: reached, and said
-        self.assertEqual(reached_lines(budget.adopt(c, Plan(events=["Enchanting already at 1"]), 400).plan),
-                         ["Enchanting is already at 1: nothing to plan."])
+        kept = Plan(events=["Enchanting already at 1"])
+        self.assertIs(budget.adopt(c, kept, 400).plan, kept)  # nothing to drop: the same plan
+        self.assertEqual(reached_lines(kept), ["Enchanting is already at 1: nothing to plan."])
 
 
 class RenderTests(unittest.TestCase):
