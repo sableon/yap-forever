@@ -269,3 +269,53 @@ class FreeSkipNoteTests(unittest.TestCase):
         self.assertEqual(text.count(skips[0]), 1)
         self.assertLess(notes.index("- A saving line."), notes.index(f"- {skips[0]}"))
         self.assertNotIn("Planned without", render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps))
+
+
+class CouldAlsoMakeReportTests(unittest.TestCase):
+    """#95: inside "Merchant's Favor", the suggestions under a bold heading (the report's sections stay seven), and a
+    data note that Favor recipes are not used to level."""
+    BLOCK = ["**You could also make**", "", "Merchant's Favor recipes to craft once ...", "",
+             "- **Staff of Ana** (Enchanting 100, for level 30): 50 of your 150 Favor; materials about 10s on the AH.", ""]
+
+    def render(self, favor, could_make=(), levels=True):
+        from yap_forever.gamedata import ItemInfo
+        p, m, gd, st = sample()
+        if levels:
+            gd.items[9001] = ItemInfo(9001, "Staff", 2, 30, 2, 100, 400, bonding=2, required_level=30)
+        return render(p, verdict(p, st), m, gd, st, favor, {164: 225, 333: 225}, could_make=could_make)
+
+    def test_inside_merchants_favor(self):
+        from yap_forever.favor import FavorData
+        text = self.render(FavorData({1: 50}, {}, [toy_turnin()]), self.BLOCK)
+        favor = text[text.index("## Merchant's Favor\n"):text.index("## Totals\n")]
+        self.assertIn("\n".join(self.BLOCK), favor)
+        self.assertLess(favor.index("Spent 0 of 0 Favor."), favor.index("**You could also make**"))
+        self.assertLess(favor.index("**You could also make**"), favor.index("Crate turn-ins"))
+        positions = [text.index(f"## {s}\n") for s in SECTIONS]
+        self.assertEqual(positions, sorted(positions))
+        notes = text[text.index("## Data notes"):]
+        self.assertIn("- Merchant's Favor recipes are not used to level (see You could also make).", notes)
+
+    def test_data_note_without_suggestions(self):
+        from yap_forever.favor import FavorData, no_favor
+        notes = self.render(FavorData({1: 50}, {}, []))
+        notes = notes[notes.index("## Data notes"):]
+        self.assertIn("- Merchant's Favor recipes are not used to level.", notes)
+        self.assertNotIn("You could also make", notes)
+        horde = self.render(no_favor())  # no Favor recipes: nothing to say
+        self.assertNotIn("not used to level", horde)
+        self.assertNotIn("You could also make", horde)
+
+    def test_data_note_when_item_levels_are_unknown(self):
+        # C15: a cache without ItemSparse RequiredLevel gives no item a level: item suggestions are skipped, and said
+        from yap_forever.favor import FavorData
+        line = ("- Item required levels are not in the game data: Merchant's Favor items are not suggested, only "
+                "enchants.")
+        self.assertIn(line, self.render(FavorData({1: 50}, {}, []), levels=False))
+        self.assertNotIn(line, self.render(FavorData({1: 50}, {}, [])))
+
+
+def toy_turnin():
+    from yap_forever.favor import Turnin
+    return Turnin("Copper crate", {toy.COPPER_BAR: 2}, 5)
+

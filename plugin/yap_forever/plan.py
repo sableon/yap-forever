@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from yap_forever import budget as budget_cut
-from yap_forever import gamedata, trainer_text
+from yap_forever import favor_suggest, gamedata, trainer_text
 from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
 from yap_forever.config import Stock, load_stock
 from yap_forever.costmodel import Valuer
@@ -243,6 +243,12 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         routes[m] = route
     same = routes["gold"] is routes["value"]
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
+    # Favor recipes to craft once, apart from the route: the group's gold before the route, and the group's mail
+    shown, more = favor_suggest.suggest(gd, favor, stock, Valuer(market, gd, stock),
+                                        budget.copper if budget is not None else stock.cash,
+                                        getattr(stock, "shared", {}), set(once.values()))
+    could_guide = favor_suggest.lines(shown, more, gd, stock.favor)
+    could_report = favor_suggest.lines(shown, more, gd, stock.favor, heading="**You could also make**")
     if cuts:  # once per set of caps the cuts landed on
         savings = {}
         for k in {budget_cut.key(c.planned_caps) for c in cuts.values()}:
@@ -273,7 +279,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,
                                notes=group.notes() if group else (), budget_lines=said, goal=target,
-                               nothing_in_budget=empty, free_skips=skips),
+                               nothing_in_budget=empty, free_skips=skips, could_make=could_report),
                         encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
@@ -282,7 +288,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                        saving_line=line, mode=m,
                                        study_hint_gold_per_point=study_hint_gold_per_point,
                                        budget_lines=said, order=inputs.order, nothing_in_budget=empty,
-                                       trainer_trips=trainer_trips, free_skips=skips,
+                                       trainer_trips=trainer_trips, free_skips=skips, could_make=could_guide,
                                        extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else [])]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide

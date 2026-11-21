@@ -196,6 +196,27 @@ Write it for that.
 - If the trainer data can't be downloaded or read, the guide renders without names and says why
   once, near the top.
 
+## You could also make
+
+Merchant's Favor recipes the character could craft once for itself ([game-rules.md](game-rules.md),
+"Merchant's Favor"). The guide has the section after the route, before the shopping list; the report
+has it inside "Merchant's Favor", after the Favor spent, under `**You could also make**`. Neither has
+it when nothing fits, or for Horde (no Favor recipes yet):
+
+- `## You could also make`, then
+  `Merchant's Favor recipes to craft once for yourself, if you don't have the item yet. They are not part of the route, its shopping list or its gold.`
+- A row per recipe: `- **<name>** (<Profession> <skill>, for level <level>): <favor> of your <Favor> Favor; materials about <gold> on the AH, <n> <item> from your bank, <n> <item> (mail from <Name>).`
+  `<skill>` is the recipe's Favor skill, `<level>` the crafted item's required level, `<gold>` what the
+  materials not held cost at today's prices. An enchant crafts no item: `(<Profession> <skill>)`. What
+  is bought is `on the AH`, `from a vendor` or `on the AH and from a vendor`; the bank part lists each
+  item (`2 Dream Dust and 1 Star Wood from your bank`), the mail part names each sender as on the
+  shopping list. When nothing needs buying: `materials: <n> <item> from your bank`, then the mail.
+- Items first, the nearest to the character's level first, then by Favor price; then the enchants,
+  by Favor price. At most 6 rows, then `and <n> more.` in a paragraph of its own.
+- The report's data notes say `Merchant's Favor recipes are not used to level (see You could also make).`
+  (without the parenthesis when there is no section), and, when the game data gives no item a required
+  level, `Item required levels are not in the game data: Merchant's Favor items are not suggested, only enchants.`
+
 ## Budget
 
 With a budget goal ([setup.md](setup.md), "A budget as a goal"), the guide says under the comparison,
