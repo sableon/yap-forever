@@ -763,6 +763,18 @@ class GoalCraftFailsTests(unittest.TestCase):
                                 f"The next stop, Blacksmithing 150, costs about {gold(TO_150 - TO_75)} more.",
                                 f"The route stops at Blacksmithing 160: {self.WHY}."])
 
+    def test_goal_skill_out_of_reach(self):
+        # the same tail when the goal's route stalls in skill below the recipe (no usable recipe from 120, the goal at
+        # 160): the cut takes the route to where it stalls, and its line says why it ends there
+        import dataclasses
+        i = goal_inputs(req=160)
+        i.gd.recipes[1] = dataclasses.replace(i.gd.recipes[1], thresholds=(1, 120, 120, 120))
+        c = cut(i, 30)
+        self.assertEqual((c.caps, c.covered, c.next_stop), ({BS: 120}, set(), {}))
+        self.assertEqual(budget.lines(c, Budget(30)),
+                         [f"30g takes Blacksmithing to 120 ({gold(c.spent)}); the route stops there: no usable recipe "
+                          "at 120."])
+
     def test_with_the_bring_list_tail(self):
         # Minor 7 with the stop's reason on one line: the reason first, then the bring list's
         c = budget.cut(favor_goal_inputs(), "gold", Budget(3, pay="as_you_go"))
