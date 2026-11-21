@@ -44,6 +44,7 @@ class Stock:
     # by name (not in the file: set from the other characters' stock files, see shared.Group)
     budget: "Budget | None" = None  # [goals] budget: plan only as far as this gold reaches; None = to the targets
     level_set: bool = True  # False: the file gives no `level` (Merchant's Favor items are then not suggested)
+    ah_premium: float = 2.0  # a craft counts as sold on the AH only at this many times its vendor price or more
 
 
 MAX_SKILL = 300
@@ -170,6 +171,16 @@ def _number(value, key: str) -> float:
     return n
 
 
+def _premium(d: dict) -> float:
+    """`ah_premium`: a number, 1 or more (default 2)."""
+    if "ah_premium" not in d:
+        return 2.0
+    n = _number(d["ah_premium"], "ah_premium")
+    if n < 1:
+        raise ValueError(f"ah_premium must be 1 or more, not {d['ah_premium']}")
+    return n
+
+
 def _slots(d: dict, key: str, default):
     n = _whole(d[key], key) if key in d else default
     if n is not None and n < 0:
@@ -232,4 +243,5 @@ def _stock(d: dict) -> Stock:
         reagent_slots=_slots(d, "reagent_slots", 0),
         budget=budget,
         level_set="level" in d,
+        ah_premium=_premium(d),
     )

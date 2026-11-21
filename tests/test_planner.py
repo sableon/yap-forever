@@ -719,3 +719,26 @@ class RankCutTests(unittest.TestCase):
         self.assertEqual(sum(s.economic for s in p.steps), 144000)
         self.assertAlmostEqual(sum(s.materials[toy.COPPER_BAR] for s in p.steps), 1439.881331137465, places=6)
         self.assertAlmostEqual(p.bought[toy.COPPER_BAR], 1439.8813311374647, places=6)
+
+
+class AhPremiumPlanTests(unittest.TestCase):
+    """#62 in the totals: a craft's AH sales count only well above its vendor price, up to the sale limit."""
+    GEAR = 7777  # a made-up craft with a 1g vendor price
+
+    def plan(self, listing):
+        gd = toy.gamedata([toy.recipe(1, "BS gear", BS, {toy.COPPER_BAR: 1}, (self.GEAR, 1))])
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=10000)
+        st = toy.stock()
+        m = toy.market({**BARS, self.GEAR: [listing]})
+        return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={BS: 20}), m
+
+    def test_dead_market_vendored_in_totals(self):
+        p, _m = self.plan((13685, 50))  # net 1.3g: every one goes to a vendor
+        n = p.leftovers[self.GEAR]
+        self.assertGreater(n, 5)
+        self.assertAlmostEqual(p.sale_proceeds, n * 10000)
+
+    def test_scarce_market_counted_to_the_limit_in_totals(self):
+        p, m = self.plan((115790, 1))  # one listed at 11x: five on the AH, the rest to a vendor
+        n = p.leftovers[self.GEAR]
+        self.assertAlmostEqual(p.sale_proceeds, 5 * m.net_sell(self.GEAR) + (n - 5) * 10000)

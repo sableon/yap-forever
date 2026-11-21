@@ -724,13 +724,11 @@ def _deltas(before: dict, after: dict):
 
 
 def sale_value(valuer, gd, item: int, n: float) -> float:
-    """Selling n crafted items: AH for the first few (all if a quest item), vendor after.
-
-    The AH part is also capped at what is listed today: more than that would not sell at that price."""
-    info = gd.items.get(item)
-    vendor = info.sell_price if info else 0
-    ah = valuer.market.net_sell(item) or 0
-    if ah <= vendor:
+    """Selling n crafted items: on the AH up to the sale limit when the AH pays well above a vendor
+    (`Valuer.ah_price`), the rest to a vendor. What is listed today doesn't cap it (#62)."""
+    vendor = valuer.vendor_price(item)
+    ah = valuer.ah_price(item)
+    if ah is None:
         return n * vendor
-    cap = min(n, valuer.sale_limit(item), valuer.market.depth(item))
+    cap = min(n, valuer.sale_limit(item))
     return cap * ah + (n - cap) * vendor
