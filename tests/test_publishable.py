@@ -334,6 +334,7 @@ class PublishableTests(unittest.TestCase):
                      "fewer trainer visits and pattern trips is left out of the route",
                      "at most three rounds, the recipes left out adding up",
                      "the trips left out cost at most 0.5c more together, against the route as first planned",
+                     "each skip is also within 0.5c of the route it starts from",
                      "a route both guides share is planned without a trip only when it is free in both measures",
                      "`Planned without the trip back to <trainer> at <skill> for <recipes>: the route without it "
                      "costs the same.`",

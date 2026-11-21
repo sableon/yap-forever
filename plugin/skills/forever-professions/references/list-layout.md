@@ -127,14 +127,14 @@ Write it for that.
   of the route (trainer visits: rank trainings, trips back and capital stops; pattern trips: vendor and
   Favor trips). The route is planned again without it, at most three rounds, the recipes left out
   adding up, never the goal recipe, and under a budget only when its "Gold to bring" still fits; the
-  trips left out cost at most 0.5c more together, against the route as first planned, and a route both
-  guides share is planned without a trip only when it is free in both measures. The
-  guide header (after the listing line) and the report's data notes say so, one line a trip:
-  `Planned without the trip back to <trainer> at <skill> for <recipes>: the route without it costs the
-  same.` (`<trainer>` is the trainer's name when the data names one, else `the <Rank> <Person>`), or
-  `Planned without the trip to buy the pattern for <recipe>: the route without it costs the same.` for
-  a vendor or Favor trip. A trip left on the route whose skip costs at most 0.5c more gets no skip
-  clause. Below Artisan it is a stop in a capital:
+  trips left out cost at most 0.5c more together, against the route as first planned, each skip is also
+  within 0.5c of the route it starts from, and a route both guides share is planned without a trip only
+  when it is free in both measures. The guide header (after the listing line) and the report's data
+  notes say so, one line a trip: `Planned without the trip back to <trainer> at <skill> for <recipes>:
+  the route without it costs the same.` (`<trainer>` is the trainer's name when the data names one,
+  else `the <Rank> <Person>`), or `Planned without the trip to buy the pattern for <recipe>: the route
+  without it costs the same.` for a vendor or Favor trip. A trip left on the route whose skip costs at
+  most 0.5c more gets no skip clause. Below Artisan it is a stop in a capital:
   `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
   later stops of that rank read `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital.` Without
