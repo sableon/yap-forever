@@ -198,8 +198,8 @@ def cmd_prices(paths: Paths) -> int:
 
 
 def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None, budget: str | None = None,
-             order: str | None = None) -> int:
-    """budget, order: the --budget and --order flags as typed (None: the stock file's [goals] keys)."""
+             order: str | None = None, pay: str | None = None) -> int:
+    """budget, order, pay: the --budget, --order and --pay flags as typed (None: the stock file's [goals] keys)."""
     try:
         prof = profile.load_profile(paths.profile)
     except (FileNotFoundError, ValueError) as e:
@@ -253,7 +253,7 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None, budge
         if len(goals) > 2:
             print(f"{stock} has goals for {len(goals)} professions: plan one or two at a time (one --prof each)")
             return 1
-        target = _budget_target(saved.budget, budget, order, goals)
+        target = _budget_target(saved.budget, budget, order, goals, pay)
     except ValueError as e:
         print(e)
         return 1
@@ -288,10 +288,10 @@ def cmd_plan(paths: Paths, character: str, profs: list[str] | None = None, budge
     return 0
 
 
-def _budget_target(saved, budget: str | None, order: str | None, goals: dict):
-    """The budget goal of a plan: the --budget and --order flags over the stock file's keys (config.Budget,
+def _budget_target(saved, budget: str | None, order: str | None, goals: dict, pay: str | None = None):
+    """The budget goal of a plan: the --budget, --order and --pay flags over the stock file's keys (config.Budget,
     or None). The order needs two professions planned (with one it is ignored) and names only them; a
-    profession it leaves out comes after the ones it names."""
+    profession it leaves out comes after the ones it names. pay: "upfront" or "as_you_go" (config.Budget.pay)."""
     from yap_forever import config
     from yap_forever.gamedata import PROFESSIONS
     gold = saved.gold if saved else None
@@ -303,16 +303,19 @@ def _budget_target(saved, budget: str | None, order: str | None, goals: dict):
     if gold is None:
         if order is not None:
             raise ValueError("--order goes with a budget: add --budget GOLD, or save budget under [goals]")
+        if pay is not None:
+            raise ValueError("--pay goes with a budget: add --budget GOLD, or save budget under [goals]")
         return None
+    how = config.parse_pay(pay, "--pay") if pay is not None else (saved.pay if saved else "upfront")
     sequence = config.parse_order(order, "--order") if order is not None else (saved.order if saved else None)
     if sequence is None or len(goals) < 2:
-        return config.Budget(gold, None)
+        return config.Budget(gold, None, how)
     for x in sequence:
         if x not in goals:
             planned = ", ".join(PROFESSIONS[p] for p in goals)
             raise ValueError(f"the budget order names {PROFESSIONS[x]}, which is not planned "
                              f"(planned: {planned})")
-    return config.Budget(gold, tuple(sequence) + tuple(p for p in goals if p not in sequence))
+    return config.Budget(gold, tuple(sequence) + tuple(p for p in goals if p not in sequence), how)
 
 
 def cmd_migrate(paths: Paths, args) -> int:
@@ -364,6 +367,9 @@ def main(argv: list[str], paths: Paths | None = None) -> int:
                     help="plan only as far as this much gold reaches (the last stop: 75, 150, 225, 300 or the target)")
     pl.add_argument("--order", metavar="even|NAME,NAME",
                     help="with a budget and two professions: raise them evenly (default) or one at a time in this order")
+    pl.add_argument("--pay", metavar="upfront|as_you_go",
+                    help="with a budget: compare it with the gold to buy everything before you start (upfront, default) "
+                         "or with the gold enough up front if you sell crafts to a vendor as you go (as_you_go)")
     m = sub.add_parser("migrate", help="move a pre-yap-forever planner folder into your home folder")
     m.add_argument("--from-data", type=Path, required=True, help="old data folder (house and prices are copied)")
     m.add_argument("--character", action="append", required=True, metavar="NAME=FILE",
@@ -393,4 +399,4 @@ def main(argv: list[str], paths: Paths | None = None) -> int:
         return cmd_prices(paths)
     if args.command == "migrate":
         return cmd_migrate(paths, args)
-    return cmd_plan(paths, args.character, args.prof, args.budget, args.order)
+    return cmd_plan(paths, args.character, args.prof, args.budget, args.order, args.pay)

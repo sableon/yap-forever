@@ -57,12 +57,25 @@ class Goal:
     recipe: str | None = None
 
 
+PAYS = ("upfront", "as_you_go")  # how a budget pays for the route (Budget.pay)
+
+
 @dataclass(frozen=True)
 class Budget:
     """A budget as a goal: plan each profession to the last stop this much gold reaches (see budget.cut).
-    order: None raises two professions evenly; skill line IDs raise them one at a time, in that order."""
+    order: None raises two professions evenly; skill line IDs raise them one at a time, in that order.
+    pay: "upfront" compares the budget with the shopping list's "Gold to bring" (everything bought before you start),
+    "as_you_go" with the gold enough up front when crafts are sold to a vendor as you go (shopping.gold_as_you_go)."""
     gold: float
     order: tuple[int, ...] | None = None
+    pay: str = "upfront"
+
+
+def parse_pay(value, key: str) -> str:
+    """'upfront' or 'as_you_go' (Budget.pay); anything else is an error naming `key`."""
+    if value not in PAYS:
+        raise ValueError(f'{key}: use "upfront" or "as_you_go", not {value!r}')
+    return value
 
 
 def parse_order(names, key: str) -> tuple[int, ...] | None:
@@ -221,6 +234,11 @@ def _stock(d: dict) -> Stock:
         if budget is None:
             raise ValueError("goals.budget_order goes with goals.budget: set the budget too, or leave it out")
         budget = Budget(budget.gold, parse_order(order, "goals.budget_order"))
+    if "pay" in table:
+        pay = table.pop("pay")
+        if budget is None:
+            raise ValueError("goals.pay goes with goals.budget: set the budget too, or leave it out")
+        budget = Budget(budget.gold, budget.order, parse_pay(pay, "goals.pay"))
     for k, v in table.items():
         try:
             goals[_profession_id(k)] = parse_goal(v)
