@@ -312,5 +312,160 @@ class FeaturesTogetherTests(unittest.TestCase):
         self.assertNotIn("Plans: Something (from", trips[0])
 
 
+GEAR = 7811  # a made-up craft that sells to a vendor for 2s
+
+
+def gear_inputs(caps, skills=None, ranks=None, late=()):
+    """Blacksmithing where "BS gear" (spell 61, an Iron Bar at 1s 60c) makes a Test Gear a vendor pays 2s for and "BS
+    plain" (spell 62, a Copper Bar at 1s 20c) makes nothing, both orange: with the vendor credit the gear costs nothing
+    and wins, without it the plain craft does. late: more recipes."""
+    i = inputs([toy.recipe(61, "BS gear", BS, {toy.IRON_BAR: 1}, (GEAR, 1)),
+                toy.recipe(62, "BS plain", BS, {toy.COPPER_BAR: 1}), *late], caps, skills=skills,
+               listings={toy.IRON_BAR: [(160, 100000)], toy.COPPER_BAR: [(120, 100000)], toy.SHARD: [(100, 100000)]},
+               ranks=ranks)
+    i.gd.items[GEAR] = toy.item(GEAR, "Test Gear", sell=200)
+    return i
+
+
+def spells(p):
+    return {s.spell_id for s in p.steps}
+
+
+class UncreditedFallbackTests(unittest.TestCase):
+    """#97 (owner, 2026-11-21): under a budget each stop takes the mode's route planned with the vendor credit when its
+    gold to bring fits, else the route planned without it when that fits; the stop is reached when either fits."""
+
+    def test_budget_takes_uncredited_route_when_it_fits(self):
+        # to 75: the credited route brings 74 Iron Bars (1.184g), the uncredited one 74 Copper Bars (0.888g); 1g budget
+        i = gear_inputs({BS: 75})
+        self.assertEqual((gold_of(i)(route(i, {BS: 75})), spells(route(i, {BS: 75}))), (11840, {61}))
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                c = cut(i, 1, mode=mode)
+                self.assertEqual(c.caps, {BS: 75})
+                self.assertEqual((c.spent, c.credited, c.plan.vendor_credit), (8880, False, False))
+                self.assertEqual(spells(c.plan), {62})
+                self.assertEqual(c.next_stop, {})
+
+    def test_budget_prefers_credited_when_both_fit(self):
+        i = gear_inputs({BS: 75})
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                c = cut(i, 2, mode=mode)
+                self.assertEqual((c.caps, c.spent, c.credited, c.plan.vendor_credit), ({BS: 75}, 11840, True, True))
+                self.assertEqual(spells(c.plan), {61})
+
+    def test_next_stop_costs_what_the_cheaper_route_brings(self):
+        # neither fits 0.5g: the stop is reached with the route that brings less, so the next stop costs its gold
+        c = cut(gear_inputs({BS: 75}), 0.5)
+        self.assertTrue(c.below_first_stop)
+        self.assertEqual(c.next_stop, {BS: (75, 8880)})
+
+    def test_no_budget_no_extra_candidates(self):
+        # the routes planned without the vendor credit are planned only when a credited route misses a stop
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        i = gear_inputs({BS: 75})
+        with mock.patch.object(plan_mod, "plan", wraps=plan_mod.plan) as planned:
+            n = len(candidates(i))
+            self.assertTrue(all(p.vendor_credit for p in candidates(i)))
+            cut(i, 2)
+        self.assertEqual(n, 3)  # one reuse round each: value, gold, gold with one-time costs in full
+        self.assertEqual([c.kwargs.get("vendor_credit", True) for c in planned.call_args_list], [True] * 9)
+        with mock.patch.object(plan_mod, "plan", wraps=plan_mod.plan) as planned:
+            cut(i, 1)
+        self.assertEqual([c.kwargs["vendor_credit"] for c in planned.call_args_list], [True] * 3 + [False] * 2)
+
+    def test_uncredited_stop_with_a_free_skip(self):
+        # C14: Blacksmithing 225-300 for 6g. With the credit the gear (1s 60c a point) brings 6.2g with the Master rank,
+        # so the stop takes the route without it (5.75g): copper to 240, then "BS late" (iron at 1s 20c, the lower id on
+        # the tie), a trip back to the Master trainer. Planned without that trip the route costs the same, so the trip is
+        # left out, and the route without it is planned without the vendor credit too: with the credit it would take
+        # the gear again, cost 1.2g less net and miss the budget
+        import dataclasses
+
+        from yap_forever.gamedata import Rank
+        from yap_forever.plan import take_free_skips
+        from yap_forever.trips import trip_alternatives
+        late = toy.recipe(1, "BS late", BS, {toy.SHARD: 1}, t=(240, 300, 300, 300), req=240)
+        i = gear_inputs({BS: 300}, skills={BS: 225}, ranks={BS: [Rank(300, 50000, 200, 35)]}, late=[late])
+        i = dataclasses.replace(i, market=toy.market({toy.IRON_BAR: [(160, 100000)], toy.COPPER_BAR: [(120, 100000)],
+                                                      toy.SHARD: [(120, 100000)]}))
+        c = cut(i, 6)
+        self.assertEqual((c.caps, c.spent, c.credited), ({BS: 300}, 59000, False))
+        self.assertEqual(spells(c.plan), {1, 62})
+        cache: dict = {}
+        self.assertEqual(trip_alternatives(c.plan, i, "gold", cache), {(1,): 0})
+        self.assertEqual([k[-1] for k in cache], [False])  # planned without the vendor credit
+        route, left = take_free_skips(c.plan, i, "gold", cache, fits=lambda p: gold_of(i)(p) <= budget.copper(Budget(6)))
+        self.assertEqual([t.spells for t in left], [(1,)])
+        self.assertFalse(route.vendor_credit)
+        self.assertEqual(spells(route), {62})
+        self.assertEqual(gold_of(i)(route), 59000)
+
+    def test_listed_saving_keeps_the_routes_credit(self):
+        # the route at the Forever listing a route is compared with is planned with the same vendor credit
+        import dataclasses
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        i = gear_inputs({BS: 75})
+        gd = i.gd
+        gd.recipes[62] = dataclasses.replace(gd.recipes[62], listed_skill=1)
+        uncredited = settle_routes(candidates(i, vendor_credit=False), {BS: 75})[0]
+        with mock.patch.object(plan_mod, "candidates", wraps=plan_mod.candidates) as made:
+            plan_mod.listed_savings(i, {"gold": uncredited["gold"], "value": route(i, {BS: 75}, "value")})
+        self.assertEqual(sorted(c.kwargs.get("vendor_credit", True) for c in made.call_args_list), [False, True])
+
+    def test_uncredited_route_that_stops_short_is_not_taken(self):
+        # the route without the credit needs less gold but stalls at 60, below the stop at 75: the stop stays on the
+        # credited route, which misses the budget, so nothing is planned and the next stop costs the credited gold
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.planner import Plan
+
+        def planned(sub, vendor_credit=True):
+            skill = sub.caps[BS] if vendor_credit else min(60, sub.caps[BS])
+            cost = 0 if sub.caps[BS] == 1 else 20000 if vendor_credit else 500
+            return [Plan(final_skill={BS: skill}, cash_total=cost, vendor_credit=vendor_credit)]
+        i = inputs(bs_only(), {BS: 75})
+        with mock.patch.object(plan_mod, "candidates", side_effect=planned):
+            c = budget.cut(i, "gold", Budget(1), lambda p: p.cash_total)
+        self.assertEqual((c.caps, c.credited, c.next_stop), ({BS: 1}, True, {BS: (75, 20000)}))
+
+    def test_uncredited_route_at_a_stop_below_the_target(self):
+        # two stops, 75 and 150 (its rank 4s 50c): with 1g neither route reaches 150, and 75 fits only without the
+        # credit (0.888g against 1.184g), so the cut stops at 75 on that route; the next stop costs the cheaper route's
+        # 1.833g less the 0.888g spent
+        i = gear_inputs({BS: 150})
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                c = cut(i, 1, mode=mode)
+                self.assertEqual((c.caps, c.spent, c.credited, c.plan.vendor_credit), ({BS: 75}, 8880, False, False))
+                self.assertEqual(spells(c.plan), {62})
+                self.assertEqual(c.next_stop, {BS: (150, 18330 - 8880)})
+
+    def test_uncredited_route_that_gets_further_says_so(self):
+        # the credited route stalls at 60 below the target of 75 and misses the budget; the one without the credit
+        # reaches 75 and fits: the cut reaches 75, with no stall to report
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.planner import Plan
+
+        def planned(sub, vendor_credit=True):
+            cap = sub.caps[BS]
+            if vendor_credit:
+                why = {BS: "Blacksmithing: no usable recipe at 60"} if cap > 60 else {}
+                return [Plan(final_skill={BS: min(60, cap)}, stall_reasons=why, cash_total=0 if cap == 1 else 20000)]
+            return [Plan(final_skill={BS: cap}, cash_total=500, vendor_credit=False)]
+        i = inputs(bs_only(), {BS: 75})
+        with mock.patch.object(plan_mod, "candidates", side_effect=planned):
+            c = budget.cut(i, "gold", Budget(1), lambda p: p.cash_total)
+        self.assertEqual((c.caps, c.credited, c.stops_early, c.stalled, c.next_stop), ({BS: 75}, False, {}, {}, {}))
+
+
 if __name__ == "__main__":
     unittest.main()

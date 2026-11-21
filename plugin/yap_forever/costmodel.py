@@ -106,6 +106,12 @@ class Pools:
         return set(self.tools) | {i for pool, _made in self.owned() for i, n in pool.items() if n >= 1}
 
 
+def vendor_price(gd, item: int) -> int:
+    """What a vendor pays for one; 0 for an item the game data doesn't know (Valuer.vendor_price, the route rows)."""
+    info = gd.items.get(item)
+    return info.sell_price if info else 0
+
+
 class Valuer:
     def __init__(self, market, gd, stock, mode: str = "value"):
         """mode "value": choose by total value (owned items at what they'd sell for);
@@ -121,8 +127,7 @@ class Valuer:
 
     def vendor_price(self, item: int) -> int:
         """What a vendor pays for one; 0 for an item the game data doesn't know."""
-        info = self.gd.items.get(item)
-        return info.sell_price if info else 0
+        return vendor_price(self.gd, item)
 
     def ah_price(self, item: int) -> int | None:
         """What one crafted item counts for when sold on the AH: its net price (lowest listing less the AH's

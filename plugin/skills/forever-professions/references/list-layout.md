@@ -53,6 +53,22 @@ Write it for that.
 - Green crafts are not sold when the player (or another of their characters) can disenchant:
   mark them for disenchanting and leave their value out of "leftovers sell for".
 - Whites are vendored or parked in the mail (send and return) until there's time to sell.
+- A route row whose crafts go to a vendor ends `→ sell to a vendor: about <gold> back`, or
+  `→ sell up to <n> on the AH (about <price> each), the rest to a vendor: about <gold> back`:
+  the vendor price × the crafts the planner expects for the row, in whole crafts (without the buffer
+  the row's `×N` includes) × the output, less the crafts sold on the AH, which go to the item's first
+  rows. A row the AH takes whole, one whose craft a vendor pays nothing for and the AH-only quest
+  form (`→ sell on the AH (quest item, about <price> each)`) get no amount. For a craft the route
+  only sells, its rows add up to what vendors pay back for it within about a craft each.
+- The comparison table gives `Gold out of pocket`, `Back from a vendor`, `Total value` (vendor sales
+  only) and `AH sales on top` (`—` when there are none), and ends with `Least gold is the gold out of
+  pocket less what vendors pay back for the crafts. AH sales of crafts are not counted in choosing a
+  route.`
+- The guide's Money says `- **Back from selling crafts:** about <total>: <vendor> from vendors
+  (counted in choosing the route) and about <ah> more if the AH sales go through.`, or, with no AH
+  sales, `- **Back from selling crafts:** about <vendor> from vendors (counted in choosing the
+  route).`; its Net counts vendor sales only. The report's Totals say `Back from vendors: <gold>
+  (counted in choosing the route).` and `AH sales on top: <gold> (not counted).`
 
 ## Trainer stages and trips
 

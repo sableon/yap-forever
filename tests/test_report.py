@@ -426,7 +426,7 @@ class AhSalesReportTests(unittest.TestCase):
         # #97 (C39): the full economic cost subtracts the crafts sold at their vendor price, not what the AH pays
         text, *_rest = self.render([(115790, 1)])
         self.assertIn("- **Full economic cost:** 0s 0c (cash + your stock and farmed bars at what they'd sell for "
-                      "− crafts sold, at their vendor price − leftovers).\n", text)
+                      "− vendor sales of crafts − leftovers).\n", text)
 
 
 def toy_turnin():

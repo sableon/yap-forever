@@ -6,7 +6,7 @@ import tomllib
 from dataclasses import dataclass
 
 from yap_forever.config import STATIC_DIR
-from yap_forever.costmodel import BARS, ORES, STONES, Valuer, money
+from yap_forever.costmodel import BARS, ORES, STONES, Valuer, money, vendor_price
 from yap_forever.gamedata import ENCH, PROFESSIONS
 from yap_forever.planner import DISENCHANT as DE_SPELL, START_CAP, reached_lines, step_factor
 from yap_forever import trainer_text
@@ -578,6 +578,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
         return first[p][1] + sum(1 for t in trained[p] if (t < skill if event else t <= skill))
 
     whole = _whole(plan, gd)
+    on_ah: dict[int, float] = {}  # craft -> how many more the AH takes (_vendor_back): the item's first rows' crafts
     lines: dict[tuple[int, int], list] = {}  # (stage, profession) -> [(skill, order, text)]
     for p in caps:
         steps = [s for s in plan.steps if s.profession == p and s.skill_from < s.skill_to]
@@ -586,7 +587,7 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
             groups.setdefault(stage(p, s.skill_from, False), []).append(s)
         for k, group in groups.items():
             for r in _ranges(group, gd, whole):
-                line = _range_line(r, gd, used_by, disenchanted | held, plan.kept_greens, sales)
+                line = _range_line(r, gd, used_by, disenchanted | held, plan.kept_greens, sales, on_ah)
                 lines.setdefault((k, p), []).append((r["from"], 1, line + (hint.note(p, r) if hint else "")))
         for s in plan.steps:
             if s.profession == p and s.skill_from == s.skill_to:  # the goal recipe, crafted once
@@ -696,17 +697,20 @@ def _learned_at(plan, gd, trainer_info, start_skills, trainer_trips="as_needed",
 
 
 def _ranges(steps, gd, rows=None) -> list[dict]:
-    """rows: id(step) -> shopping row; a step with a row shows its whole crafts and their counts."""
+    """rows: id(step) -> shopping row; a step with a row shows its whole crafts and their counts. expected: the
+    crafts the planner expects, without the buffer (counted like crafts: a run's first part has them all)."""
     out: list[dict] = []
     seen = set()
     for s in steps:
         row = (rows or {}).get(id(s))
         here = {}
+        expected = s.crafts
         if row and id(row) in seen:  # a later part of a run already counted with its first part
-            crafts, mats, own = 0, {}, {}
+            crafts, mats, own, expected = 0, {}, {}, 0
         elif row:
             seen.add(id(row))
             crafts, mats, own = row["n"] + row["more"], _less(row["need"], row["tools"]), dict(row["earlier"])
+            expected = row["st"].crafts
             here = dict(row["here"])  # bought tools are left out: the route shows each purchase
         else:
             k = step_factor(s)
@@ -717,6 +721,7 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
         if last and last["spell"] == s.spell_id and last["to"] == s.skill_from:
             last["to"] = s.skill_to
             last["crafts"] += crafts
+            last["expected"] += expected
             last["cash"] += s.cash
             last["economic"] += s.economic
             _add(last["mats"], mats)
@@ -724,14 +729,14 @@ def _ranges(steps, gd, rows=None) -> list[dict]:
             _add(last["here"], here)
         else:
             out.append({"spell": s.spell_id, "name": recipe_name(s.spell_id, s.name, gd), "from": s.skill_from,
-                        "to": s.skill_to, "crafts": crafts, "mats": mats, "own": own, "here": here,
+                        "to": s.skill_to, "crafts": crafts, "expected": expected, "mats": mats, "own": own, "here": here,
                         "cash": s.cash, "economic": s.economic})
     return out
 
 
-def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None) -> str:
+def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None, on_ah=None) -> str:
     """One route row. sales: the render's costmodel.Valuer, whose rule says where its crafts are sold (None: no
-    prices, so to a vendor)."""
+    prices, so to a vendor). on_ah: see _vendor_back (None: a row on its own)."""
     # Disenchants are an expected count of greens you already have, not a buffered shopping count.
     n = max(1, round(r["crafts"]) if r["spell"] == DE_SPELL else math.ceil(r["crafts"] - 1e-6))
     mats = [f"{count(q)} {gd.name(i)}" for i, q in r["mats"].items()] + \
@@ -751,8 +756,27 @@ def _range_line(r, gd, used_by, for_de, kept=frozenset(), sales=None) -> str:
         elif item in kept:
             line += " → keep for disenchanting on another character"
         else:
-            line += _sell_clause(item, gd, sales)
+            clause = _sell_clause(item, gd, sales)
+            if clause.endswith("to a vendor"):  # an AH-only quest item says nothing more
+                clause += _vendor_back(r, recipe, gd, sales, {} if on_ah is None else on_ah)
+            line += clause
     return line
+
+
+def _vendor_back(r, recipe, gd, sales, on_ah) -> str:
+    """': about <gold> back' for a row whose crafts go to a vendor, or "" when it brings nothing: the vendor price x
+    the row's crafts (the planner's expected crafts, in whole crafts: the rows add up to Money's "from vendors" within
+    a craft each) x the output, less the crafts the AH takes, which go to the item's first rows. on_ah: craft -> how
+    many more the AH takes (its sale limit before the first row), updated for the next row."""
+    item = recipe.output[0]
+    made = math.ceil(r["expected"] - 1e-6) * recipe.output[1]
+    if item not in on_ah:
+        ah = sales.ah_price(item) if sales is not None else None
+        on_ah[item] = sales.sale_limit(item) if ah is not None else 0
+    to_ah = min(made, on_ah[item])
+    on_ah[item] -= to_ah
+    back = (made - to_ah) * vendor_price(gd, item)  # what Plan.vendor_back counts a unit at
+    return f": about {gold(back)} back" if round(back) >= 1 else ""
 
 
 def _sell_clause(item, gd, sales) -> str:
@@ -775,11 +799,21 @@ def _money(out, plan, stock) -> None:
     out += ["## Money", "",
             f"- **Spent along the way:** about {gold(plan.cash_total)}, including {gold(plan.fees)} of "
             "trainer ranks. It is spread over the whole route, and sales come in as you go.",
-            f"- **Back from selling crafts:** about {gold(plan.sale_proceeds)}.",
+            _back_line(plan),
             f"- **Net:** about {gold(abs(plan.economic_total))} "
-            f"{'cost' if plan.economic_total > 0 else 'profit'} (crafts sold at their vendor price), counting your bank "
+            f"{'cost' if plan.economic_total > 0 else 'profit'} (vendor sales only), counting your bank "
             "and mined bars at what they would sell for.",
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
+
+
+def _back_line(plan) -> str:
+    """Money's "Back from selling crafts": what vendors pay back (Plan.vendor_back, counted in choosing the route) and
+    what AH sales add on top (Plan.ah_extra), that clause left out when there are none."""
+    vendor = f"{gold(plan.vendor_back)} from vendors (counted in choosing the route)"
+    if round(plan.ah_extra) < 1:
+        return f"- **Back from selling crafts:** about {vendor}."
+    return (f"- **Back from selling crafts:** about {gold(plan.sale_proceeds)}: {vendor} and about "
+            f"{gold(plan.ah_extra)} more if the AH sales go through.")
 
 
 def _notes(out, plan, market, gatherer=True, mailed=None, gd=None, notes=(), skins=False) -> None:

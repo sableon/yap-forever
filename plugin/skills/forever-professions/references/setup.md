@@ -147,6 +147,10 @@ or more), or `plan --budget GOLD` for one run (the flag wins over the key). Each
 still bounds the route; the route ends at the last stop the gold reaches. Stops are the rank caps
 75, 150, 225 and 300 and the profession's own target. The gold a stop needs is the shopping list's
 "Gold to bring" (whole crafts with the buffer, patterns and trainer fees), so the list fits the budget.
+A craft's vendor price makes a route cheaper in the end but can make it need more gold up front, so
+each stop takes the route planned with what vendors pay back when its gold fits, else the route
+planned without it when that one fits and gets each profession as far; the stop is reached when
+either fits.
 With two professions, `budget_order` (or `--order even|NAME,NAME`) says how to share it:
 
 - `"even"` (the default): both rise side by side, the lower one first. When its next stop doesn't

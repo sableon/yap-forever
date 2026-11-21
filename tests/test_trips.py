@@ -366,7 +366,7 @@ class FreeSkipTests(unittest.TestCase):
             alts = trip_alternatives(base, inputs, "gold", cache, excluded=frozenset({7}))
         self.assertEqual(alts, {(3,): 1})
         self.assertEqual(replan.call_args.kwargs["exclude"], frozenset({3, 7}))
-        self.assertEqual(list(cache), [("gold", ((BS, 300),), frozenset({3, 7}))])
+        self.assertEqual(list(cache), [("gold", ((BS, 300),), frozenset({3, 7}), True)])  # planned with the vendor credit
 
     def test_shared_route_needs_both_measures(self):
         # gold and value on one route: the route without the trip is taken only when it is free in both measures
@@ -395,7 +395,7 @@ class FreeSkipTests(unittest.TestCase):
         base = route([(3, 240), (5, 260)], 1000)
         without = {frozenset({3}): route([(5, 260)], 1000.3), frozenset({5}): route([(3, 240)], 1000.4),
                    frozenset({3, 5}): route([], 1000.6)}
-        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: without[exclude]):
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude, vendor_credit: without[exclude]):
             got, left = take_free_skips(base, inputs, "gold", {})
         self.assertIs(got, without[frozenset({3})])
         self.assertEqual([t.spells for t in left], [(3,)])
@@ -416,7 +416,7 @@ class FreeSkipTests(unittest.TestCase):
         base = route([(3, 240), (5, 260)], 1000)
         without = {frozenset({3}): route([(5, 260)], 990), frozenset({5}): route([(3, 240)], 1000.4),
                    frozenset({3, 5}): route([], 995)}
-        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: without[exclude]):
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude, vendor_credit: without[exclude]):
             got, left = take_free_skips(base, inputs, "gold", {})
         self.assertIs(got, without[frozenset({3})])
         self.assertEqual([t.spells for t in left], [(3,)])
@@ -610,7 +610,7 @@ class CapitalStopTests(unittest.TestCase):
                    cash_total=1000, economic_total=1000)
         inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills=start), craft_once={}, caps={ENG: 225, ALCH: 225})
         kw = {"capitals": STAGE_CAPS, "home": IRONFORGE}
-        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: alt if exclude == {32}
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude, vendor_credit: alt if exclude == {32}
                         else p):
             self.assertIn((32,), trip_alternatives(p, inputs, "gold", {}, **kw))
             route, left = take_free_skips(p, inputs, "gold", {}, **kw)

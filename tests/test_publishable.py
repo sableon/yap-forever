@@ -524,6 +524,33 @@ class PublishableTests(unittest.TestCase):
                      "The day's count doesn't limit how many crafts count as sold"):
             self.assertIn(line, setup)
 
+    def test_docs_promise_vendor_rule(self):
+        """#97: game-rules.md "Selling crafts" says a craft's vendor price counts in choosing the route, next to PR 6's
+        AH sentence; list-layout.md gives the route row's amount, the table's rows, Money and Totals, and setup.md the
+        budget's fallback (tests/test_guide.py SellClauseGuideTests, test_compare.py, test_budget.py
+        UncreditedFallbackTests)."""
+        def read(name):
+            return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
+        rules, layout, setup = read("game-rules.md"), read("list-layout.md"), read("setup.md")
+        section = rules[rules.index("## Selling crafts"):rules.index("## Merchant's Favor")]
+        for line in ("AH resale of crafts never chooses the route",
+                     "A craft's vendor price counts in choosing the route; AH resale of crafts never does."):
+            self.assertIn(line, section)
+        from yap_forever.compare import LEAST_GOLD_NOTE
+        for line in ("→ sell to a vendor: about <gold> back", "the rest to a vendor: about <gold> back",
+                     "less the crafts sold on the AH, which go to the item's first rows",
+                     "`Gold out of pocket`, `Back from a vendor`, `Total value` (vendor sales only) and `AH sales on top` "
+                     "(`—` when there are none)", LEAST_GOLD_NOTE,
+                     "- **Back from selling crafts:** about <total>: <vendor> from vendors (counted in choosing the "
+                     "route) and about <ah> more if the AH sales go through.",
+                     "- **Back from selling crafts:** about <vendor> from vendors (counted in choosing the route).",
+                     "`Back from vendors: <gold> (counted in choosing the route).`",
+                     "`AH sales on top: <gold> (not counted).`"):
+            self.assertIn(line, layout)
+        self.assertIn("each stop takes the route planned with what vendors pay back when its gold fits, else the route "
+                      "planned without it when that one fits and gets each profession as far; the stop is reached when "
+                      "either fits.", setup)
+
 
 if __name__ == "__main__":
     unittest.main()

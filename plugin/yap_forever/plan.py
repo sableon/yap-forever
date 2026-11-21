@@ -69,9 +69,9 @@ def unit_value(item: int, gd, market) -> float:
     return min(opts) if opts else 0
 
 
-def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full):
+def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full, vendor_credit=True):
     """Plans of each reuse round: reagents later steps consume count as savings when a step makes
-    them, replanned until those counts settle."""
+    them, replanned until those counts settle. vendor_credit: see planner.plan."""
     gd, market = inputs.gd, inputs.market
     valuer = Valuer(market, gd, inputs.stock, mode=mode)
     makes = {r.output[0] for r in gd.recipes.values() if r.skill_line in inputs.caps and r.output}
@@ -80,7 +80,7 @@ def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full):
     for _ in range(REUSE_ROUNDS):
         p = plan(gd, valuer, inputs.stock, inputs.favor, quests=inputs.quests, reuse=reuse, caps=inputs.caps,
                  craft_once=inputs.craft_once, exclude=exclude, one_time_in_full=one_time_in_full,
-                 overtime=inputs.overtime, reading=inputs.reading, order=inputs.order)
+                 overtime=inputs.overtime, reading=inputs.reading, order=inputs.order, vendor_credit=vendor_credit)
         out.append(p)
         used: dict[int, float] = {}
         for st in p.steps:
@@ -96,19 +96,22 @@ def _rounds(inputs: PlanInputs, mode, exclude, one_time_in_full):
     return out
 
 
-def plan_route(inputs: PlanInputs, mode, exclude=frozenset(), one_time_in_full=False):
-    """The best reuse round of one mode, by that mode's own measure."""
-    rounds = _rounds(inputs, mode, exclude, one_time_in_full)
+def plan_route(inputs: PlanInputs, mode, exclude=frozenset(), one_time_in_full=False, vendor_credit=True):
+    """The best reuse round of one mode, by that mode's own measure. vendor_credit: see planner.plan."""
+    rounds = _rounds(inputs, mode, exclude, one_time_in_full, vendor_credit)
     routes, _ = settle_routes(rounds, inputs.caps)
     return routes[mode]
 
 
-def candidates(inputs: PlanInputs) -> list:
+def candidates(inputs: PlanInputs, vendor_credit: bool = True) -> list:
     """Every reuse round of the value mode, the gold mode, and the gold mode with one-time costs
-    charged in full."""
+    charged in full. vendor_credit False: a budget's fallback (budget.cut), every reuse round of the value mode and
+    the gold mode planned without the vendor price of the crafts sold in the score (planner.plan)."""
     out = []
-    for mode, full in (("value", False), ("gold", False), ("gold", True)):
-        out += _rounds(inputs, mode, frozenset(), full)
+    families = (("value", False), ("gold", False), ("gold", True)) if vendor_credit else (("value", False),
+                                                                                          ("gold", False))
+    for mode, full in families:
+        out += _rounds(inputs, mode, frozenset(), full, vendor_credit)
     return out
 
 
@@ -116,13 +119,19 @@ def listed_savings(inputs: PlanInputs, routes) -> dict[str, float]:
     """What the routes could cost less if every trainer offered its recipes at the Forever listing:
     mode -> copper, in the mode's own measure, for the modes where it is worth saying.
     inputs.gd: the game data the routes were planned on (see gamedata.safe_requirements); routes: their
-    settled routes. The listed routes are settled the same way, from the same candidates."""
+    settled routes. The listed routes are settled the same way, from the same candidates, planned with the same
+    vendor credit as the route (Plan.vendor_credit)."""
     gd, caps = inputs.gd, inputs.caps
     if not any(r.listed_skill is not None for r in gd.recipes.values()):
         return {}
-    listed, _ = settle_routes(candidates(dataclasses.replace(inputs, gd=gamedata.listed_requirements(gd))), caps)
+    at_listing = dataclasses.replace(inputs, gd=gamedata.listed_requirements(gd))
+    settled: dict[bool, dict] = {}  # vendor credit -> the listed routes
     out = {}
     for mode, safe in routes.items():
+        credit = safe.vendor_credit
+        if credit not in settled:
+            settled[credit] = settle_routes(candidates(at_listing, vendor_credit=credit), caps)[0]
+        listed = settled[credit]
         cost = measure(mode)
         saving = cost(safe) - cost(listed[mode])
         if saving >= MIN_SAVING and (reaches(listed[mode], caps) or not reaches(safe, caps)):
@@ -246,7 +255,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     def gold_of(p):
         return gold_to_bring(p, gd, market, stock)
     if target is not None:
-        cache = {budget_cut.key(caps): (routes, same)}
+        cache = {budget_cut.key(caps): (routes, same, None)}  # the routes without vendor credit: planned if needed
         cuts = {m: budget_cut.cut(inputs, m, target, gold_of, cache) for m in routes}
         routes = {m: c.plan for m, c in cuts.items()}
         per_mode = {m: dataclasses.replace(inputs, caps=c.planned_caps) for m, c in cuts.items()}

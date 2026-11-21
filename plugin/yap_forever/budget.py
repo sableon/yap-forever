@@ -2,7 +2,8 @@
 
 Stops are the rank caps (75, 150, 225, 300) and each profession's own target. The gold a route needs is
 the shopping list's "Gold to bring" (whole crafts with the buffer, patterns and fees), so the cut route
-always fits the list the player shops from.
+always fits the list the player shops from. A craft's vendor price makes a route cheaper in the end but can make
+it need more gold up front, so a stop the route misses may be reached by the route planned without that credit (#97).
 """
 import dataclasses
 from collections.abc import Callable
@@ -30,7 +31,8 @@ class BudgetCut:
     copper it costs); stalled: the stall reasons of professions that can't advance, so get no gold.
     planned_caps: the caps the plan was made with (a stalled profession keeps its target, so the plan says
     why it stops); start: the skills the route starts from; stops_early: profession -> (the skill its route
-    stalls at below the target, why), when it does."""
+    stalls at below the target, why), when it does. credited: the plan is the mode's route planned with the vendor
+    price of the crafts sold (False: the one planned without it, which fit the budget where that one didn't)."""
     caps: dict[int, int]
     plan: Plan
     spent: float
@@ -39,6 +41,7 @@ class BudgetCut:
     planned_caps: dict[int, int] = field(default_factory=dict)
     start: dict[int, int] = field(default_factory=dict)
     stops_early: dict[int, tuple[int, str]] = field(default_factory=dict)
+    credited: bool = True
 
     @property
     def below_first_stop(self) -> bool:
@@ -84,9 +87,14 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
     the profession with the lower stop goes first, and when its next stop doesn't fit the other one's may
     (the gold left goes to it). A stop is taken only when gold_of(route) fits the budget, so the next stop
     of each profession is the one that doesn't: its cost is that route's gold minus the cut route's.
+    The route to a set of caps is the mode's route planned with the vendor credit when its gold fits, else the one
+    planned without it (plan.candidates(..., vendor_credit=False), settled by the same measure) when that fits; when
+    neither fits, the one that needs less gold, which is what the stop costs. The one without the credit is taken only
+    when it gets each profession as far as the credited one does.
     inputs: plan.PlanInputs with the targets as caps (a recipe goal is not cut: the caller plans it in full).
-    cache: caps key -> (routes, same) from compare.settle_routes, shared by both modes' cuts (planning a
-    set of caps takes seconds); give it the routes to the targets when the caller has them."""
+    cache: caps key -> (routes, same, the routes without the vendor credit or None) from compare.settle_routes,
+    shared by both modes' cuts (planning a set of caps takes seconds); give it the routes to the targets when the
+    caller has them. The routes without the credit are planned only when a credited route misses the budget."""
     from yap_forever.plan import candidates  # plan imports this module
     inputs = dataclasses.replace(inputs, order=budget.order)
     cache = {} if cache is None else cache
@@ -94,22 +102,41 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
     target = dict(inputs.caps)
     start = {p: max(1, inputs.stock.skills.get(p, 1)) for p in target}
 
-    def routes(caps):
+    def routes(caps, credited=True):
+        """mode -> the route to caps, planned with the vendor credit or without it (filled in when first asked)."""
         k = key(caps)
         if k not in cache:
             sub = dataclasses.replace(inputs, caps=dict(caps))
-            cache[k] = settle_routes(candidates(sub), sub.caps)
-        return cache[k][0]
+            cache[k] = (*settle_routes(candidates(sub), sub.caps), None)
+        settled, same, bare = cache[k]
+        if credited:
+            return settled
+        if bare is None:
+            sub = dataclasses.replace(inputs, caps=dict(caps))
+            bare = settle_routes(candidates(sub, vendor_credit=False), sub.caps)[0]
+            cache[k] = (settled, same, bare)
+        return bare
 
-    full = routes(target)[mode]
-    stops, stalled, early = {}, {}, {}
-    for p, t in target.items():
-        end = full.final_skill.get(p, start[p])
-        stops[p] = stops_for(start[p], min(t, end))
-        if not stops[p] and start[p] < t and p in full.stall_reasons:
-            stalled[p] = full.stall_reasons[p]
-        elif stops[p] and end < t and p in full.stall_reasons:
-            early[p] = (end, full.stall_reasons[p])
+    def gold_at(caps, credited):
+        k = ("gold", mode, key(caps), credited)
+        if k not in cache:
+            cache[k] = gold_of(routes(caps, credited)[mode])
+        return cache[k]
+
+    def ends(full):
+        """(each profession's stops on the route to the targets, the professions it can't advance, where it stalls
+        below the target)."""
+        stops, stalled, early = {}, {}, {}
+        for p, t in target.items():
+            end = full.final_skill.get(p, start[p])
+            stops[p] = stops_for(start[p], min(t, end))
+            if not stops[p] and start[p] < t and p in full.stall_reasons:
+                stalled[p] = full.stall_reasons[p]
+            elif stops[p] and end < t and p in full.stall_reasons:
+                early[p] = (end, full.stall_reasons[p])
+        return stops, stalled, early
+
+    stops, stalled, early = ends(routes(target)[mode])
 
     def caps_at(level):
         """level: profession -> stops taken. With all of them the cap is the target, so a profession the
@@ -119,13 +146,12 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
 
     def plan_at(level):
         caps = caps_at(level)
-        p = routes(caps)[mode]
+        credited = (gold_at(caps, True) <= limit or gold_at(caps, False) >= gold_at(caps, True)
+                    or not _as_far(routes(caps, False)[mode], routes(caps)[mode], caps))
+        p = routes(caps, credited)[mode]
         held = _held(caps, start, [x for x in caps if start[x] < target[x]])
         p.events = [e for e in p.events if e not in held]  # held at the start by the budget: not a target reached
-        k = ("gold", mode, key(caps))
-        if k not in cache:
-            cache[k] = gold_of(p)
-        return p, cache[k]
+        return p, gold_at(caps, credited)
 
     def reached(level):
         return {p: stops[p][n - 1] if n else start[p] for p, n in level.items()}
@@ -133,7 +159,10 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
     level = {p: len(stops[p]) for p in target}
     plan, spent = plan_at(level)
     if spent <= limit:
-        return BudgetCut(reached(level), plan, spent, {}, stalled, caps_at(level), start, early)
+        if not plan.vendor_credit:  # the route without the credit may get further than the one the stops came from
+            stops, stalled, early = ends(plan)
+            level = {p: len(stops[p]) for p in target}
+        return BudgetCut(reached(level), plan, spent, {}, stalled, caps_at(level), start, early, plan.vendor_credit)
 
     level = {p: 0 for p in target}
     plan, spent = plan_at(level)
@@ -164,7 +193,12 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float], cac
             if not took:
                 break
     next_stop = {p: (stops[p][level[p]], plan_at(more(p))[1] - spent) for p in target if left(p)}
-    return BudgetCut(reached(level), plan, spent, next_stop, stalled, caps_at(level), start, early)
+    return BudgetCut(reached(level), plan, spent, next_stop, stalled, caps_at(level), start, early, plan.vendor_credit)
+
+
+def _as_far(p: Plan, than: Plan, caps: dict[int, int]) -> bool:
+    """p gets every profession in caps at least as far as `than` does."""
+    return all(p.final_skill.get(x, 0) >= than.final_skill.get(x, 0) for x in caps)
 
 
 def amount(budget: Budget) -> str:

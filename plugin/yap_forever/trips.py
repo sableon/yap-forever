@@ -357,8 +357,9 @@ def alternatives(base, inputs, mode, cache: dict | None = None, trainer_trips: s
     """(trip, the route planned without its recipes, what that costs more in the route's measure) for the trips
     trip_alternatives measures; (trip, None, None) when the targets can't be reached without them, and for a
     trip for the goal recipe. excluded: recipes the base route was already planned without (plan.take_free_skips),
-    left out of every route planned here too. capitals, home: see visits (they never change a route planned here).
-    See trip_alternatives for the rest."""
+    left out of every route planned here too. Each route here is planned with the base's vendor credit
+    (Plan.vendor_credit: a budget's fallback route is compared with routes planned the same way). capitals, home: see
+    visits (they never change a route planned here). See trip_alternatives for the rest."""
     from yap_forever.plan import plan_route  # plan imports this module
 
     cost = measure(mode)
@@ -369,11 +370,12 @@ def alternatives(base, inputs, mode, cache: dict | None = None, trainer_trips: s
     patterns = sorted((t for t in found if t.spell is not None and t.spell not in goals), key=lambda t: -t.cost)
     recipes = sorted((t for t in found if t.kind == "recipe" and t.key not in goal_trips), key=lambda t: -t.cost)
     cache = {} if cache is None else cache
+    credit = base.vendor_credit
     for t in patterns[:MAX_TRIP_ALTS] + recipes[:MAX_TRIP_ALTS]:
         left = frozenset(excluded) | t.recipes
-        k = (mode, tuple(sorted(inputs.caps.items())), left)
+        k = (mode, tuple(sorted(inputs.caps.items())), left, credit)
         if k not in cache:
-            cache[k] = plan_route(inputs, mode, exclude=left)
+            cache[k] = plan_route(inputs, mode, exclude=left, vendor_credit=credit)
         alt = cache[k]
         reached = all(alt.final_skill.get(p, 0) >= base.final_skill.get(p, 0) for p in inputs.caps)
         out.append((t, alt, cost(alt) - cost(base)) if reached else (t, None, None))
@@ -388,7 +390,7 @@ def trip_alternatives(base, inputs, mode, cache: dict | None = None, trainer_tri
     price; a Favor trip is always a target's, never measured), and apart from them the costliest
     MAX_TRIP_ALTS recipe trips (by their fees); a recipe trip for the goal recipe is always None.
     inputs: the plan.PlanInputs the route was planned from. cache: routes planned without some recipes, kept
-    by the caller across calls (by mode, targets and the recipes left out), so none is planned twice.
+    by the caller across calls (by mode, targets, the recipes left out and the vendor credit), so none is planned twice.
     trainer_trips: see visits; a "one_go" route has no recipe trips inside a remote rank's stretch to skip.
     excluded: the recipes the route was planned without (free skips): every route planned here leaves them out too.
     capitals, home: see visits; a stop in the home capital is keyed and measured as the trip it was."""

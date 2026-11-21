@@ -78,6 +78,7 @@ class Plan:
     sale_proceeds: float = 0  # what the leftovers sold bring: on the AH up to the sale limit, the rest to a vendor
     leftover_value: float = 0
     vendor_back: float = 0  # the leftovers sold, every one at its vendor price, whatever the AH pays (#97)
+    vendor_credit: bool = True  # planned with the vendor price of the crafts sold in the score (False: see plan())
 
     @property
     def ah_extra(self) -> float:
@@ -154,7 +155,7 @@ def plan(gd, valuer, stock, favor, caps: dict[int, int], quests: dict | None = N
          reuse: dict[int, tuple[float, float]] | None = None,
          craft_once: dict[int, int] | None = None, exclude: frozenset[int] = frozenset(),
          one_time_in_full: bool = False, overtime: int = 0, reading: str = "relative",
-         order: tuple[int, ...] | None = None) -> Plan:
+         order: tuple[int, ...] | None = None, vendor_credit: bool = True) -> Plan:
     """caps: profession -> target skill (one or two professions; see resolve_goals).
     order: None raises the professions side by side (always the lower one); skill lines raise them one
     at a time, the first in the order until it reaches its cap or stalls, then the next.
@@ -163,17 +164,21 @@ def plan(gd, valuer, stock, favor, caps: dict[int, int], quests: dict | None = N
     rather than spread over the points it could cover (a candidate route; see compare.settle_routes).
     reuse: item -> (count later steps consume, value per unit), credited when a step makes it.
     overtime, reading: the character's Working Overtime rank and how it reads (see skillup_chance);
-    it raises the chance of every skill-up, disenchanting included."""
+    it raises the chance of every skill-up, disenchanting included.
+    vendor_credit: False plans without the vendor price of the crafts sold in the score (a budget's fallback route,
+    which may need less gold up front; see budget.cut). The totals count what vendors pay back either way, and the
+    plan says how it was planned (Plan.vendor_credit), so a route planned again from it is planned the same way."""
     return _Route(gd, valuer, stock, favor, caps, quests, reuse, craft_once, exclude, one_time_in_full,
-                  overtime, reading, order).run()
+                  overtime, reading, order, vendor_credit).run()
 
 
 class _Route:
     """The state one plan() call shares between its steps."""
 
     def __init__(self, gd, valuer, stock, favor, caps, quests, reuse, craft_once, exclude,
-                 one_time_in_full, overtime, reading, order=None):
+                 one_time_in_full, overtime, reading, order=None, vendor_credit=True):
         self.gd, self.valuer, self.stock, self.favor = gd, valuer, stock, favor
+        self.vendor_credit = vendor_credit
         self.order = tuple(order) if order else None
         self.one_time_in_full, self.overtime, self.reading = one_time_in_full, overtime, reading
         self.quests = quests or {}
@@ -191,7 +196,7 @@ class _Route:
             recipes.pop(spell, None)
         self.recipes = recipes
         self.pools = Pools.from_stock(stock)
-        self.p = Plan()
+        self.p = Plan(vendor_credit=vendor_credit)
         skill = {x: max(1, stock.skills.get(x, 1)) for x in self.profs}
         self.skill = skill
         # Ranks up to the current skill are already trained; at exactly a cap the next one is not.
@@ -615,7 +620,7 @@ class _Route:
                                                        reuse_left=need - self.produced.get(item, 0))
                 reuse_val = unit * reused
                 held_val = held * opts.get("de", 0)
-                sold_val = sold * self.valuer.vendor_price(item)
+                sold_val = sold * self.valuer.vendor_price(item) if self.vendor_credit else 0
             one_time = lo[0].economic + sum(t["cost"].economic for t in tools)
             base = c.score + one_time / usable
             plain = base - reuse_val - held_val  # the score without the vendor credit
