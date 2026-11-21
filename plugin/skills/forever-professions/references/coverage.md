@@ -8,7 +8,7 @@ says what is there.
   least total value).
 - The route in trainer stages, with trips away from home marked (Artisan and Master trainers,
   trips back to them for recipes, vendor patterns, the Favor vendor) and the cost of skipping a
-  recipe trip; or, per character, levelling at the remote trainer in one go with everything brought
+  recipe trip (a trip that costs nothing to skip is left out of the route, and said); or, per character, levelling at the remote trainer in one go with everything brought
   along, and a warning when the bring list doesn't fit the bags. Each trainer visit lists the trainer recipes to learn there, as far as the trainer's
   rank teaches them. Trainers are named for the character's faction, with zone, map coordinates and
   what is nearby ([list-layout.md](list-layout.md), "Trainer stages and trips").

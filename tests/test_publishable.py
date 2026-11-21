@@ -321,6 +321,28 @@ class PublishableTests(unittest.TestCase):
         self.assertIn("A run that crosses a rank training is two rows, one in each stage.", layout)
 
 
+    def test_docs_promise_free_skips(self):
+        """#90: list-layout.md gives the free-skip rule of plan.take_free_skips (trips.FREE_SKIP, MAX_TRIP_ALTS rounds)
+        and the lines guide.free_skip_line prints (tests/test_trips.py FreeSkipTests, tests/test_cli.py
+        FreeSkipReportTests); setup.md and coverage.md say a free trip is left out."""
+        from yap_forever.trips import FREE_SKIP, MAX_TRIP_ALTS
+
+        def read(name):
+            return " ".join((SKILL / name).read_text(encoding="utf-8").split())
+        layout, setup, coverage = (read(f"references/{n}.md") for n in ("list-layout", "setup", "coverage"))
+        self.assertEqual((FREE_SKIP, MAX_TRIP_ALTS), (0.5, 3))
+        for line in ("A trip whose route-without costs at most 0.5c more (or less), reaches the same skills and makes "
+                     "fewer trainer visits and pattern trips is left out of the route",
+                     "at most three rounds, the recipes left out adding up",
+                     "`Planned without the trip back to <trainer> at <skill> for <recipes>: the route without it "
+                     "costs the same.`",
+                     "`Planned without the trip to buy the pattern for <recipe>: the route without it costs the same.`",
+                     "A trip left on the route whose skip costs at most 0.5c more gets no skip clause."):
+            self.assertIn(line, layout)
+        self.assertNotIn("no extra cost", layout)
+        self.assertIn("one that costs nothing to skip is left out of the route", setup)
+        self.assertIn("a trip that costs nothing to skip is left out of the route", coverage)
+
 if __name__ == "__main__":
     unittest.main()
 

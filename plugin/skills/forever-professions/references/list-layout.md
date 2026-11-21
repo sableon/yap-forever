@@ -122,7 +122,17 @@ Write it for that.
   for the route without it` (the route planned again without those recipes) or `; there is no other
   way to reach the target without it`, and a full stop. As with vendor and Favor trips, which keep
   their own three, only the costliest three recipe trips (by trainer fees) get the skip clause; a trip
-  for the goal recipe always says there is no other way. Below Artisan it is a stop in a capital:
+  for the goal recipe always says there is no other way. A trip whose route-without costs at most 0.5c
+  more (or less), reaches the same skills and makes fewer trainer visits and pattern trips is left out
+  of the route (trainer visits: rank trainings, trips back and capital stops; pattern trips: vendor and
+  Favor trips). The route is planned again without it, at most three rounds, the recipes left out
+  adding up, never the goal recipe, and under a budget only when its "Gold to bring" still fits. The
+  guide header (after the listing line) and the report's data notes say so, one line a trip:
+  `Planned without the trip back to <trainer> at <skill> for <recipes>: the route without it costs the
+  same.` (`<trainer>` is the trainer's name when the data names one, else `the <Rank> <Person>`), or
+  `Planned without the trip to buy the pattern for <recipe>: the route without it costs the same.` for
+  a vendor or Favor trip. A trip left on the route whose skip costs at most 0.5c more gets no skip
+  clause. Below Artisan it is a stop in a capital:
   `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital (for example <name>, <capital>).`
   After the first row of a rank and profession has named the capital trainers (and the city's tip),
   later stops of that rank read `- At <skill>, learn <recipes> at any <Rank> <Person> in a capital.` Without
@@ -175,7 +185,8 @@ Write it for that.
   cheaper if trainers offer recipes at the Forever listing (the route planned again with the listed
   requirements, compared in the route's own measure): `A route planned at the Forever listing
   (trainers offering recipes from their listed skill) could cost about <gold> less.` The report's data notes carry the same line. No line when listing the recipes
-  would not make the route cheaper.
+  would not make the route cheaper. The lines of the trips the route was planned without follow it
+  ("Trainer stages and trips").
 - On the lowest profession's route, a row that costs `study_hint_gold_per_point` gold a point or more
   ends with ` — about <gold> a point here: Dedicated Study (one free point a day) would cover these N
   points in N days`, and ` (a legacy talent you haven't taken)` when the profile's character lacks

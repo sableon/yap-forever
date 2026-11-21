@@ -162,6 +162,21 @@ class CutTests(unittest.TestCase):
         self.assertIn("The next stop, Blacksmithing 75, costs about", " ".join(budget.lines(cut(i, 0.5), Budget(0.5))))
         self.assertNotIn("stops there", " ".join(budget.lines(cut(i, 0.5), Budget(0.5))))
 
+    def test_adopted_route_keeps_the_cut(self):
+        # #90: a route planned without a free trip replaces the cut's route and gold; a profession the budget holds
+        # at its start gets no "already at" event back from the new plan (cut drops it), one at its target keeps it
+        from yap_forever.planner import Plan, reached_lines
+        old = Plan(events=[])
+        c = budget.BudgetCut({BS: 225, ENCH: 1}, old, 500, {ENCH: (75, 900)}, {}, {BS: 225, ENCH: 1}, {BS: 1, ENCH: 1})
+        new = Plan(events=["Enchanting already at 1"])
+        got = budget.adopt(c, new, 400)
+        self.assertIs(got.plan, new)
+        self.assertEqual((got.spent, got.caps, got.next_stop), (400, c.caps, c.next_stop))
+        self.assertEqual(reached_lines(got.plan), [])
+        c.next_stop = {}  # Enchanting's target is 1: reached, and said
+        self.assertEqual(reached_lines(budget.adopt(c, Plan(events=["Enchanting already at 1"]), 400).plan),
+                         ["Enchanting is already at 1: nothing to plan."])
+
 
 class RenderTests(unittest.TestCase):
     """The guide and the report of a cut route: what the budget reaches and why."""

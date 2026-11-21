@@ -256,3 +256,16 @@ class BudgetLineTests(unittest.TestCase):
         plain = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps, budget_lines=budget.lines(cut, goal))
         self.assertNotIn("The next stop", plain)
         self.assertNotIn("planned to your", render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps))
+
+
+class FreeSkipNoteTests(unittest.TestCase):
+    def test_data_notes_name_the_trips_left_out(self):
+        # #90: each trip the route was planned without (plan.take_free_skips) is one line, after the saving line
+        p, m, gd, st = sample()
+        caps = {164: 225, 333: 225}
+        skips = ["Planned without the trip to buy the pattern for BS scroll: the route without it costs the same."]
+        text = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps, saving_line="A saving line.", free_skips=skips)
+        notes = text[text.index("## Data notes"):]
+        self.assertEqual(text.count(skips[0]), 1)
+        self.assertLess(notes.index("- A saving line."), notes.index(f"- {skips[0]}"))
+        self.assertNotIn("Planned without", render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, caps))

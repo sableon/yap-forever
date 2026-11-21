@@ -86,6 +86,13 @@ def reached_lines(plan) -> list[str]:
             for e in plan.events if (m := ALREADY_AT.match(e))]
 
 
+def measure(mode: str):
+    """The measure a route of `mode` is chosen and compared by, as a function of a Plan: gold out of pocket for
+    "gold", total value for "value". Settling the routes, the skip alternatives, free skips and the listed saving
+    all use it."""
+    return (lambda p: p.cash_total) if mode == "gold" else (lambda p: p.economic_total)
+
+
 def resolve_goals(goals: dict, gd, favor=None, quests: dict | None = None) -> tuple[dict[int, int], dict[int, int]]:
     """Goals (config.Goal per profession) -> (target skill per profession, recipe to craft once)."""
     caps: dict[int, int] = {}
