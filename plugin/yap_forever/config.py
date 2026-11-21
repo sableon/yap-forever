@@ -174,7 +174,7 @@ def _number(value, key: str) -> float:
 def _premium(d: dict) -> float:
     """`ah_premium`: a number, 1 or more (default 2)."""
     if "ah_premium" not in d:
-        return 2.0
+        return Stock.ah_premium
     n = _number(d["ah_premium"], "ah_premium")
     if n < 1:
         raise ValueError(f"ah_premium must be 1 or more, not {d['ah_premium']}")

@@ -377,3 +377,13 @@ class AhPremiumTests(unittest.TestCase):
         # a green at a dead market is vendored or, with Enchanting planned, kept for disenchanting as before
         v = Valuer(toy.market({toy.BELT: [(137, 50)]}), toy.gamedata([]), toy.stock())  # net 1.3x vendor
         self.assertEqual(set(v.output_options(toy.BELT, 0)), {"vendor", "de"})
+
+    def test_premium_boundary_is_exact(self):
+        # 2.2 x 100 is 220.00000000000003 in floating point: a net of exactly 220c still passes
+        self.assertGreater(2.2 * 100, 220)
+        v = self.valuer([(232, 10)], sell=100, ah_premium=2.2)
+        self.assertEqual(v.market.net_sell(self.GEAR), 220)
+        self.assertEqual(v.ah_price(self.GEAR), 220)
+        below = self.valuer([(231, 10)], sell=100, ah_premium=2.2)  # net 219c
+        self.assertEqual(below.market.net_sell(self.GEAR), 219)
+        self.assertIsNone(below.ah_price(self.GEAR))

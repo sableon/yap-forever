@@ -130,7 +130,8 @@ class Valuer:
         goes to a vendor). For crafted outputs only: what the player holds or uses keeps `owned_value`."""
         net = self.market.net_sell(item)
         vendor = self.vendor_price(item)
-        if net is None or net < self.stock.ah_premium * vendor or net - vendor < MIN_AH_MARGIN:
+        # copper is whole: the tolerance keeps a net of exactly premium x vendor in (2.2 x 100 is 220.00000000000003)
+        if net is None or net < self.stock.ah_premium * vendor - 1e-6 or net - vendor < MIN_AH_MARGIN:
             return None
         return net
 

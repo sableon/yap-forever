@@ -742,3 +742,17 @@ class AhPremiumPlanTests(unittest.TestCase):
         p, m = self.plan((115790, 1))  # one listed at 11x: five on the AH, the rest to a vendor
         n = p.leftovers[self.GEAR]
         self.assertAlmostEqual(p.sale_proceeds, 5 * m.net_sell(self.GEAR) + (n - 5) * 10000)
+
+    def test_green_below_the_premium_is_disenchanted_with_enchanting_planned(self):
+        # the effect behind the real-data route change: a green whose AH price no longer counts is kept for
+        # disenchanting when its materials are worth more than its vendor price (here 3.75 dust at 30c and the rest,
+        # about 1s 24c, against a 1s vendor price and an AH net of 1s 90c, below 2x)
+        gd = toy.gamedata([toy.recipe(1, "BS belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),
+                           toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})])
+        st = toy.stock(skills={ENCH: 100})  # past the skill disenchanting gives: only the materials count
+        m = toy.market({**BARS, toy.BELT: [(200, 50)], toy.DUST: [(30, 100000)]})
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={BS: 20, ENCH: 120})
+        self.assertTrue(any("disenchant" in e and "Runed Copper Belt" in e for e in p.events), p.events)
+        self.assertNotIn(toy.BELT, p.leftovers)
+        self.assertIn(toy.DUST, p.de_materials)
+        self.assertIsNone(Valuer(m, gd, st).ah_price(toy.BELT))

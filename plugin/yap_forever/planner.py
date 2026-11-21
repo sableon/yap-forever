@@ -78,6 +78,11 @@ class Plan:
     sale_proceeds: float = 0
     leftover_value: float = 0
 
+    def sold(self, item: int) -> bool:
+        """A leftover the route sells: not held for disenchanting, not a green kept for another character's
+        Enchanting, not a disenchant material (those count at their worth, see _Route._finish)."""
+        return item not in self.held_for_de and item not in self.kept_greens and item not in self.de_materials
+
 
 def reached_lines(plan) -> list[str]:
     """One line for each target the character already has (the planner's "<Prof> already at N" events),

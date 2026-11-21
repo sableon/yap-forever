@@ -380,7 +380,9 @@ class AhSalesReportTests(unittest.TestCase):
         self.assertIn("- 4 Test Gear\n", self.crafted(text))
         self.assertNotIn("check the ah", text.lower())
         self.assertIn("Test Gear (sells 4, 1 listed): check the AH before listing", self.thin(*rest))
-        _text, *rest = self.render([(115790, 2)], made=2)  # no more made than listed: no thin market to flag
+        _text, *rest = self.render([(115790, 2)], made=2)  # no more made than listed: the flag still has its entry
+        self.assertIn("Test Gear (sells 2, 2 listed): check the AH before listing", self.thin(*rest))
+        _text, *rest = self.render([(115790, 3)], made=2)  # 3 listed: no buyout risk, and no more made than listed
         self.assertEqual(self.thin(*rest), "| Thin markets | none | none |")
 
     def test_data_note_states_the_ah_rule(self):
@@ -404,6 +406,21 @@ class AhSalesReportTests(unittest.TestCase):
         self.assertIn("- BS scarce: +10g 99s 0c each", block)  # 11x: at its AH net, 110000c less 100c of material
         self.assertIn("- BS dead: +99s 0c each", block)  # 1.3x: at its vendor price, 10000c less 100c
         self.assertNotIn("+1g 29s 0c", block)  # not at its AH net of 13000c
+
+    def test_thin_markets_skip_what_is_not_sold(self):
+        # the same "sold" test as "Crafted along the way": a kept green and leftover dust are not sold
+        from yap_forever.compare import compare
+        gd, st = toy.gamedata([]), toy.stock()
+        m = toy.market({toy.BELT: [(5000, 1)], toy.DUST: [(5000, 1)]})  # one listed each, well above vendor
+        for p in (Plan(leftovers={toy.BELT: 10}, kept_greens={toy.BELT: 10}),
+                  Plan(leftovers={toy.DUST: 10}, de_materials={toy.DUST: 10})):
+            text = compare({"gold": p, "value": p}, gd, m, st)
+            self.assertIn("| Thin markets | none | none |", text)
+            report = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {BS: 20})
+            self.assertNotIn("supplier", report)
+        sold = Plan(leftovers={toy.BELT: 10})
+        self.assertIn("Runed Copper Belt (sells 10, 1 listed): check the AH before listing",
+                      compare({"gold": sold, "value": sold}, gd, m, st))
 
 
 def toy_turnin():

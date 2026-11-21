@@ -48,8 +48,7 @@ def _crafted_line(item, n, plan, v, market, gd) -> str:
     and more made than it gets the supplier note, and the buyout flag when its few listings may be gone (#62)."""
     made = math.floor(n)
     line = f"- {made} {gd.name(item)}{_q(item, gd)}"
-    sold = item not in plan.held_for_de and item not in plan.kept_greens and item not in plan.de_materials
-    if not (sold and v.supplier(item, made)):
+    if not (plan.sold(item) and v.supplier(item, made)):
         return line
     line += (f": only {market.depth(item)} listed at {money(market.min_price(item))} "
              f"(vendor {money(v.vendor_price(item))}): you may be the supplier; list more than "

@@ -504,7 +504,8 @@ class PublishableTests(unittest.TestCase):
         def read(name):
             return " ".join((SKILL / "references" / name).read_text(encoding="utf-8").split())
         rules, setup = read("game-rules.md"), read("setup.md")
-        premium = Stock({}, 0, 0, 1, 0, 0).ah_premium
+        import dataclasses
+        premium = next(f.default for f in dataclasses.fields(Stock) if f.name == "ah_premium")
         self.assertEqual((premium, gold(MIN_AH_MARGIN)), (2, "1s"))
         section = rules[rules.index("## Selling crafts"):rules.index("## Merchant's Favor")]
         for line in ("AH resale of crafts never chooses the route",

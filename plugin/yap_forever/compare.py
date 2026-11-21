@@ -23,7 +23,7 @@ def _to_sell(plan, gd, market) -> str:
 
 def _thin(plan, gd, market, sales) -> str:
     """Thin markets: what the route buys much of, and the crafts it sells on the AH (sales: a costmodel.Valuer, whose
-    rule says which) more of than are listed, flagged when the few listings may be bought out."""
+    rule says which) more of than are listed, and those whose few listings may be bought out, flagged."""
     names = []
     for i, n in sorted(plan.bought.items()):
         depth = market.depth(i)
@@ -31,8 +31,11 @@ def _thin(plan, gd, market, sales) -> str:
             names.append(f"{gd.name(i)} (buys {math.ceil(n)} of {depth})")
     for i, n in sorted(plan.leftovers.items()):
         depth = market.depth(i)
-        if sales.ah_price(i) is not None and i not in plan.held_for_de and n > depth:
-            flag = ": check the AH before listing" if sales.buyout_risk(i) else ""
+        if sales.ah_price(i) is None or not plan.sold(i):
+            continue
+        risk = sales.buyout_risk(i)
+        if n > depth or (risk and n >= 1):
+            flag = ": check the AH before listing" if risk else ""
             names.append(f"{gd.name(i)} (sells {math.floor(n)}, {depth} listed){flag}")
     return "; ".join(names) or "none"
 
