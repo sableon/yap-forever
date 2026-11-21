@@ -6,7 +6,7 @@ from yap_forever.budget import amount
 from yap_forever.costmodel import AH_UNIT_CAP, MIN_AH_MARGIN, Valuer, money
 from yap_forever.favor_suggest import levels_known
 from yap_forever.gamedata import BS, ENCH, PROFESSIONS, QUESTIE_SHA, SKILLUP_SHA, WAGO_BUILD
-from yap_forever.guide import NOTHING_IN_BUDGET, gold
+from yap_forever.guide import NOTHING_IN_BUDGET, gold, vendor_counted
 from yap_forever.planner import DISENCHANT, reached_lines, step_factor
 from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, Budget, mail_text
@@ -182,7 +182,7 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out.append(f"- **Cash needed:** {money(plan.cash_total)} ({_budget_text(plan.cash_total, stock, budget, goal)}), "
                "before any sales.")
     out.append(f"- Trainer fees included: {money(plan.fees)}.")
-    out.append(f"- Back from vendors: {money(plan.vendor_back)} (counted in choosing the route).")
+    out.append(f"- Back from vendors: {money(plan.vendor_back)} ({vendor_counted(plan)}).")
     out.append(f"- AH sales on top: {money(plan.ah_extra)} (not counted).")
     out.append(f"- Leftover disenchant materials worth {money(plan.leftover_value)}.")
     out.append(f"- **Full economic cost:** {money(plan.economic_total)} "

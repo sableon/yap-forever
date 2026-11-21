@@ -829,10 +829,17 @@ def _money(out, plan, stock) -> None:
             f"- **Merchant's Favor:** {plan.favor_spent} of {stock.favor} spent.", ""]
 
 
+def vendor_counted(plan) -> str:
+    """Whether the vendor money was counted in choosing the route: a budget's fallback route (Plan.vendor_credit
+    False, budget.cut) was chosen without it."""
+    return "counted in choosing the route" if plan.vendor_credit else "left out in choosing this route, to fit the budget"
+
+
 def _back_line(plan) -> str:
-    """Money's "Back from selling crafts": what vendors pay back (Plan.vendor_back, counted in choosing the route) and
-    what AH sales add on top (Plan.ah_extra), that clause left out when there are none."""
-    vendor = f"{gold(plan.vendor_back)} from vendors (counted in choosing the route)"
+    """Money's "Back from selling crafts": what vendors pay back (Plan.vendor_back, counted in choosing the route, or
+    left out on a budget's fallback route: vendor_counted) and what AH sales add on top (Plan.ah_extra), that clause
+    left out when there are none."""
+    vendor = f"{gold(plan.vendor_back)} from vendors ({vendor_counted(plan)})"
     if round(plan.ah_extra) < 1:
         return f"- **Back from selling crafts:** about {vendor}."
     return (f"- **Back from selling crafts:** about {gold(plan.sale_proceeds)}: {vendor} and about "

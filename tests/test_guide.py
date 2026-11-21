@@ -1600,3 +1600,27 @@ class SellClauseGuideTests(unittest.TestCase):
                 self.assertIn(f"- Back from vendors: {money(p.vendor_back)} (counted in choosing the route).\n", report)
                 self.assertIn(f"- AH sales on top: {money(p.ah_extra)} (not counted).\n", report)
                 self.assertNotIn("Expected sales", report)
+
+    def test_money_and_totals_on_the_route_without_the_credit(self):
+        # 7b review Minor 3: a budget's fallback route was chosen without the vendor money, so Money and Totals say it
+        # was left out in choosing this route (to fit the budget), not counted
+        import dataclasses
+
+        from yap_forever.costmodel import Valuer, money
+        from yap_forever.planner import plan
+        from yap_forever.report import render, verdict
+        gd = toy.gamedata([toy.recipe(1, "BS gear", 164, {toy.COPPER_BAR: 1}, (self.GEAR, 1))])
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=10000)
+        st = toy.stock()
+        for listing in ((115790, 1), (13685, 50)):
+            with self.subTest(listing=listing):
+                m = toy.market({**BARS, self.GEAR: [listing]})
+                p = dataclasses.replace(plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 20}),
+                                        vendor_credit=False)
+                guide = render_guide(p, gd, m, st, {164: 20})
+                report = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 20})
+                said = "from vendors (left out in choosing this route, to fit the budget)"
+                self.assertIn(f"19.0g {said}" + ("." if listing == (13685, 50) else " and about"), guide)
+                self.assertIn(f"- Back from vendors: {money(p.vendor_back)} (left out in choosing this route, to fit the "
+                              "budget).\n", report)
+                self.assertNotIn("counted in choosing the route", guide + report)
