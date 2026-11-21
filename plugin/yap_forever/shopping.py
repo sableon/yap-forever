@@ -354,12 +354,17 @@ def made_later_by(src: str) -> int | None:
     return int(src[len(LATER):]) if src.startswith(LATER) else None
 
 
+_MAILED = re.compile(r"^(.*) \((?:mail from .*|(\d+) your own, \d+ mail from .*)\)$")
+
+
 def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int, float]]]:
     """row index -> (origin, material, count) of the disenchants done just before that row (see _own_sources): an
-    event at Enchanting skill s comes before the first Enchanting row that reaches past s. Its greens are the oldest
-    ones made by then (before the trip, the trip's profession or the other one), then those of rows placed after it
-    (a merged run's row comes where the run starts); greens no row made (from the bank or the mail), and every green
-    of an Enchanting trip disenchanted at or below the trip's skill, count as before the trip."""
+    event at Enchanting skill s comes before the first Enchanting row that reaches past s.
+    Each event uses up the greens the route's rows made, oldest first. One done before the trip (its row comes
+    before the trip's, or, on an Enchanting trip, at or below the trip's skill) takes only greens made before the
+    trip and counts as before the trip. A later one takes those made by its row first, then those of rows placed
+    after it (a merged run's row comes where the run starts). Greens from the bank or the mail take none and count as
+    before the trip, as do greens no row made."""
     names = {it.name: i for i, it in gd.items.items()}
     made: dict[int, list[list]] = {}  # green -> [[row index, origin, count left]] in route order
     for k, r in enumerate(every):
@@ -373,26 +378,31 @@ def _de_supply(plan, gd, every, at, trip) -> dict[int, list[tuple[str | int, int
         if not m:
             continue
         s, n, name = int(m.group(1)), float(m.group(2)), m.group(3)
-        name = name.removesuffix(" from your bank")
-        while name not in names and " (" in name:
-            name = name.rsplit(" (", 1)[0]
+        crafted = n  # how many of them the route's rows made (the rest come from the bank or the mail)
+        if name.endswith(" from your bank"):
+            name, crafted = name.removesuffix(" from your bank"), 0
+        elif mailed := _MAILED.match(name):
+            name, crafted = mailed.group(1), float(mailed.group(2) or 0)
         green = names.get(name)
         if green is None:
             continue
         k = next((k for k, r in enumerate(every) if r["st"].profession == ENCH and r["st"].skill_to > s), len(every))
+        before = k < at or (trip.profession == ENCH and s <= trip.skill)
+        lots = made.get(green, [])
+        lots = ([x for x in lots if x[0] < at] if before
+                else [x for x in lots if x[0] < k] + [x for x in lots if x[0] >= k])
         parts: list[tuple[str | int, float]] = []
-        if not (trip.profession == ENCH and s <= trip.skill):
-            lots = made.get(green, [])  # those made by then first; a merged run's row can come before its greens
-            for lot in [x for x in lots if x[0] < k] + [x for x in lots if x[0] >= k]:
-                if n <= 1e-9:
-                    break
-                used = min(n, lot[2])
-                if used > 1e-9:
-                    lot[2] -= used
-                    n -= used
-                    parts.append((lot[1], used))
-        if n > 1e-9:
-            parts.append(("pre", n))
+        for lot in lots:
+            if crafted <= 1e-9:
+                break
+            used = min(crafted, lot[2])
+            if used > 1e-9:
+                lot[2] -= used
+                crafted -= used
+                parts.append(("pre" if before else lot[1], used))
+        rest = n - sum(q for _o, q in parts)
+        if rest > 1e-9:
+            parts.append(("pre", rest))
         for origin, count in parts:
             out.setdefault(k, []).extend((origin, mat, count * per) for mat, per in de_yield(gd.items[green]).items())
     return out
@@ -441,9 +451,19 @@ def _own_sources(plan, gd, every, at, rows, trip) -> tuple[dict[int, int], dict[
         if out:
             add(origin_of(k, prof), out[0], (r["n"] + r["more"]) * out[1])
 
-    def whole(d):
-        return {i: math.ceil(q - 1e-6) for i, q in sorted(d.items()) if q > 1e-6}
-    return whole(taken.get("pre", {})), {o: whole(d) for o, d in taken.items() if o not in ("own", "pre") and whole(d)}
+    # whole items: each item's total rounded up once, shared by largest remainder (disenchants yield fractions)
+    origins = ["pre", *sorted(o for o in taken if o not in ("own", "pre"))]
+    counts: dict[str | int, dict[int, int]] = {o: {} for o in origins}
+    for i in sorted({i for o in origins for i in taken.get(o, {})}):
+        shares = [(o, taken.get(o, {}).get(i, 0)) for o in origins]
+        left = math.ceil(sum(q for _o, q in shares) - 1e-6) - sum(math.floor(q + 1e-6) for _o, q in shares)
+        ranked = sorted(range(len(shares)), key=lambda x: (-(shares[x][1] - math.floor(shares[x][1] + 1e-6)),
+                                                           -shares[x][1], x))
+        for x, (o, q) in enumerate(shares):
+            n = math.floor(q + 1e-6) + (1 if x in ranked[:max(left, 0)] else 0)
+            if n:
+                counts[o][i] = n
+    return counts["pre"], {o: d for o, d in counts.items() if o != "pre" and d}
 
 
 def _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills, trainer_trips):

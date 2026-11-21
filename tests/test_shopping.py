@@ -1,5 +1,4 @@
 """Shopping list, mailbox trips and what to bring to a remote trainer (ported from scripts/shopping.py)."""
-import math
 import unittest
 
 from tests import toy
@@ -312,8 +311,10 @@ class BringListTests(unittest.TestCase):
         trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
         items = bring_list(p, gd, trip, None, trainer_trips="one_go")[1]
         before = per * 10  # the oldest belts are disenchanted first: those made before the trip
-        self.assertEqual([x for x in items if x[0] == toy.DUST],
-                         [(toy.DUST, math.ceil(before), "yours"), (toy.DUST, math.ceil(use - before - 1e-6), f"later:{BS}")])
+        dust = [x for x in items if x[0] == toy.DUST]
+        self.assertEqual([src for _i, _n, src in dust], ["yours", f"later:{BS}"])
+        self.assertEqual(sum(n for _i, n, _src in dust), use)  # whole items, rounded up once
+        self.assertLess(abs(dust[0][1] - before), 1)
 
     def test_one_go_disenchant_inside_a_merged_run_finds_its_greens(self):
         # Enchanting's dust run 230-240 is one row placed before the belts Blacksmithing makes after the trip, so the
@@ -334,6 +335,47 @@ class BringListTests(unittest.TestCase):
         trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
         items = bring_list(p, gd, trip, None, trainer_trips="one_go")[1]
         self.assertEqual([x for x in items if x[0] == toy.DUST], [(toy.DUST, use, f"later:{BS}")])
+
+    def test_one_go_disenchant_before_the_trip_uses_up_its_greens(self):
+        # belts made before an Enchanting trip are disenchanted before it (at 220); the belts Blacksmithing makes after
+        # it are disenchanted at 231: that dust is made later, not yours
+        from yap_forever.disenchant import de_yield
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import Trip
+        belt = toy.BELT
+        gd = toy.gamedata([toy.recipe(41, "Make belt", BS, {S: 2}, (belt, 1)), toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(54, "Ench dust", ENCH, {toy.DUST: 1})])
+        use = int(de_yield(gd.items[belt])[toy.DUST] * 10)
+        p = orange(Plan(steps=[Step(BS, 210, 220, 41, "Make belt", 10, 0, 0, {S: 20}),
+                               Step(ENCH, 215, 225, 54, "Ench dust", use, 0, 0, used_made={toy.DUST: use}),
+                               Step(ENCH, 225, 230, 51, "Ench T", 5, 0, 0, {T: 5}),
+                               Step(BS, 220, 230, 41, "Make belt", 10, 0, 0, {S: 20}),
+                               Step(ENCH, 230, 240, 54, "Ench dust", use, 0, 0, used_made={toy.DUST: use})],
+                        ranks=[(ENCH, 225, 300, 0)], bought={S: 40, T: 5}, final_skill={BS: 230, ENCH: 240},
+                        events=[f"Enchanting 220: disenchant 10 {gd.name(belt)}",
+                                f"Enchanting 231: disenchant 10 {gd.name(belt)}"]))
+        trip = Trip(225, ENCH, "rank", "Enchanting rank to 300")
+        items = bring_list(p, gd, trip, None, trainer_trips="one_go")[1]
+        self.assertEqual([x for x in items if x[0] == toy.DUST], [(toy.DUST, use, f"later:{BS}")])
+
+    def test_one_go_bank_disenchant_before_the_trip_takes_no_greens_made_in_it(self):
+        # a Blacksmithing trip whose stretch uses dust from 20 bank belts disenchanted at Enchanting 50, long before;
+        # Blacksmithing also makes that belt in the stretch (to sell): the dust is yours, from before the trip
+        from yap_forever.disenchant import de_yield
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import Trip
+        belt = toy.BELT
+        gd = toy.gamedata([toy.recipe(41, "Make belt", BS, {S: 2}, (belt, 1)), toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(56, "Dust bar", BS, {toy.DUST: 1})])
+        use = int(de_yield(gd.items[belt])[toy.DUST] * 20)
+        p = orange(Plan(steps=[Step(ENCH, 50, 60, 51, "Ench T", 10, 0, 0, {T: 10}),
+                               Step(BS, 225, 230, 41, "Make belt", 20, 0, 0, {S: 40}),
+                               Step(BS, 230, 235, 56, "Dust bar", use, 0, 0, used_made={toy.DUST: use})],
+                        ranks=[(BS, 225, 300, 0)], bought={S: 40, T: 10}, final_skill={BS: 235, ENCH: 60},
+                        events=[f"Enchanting 50: disenchant 20 {gd.name(belt)} from your bank"]))
+        trip = Trip(225, BS, "rank", "Blacksmithing rank to 300")
+        self.assertEqual(bring_list(p, gd, trip, None, trainer_trips="one_go"),
+                         (235, [(S, 40, "mail"), (toy.DUST, use, "yours")]))
 
     def test_one_go_counts_demand_beyond_its_own_crafts(self):
         # the stretch makes 2 L (1 and 1 more for the next row) and that row asks for 3 (the buffer): the one it
