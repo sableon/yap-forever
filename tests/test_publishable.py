@@ -575,6 +575,16 @@ class PublishableTests(unittest.TestCase):
                       "about Z less up front.", step3)
         self.assertIn("`pay`", step3)
         self.assertIn("save it under `[goals]` only together with a saved `budget` (`pay` alone is refused)", step3)
+        # Z comes from a plan to the targets without the budget, so the question is asked even when the budget reaches
+        # no stop up front (that cut route has no rows, so no line); only a plan with no line skips it
+        for rule in ("first plan to the targets without it (no `--budget`, before a budget is saved under `[goals]`)",
+                     "Whenever that line is there, ask once:",
+                     "With no such line both ways need the same gold: keep the default. Then plan with the budget and "
+                     "the chosen `--pay`."):
+            self.assertIn(rule, step3)
+        self.assertNotIn("after a first plan with that budget", step3)
+        self.assertIn("`<budget> takes <Profession> to <stop> (<gold>, selling crafts to a vendor as you go).`", layout)
+        self.assertIn("A remote trip's bring list buys its stretch before the trip", layout)
         self.assertIn("[--pay upfront|as_you_go]", skill)
         from yap_forever.config import PAYS
         self.assertEqual(PAYS, ("upfront", "as_you_go"))

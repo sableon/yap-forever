@@ -77,7 +77,11 @@ Write it for that.
   go and buy each row's reagents when you reach it, about <gold> is enough up front (<gold> less).`:
   the most you are short at any route row (what is bought up to the end of that row, with the
   patterns and trainer fees met by then, less what vendors paid for the earlier rows' crafts, the
-  amounts the rows say). AH sales and disenchant materials never count.
+  amounts the rows say, which round each row up to whole crafts: their sum is capped at what vendors
+  pay back for the route). AH sales and disenchant materials never count. The figure assumes each
+  row's reagents are bought when you reach it. A remote trip's bring list buys its stretch before the
+  trip, so shopping by the bring list can need more up front. The line is left out when the two
+  figures print the same.
 
 ## Trainer stages and trips
 
@@ -310,9 +314,10 @@ With a budget goal ([setup.md](setup.md), "A budget as a goal"), the guide says 
 and the report in its verdict, what the gold reaches, in one paragraph:
 
 - `<budget> takes <Profession> to <stop> (<gold>).`, the professions that advance joined with "and";
-  `<gold>` is the cut route's "Gold to bring" (with `pay = "as_you_go"`, the gold enough up front
-  selling crafts as you go: [setup.md](setup.md)). When no profession advances but one would with more
-  gold: `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route section
+  `<gold>` is the cut route's "Gold to bring". With `pay = "as_you_go"` it is the gold enough up front
+  selling crafts as you go ([setup.md](setup.md)), and the line reads `<budget> takes <Profession> to
+  <stop> (<gold>, selling crafts to a vendor as you go).` When no profession advances but one would
+  with more gold: `<budget> doesn't reach the first stop: nothing is planned yet.` Then the route section
   (guide and report) says `Nothing to craft within this budget.`, and the report's verdict gives only
   the budget paragraph, with no "Ready to level". When nothing advances because every target is
   reached or every profession is stalled, neither line is said: the "already at" and stall lines
