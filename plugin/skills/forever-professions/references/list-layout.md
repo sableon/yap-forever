@@ -79,13 +79,14 @@ Write it for that.
   buy them on the AH (about <gold>).`, with `<gold>` at today's AH prices and no `(about ...)` when one
   of the items has no AH price. These items count in the bag slots too. The other profession's rows stay
   where they are. A recipe trip with no remote rank training before it on the route stays a trip.
-  The patterns the stretch learns (from the trip's skill up to where its bring list ends) are on the bring
-  list too, one slot each, named by where they come from as on the shopping list: `1 <pattern> (from the
-  AH)`, `(from a pattern vendor)` (the data doesn't name the vendor), `(from the Merchant's Favor vendor)`,
-  `(from the bank)` for one you own, `(mail from <Name>)` for one another character mails. A vendor or
+  The patterns the stretch learns are on the bring list too: from the trip's skill up to where its bring
+  list ends, a goal pattern learned at the end of the route included, and one learned at the next rank
+  training left to that trip's list. One slot each, named by where they come from as on the shopping
+  list: `1 <pattern> (from the AH)`, `(from a pattern vendor)` (the data doesn't name the vendor), `(from
+  the Merchant's Favor vendor)`, `(from the bank)` for one you own, `(mail from <Name>)` for one another character mails. A vendor or
   Merchant's Favor pattern on that list gets no `**Trip:**` row of its own: it is bought before you go. A
   pattern trip outside every stretch stays a trip. As needed, the bring list has no patterns: the shopping
-  list and the mailbox trips carry them.
+  list carries them.
 - With bag slots in the stock (`bag_slots`, and `reagent_slots` for reagents), a trip's bring list that
   doesn't fit them (10 slots kept free for crafting, as for mailbox trips) ends with `This needs <N>
   free slots and you have <M>: get bigger bags, bank what this stretch doesn't need, or set a lower goal

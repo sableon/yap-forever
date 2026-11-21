@@ -441,7 +441,8 @@ class BringListTests(unittest.TestCase):
 
     def test_one_go_patterns_are_those_learned_inside_the_stretch(self):
         from yap_forever.shopping import bring_list
-        for at, brought in ((225, True), (244, True), (220, False), (245, False)):  # from the trip's skill to its end
+        # from the trip's skill to its end; the route's end (245, no later rank) is in it: a goal pattern is learned there
+        for at, brought in ((225, True), (244, True), (220, False), (245, True), (246, False)):
             p, gd = self.pattern_plan("ah", at)
             items = bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[1]
             self.assertEqual(any(i == toy.SCROLL for i, _n, _src in items), brought, at)
@@ -483,6 +484,59 @@ class BringListTests(unittest.TestCase):
             self.assertIn("1 Plans: Something (from ", rows[0])
         p, gd = self.pattern_plan("vendor", 220)  # learned before the trip: still a trip of its own
         self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["vendor", "rank"])
+
+    def goal_pattern_plan(self, how):
+        # the goal recipe is a pattern, learned at the route's end (235) and crafted once there, as
+        # planner._craft_once_step does: Step(prof, s, s, ..., crafts=1)
+        gd = toy.gamedata([toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(53, "Ench Goal", ENCH, {T: 1}, source="scroll", scroll=toy.SCROLL, req=235)])
+        gd.items[T].stack = 20
+        p = orange(Plan(steps=[Step(ENCH, 225, 235, 51, "Ench T", 10, 0, 0, {T: 10}),
+                               Step(ENCH, 235, 235, 53, "Ench Goal", 1, 0, 0, {T: 1})],
+                        ranks=[(ENCH, 225, 300, 0)], bought={T: 11}, final_skill={ENCH: 235},
+                        learn_log=[(ENCH, 235, 53, how)]))
+        return p, gd
+
+    def test_one_go_brings_a_goal_pattern_learned_at_the_end(self):
+        from yap_forever.shopping import bring_list, bring_text
+        p, gd = self.goal_pattern_plan("ah")
+        self.assertEqual(bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go"),
+                         (235, [(T, 11, "mail"), (toy.SCROLL, 1, "pattern:ah")]))
+        self.assertIn(" Bring: 11 Iron Bar (from the mail), 1 Plans: Something (from the AH): enough to craft to 235 at "
+                      "the trainer (2 bag slots)", bring_text(p, gd, self.ench_trip(), None, trainer_trips="one_go"))
+
+    def test_one_go_folds_a_vendor_goal_pattern_at_the_end(self):
+        from yap_forever.compare import compare
+        from yap_forever.guide import render_guide
+        from yap_forever.trips import trips
+        p, gd = self.goal_pattern_plan("vendor")
+        start, market = {ENCH: 225}, toy.market({T: [(10, 1000)]})
+        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start)], [("rank", 225), ("vendor", 235)])  # as needed
+        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start, "one_go")], [("rank", 225)])
+        text = render_guide(p, gd, market, toy.stock(skills=start), {ENCH: 235}, trainer_trips="one_go")
+        rows = [line for line in text.splitlines() if line.startswith("- **Trip:**")]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("1 Plans: Something (from a pattern vendor)", rows[0])
+        self.assertIn("| Trips away | 1 |", compare({"gold": p}, gd, market, toy.stock(skills=start),
+                                                     trainer_trips="one_go"))
+
+    def test_one_go_pattern_at_a_rank_boundary_is_listed_once(self):
+        # Artisan at 150 (its stretch ends at the Master training at 200), Master at 200: a pattern learned at 200
+        # belongs to the Master trip's stretch only, and as a vendor pattern it is no trip of its own
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import Trip, trips
+        gd = toy.gamedata([toy.recipe(51, "Ench T", ENCH, {T: 1}),
+                           toy.recipe(53, "Ench P", ENCH, {T: 1}, source="scroll", scroll=toy.SCROLL, req=200)])
+        for how in ("ah", "vendor"):
+            p = orange(Plan(steps=[Step(ENCH, 150, 200, 51, "Ench T", 50, 0, 0, {T: 50}),
+                                   Step(ENCH, 200, 210, 53, "Ench P", 10, 0, 0, {T: 10})],
+                            ranks=[(ENCH, 150, 225, 0), (ENCH, 200, 300, 0)], bought={T: 60}, final_skill={ENCH: 210},
+                            learn_log=[(ENCH, 200, 53, how)]))
+            got = [[i for i, _n, _src in bring_list(p, gd, Trip(s, ENCH, "rank", f"Enchanting rank to {cap}"), None,
+                                                    trainer_trips="one_go")[1]]
+                   for s, cap in ((150, 225), (200, 300))]
+            self.assertEqual([x.count(toy.SCROLL) for x in got], [0, 1], how)
+            self.assertEqual([t.kind for t in trips(p, gd, {ENCH: 150}, "one_go")], ["rank", "rank"], how)
 
     def de_mail_plan(self, suffix):
         # Blacksmithing makes 20 belts after Enchanting's trip; Enchanting disenchants 20 belts at 231 and uses the dust

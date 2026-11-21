@@ -58,13 +58,19 @@ def stretch_end(plan, profession: int, skill: int) -> int:
 PATTERN_HOWS = ("ah", "vendor", "favor", "owned", "mail")  # plan.learn_log: patterns, items the player carries
 
 
-def stretch_patterns(plan, gd, profession: int, lo: int, hi: int) -> list[tuple[int, int, str]]:
-    """(skill, spell, how) of the patterns `profession` learns at skills lo <= skill < hi (plan.learn_log): bought on the
-    AH, from a vendor or with Merchant's Favor, kept in your bank or mailed by another of your characters. With
-    trainer_trips "one_go" a remote rank trip's bring list carries those of its stretch, and a vendor or Favor
-    pattern among them is no trip of its own (see trips)."""
+def stretch_patterns(plan, gd, profession: int, lo: int, hi: int | None = None) -> list[tuple[int, int, str]]:
+    """(skill, spell, how) of the patterns `profession` learns in the one-go stretch from a remote rank training at `lo`
+    to `hi` (default: stretch_end; a bring list cut shorter gives its own end), from plan.learn_log: bought on the
+    AH, from a vendor or with Merchant's Favor, kept in your bank or mailed by another of your characters. A trip's
+    bring list carries them, and a vendor or Favor pattern among them is no trip of its own (see trips).
+    The stretch takes lo <= skill < hi: a pattern learned at the next rank training belongs to that trip's stretch.
+    When no rank training comes after `lo` and `hi` is the end of the route, `hi` is in it too: the goal recipe is
+    learned and crafted once at the final skill (planner._craft_once_step)."""
+    end = stretch_end(plan, profession, lo) if hi is None else hi
+    last = (end >= plan.final_skill.get(profession, end)
+            and not any(p == profession and s > lo for p, s, _c, _f in plan.ranks))
     return [(s, spell, how) for prof, s, spell, how in plan.learn_log
-            if prof == profession and lo <= s < hi and how in PATTERN_HOWS
+            if prof == profession and lo <= s and (s < end or (last and s == end)) and how in PATTERN_HOWS
             and spell in gd.recipes and gd.recipes[spell].scroll_item]
 
 
@@ -173,8 +179,7 @@ def trips(plan, gd, start_skills: dict[int, int], trainer_trips: str = AS_NEEDED
     out = []
     found = visits(plan, gd, start_skills, trainer_trips)
     carried = {(v.profession, s, spell) for v in found if trainer_trips == ONE_GO and v.kind == "rank" and v.remote
-               for s, spell, _how in stretch_patterns(plan, gd, v.profession, v.skill,
-                                                       stretch_end(plan, v.profession, v.skill))}
+               for s, spell, _how in stretch_patterns(plan, gd, v.profession, v.skill)}
     for v in found:
         name = PROFESSIONS.get(v.profession, v.profession)
         if v.kind == "rank" and v.remote:

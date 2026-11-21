@@ -217,6 +217,18 @@ class OneGoTests(unittest.TestCase):
         (v,) = visits(p, gd, start, "one_go")
         self.assertEqual(v.as_reached, [(1, 240), (2, 251), (3, 270)])
 
+    def test_one_go_folds_a_goal_trainer_recipe_learned_at_the_end(self):
+        # a craft-once goal taught by the Master trainer, learned at the route's end (240): as needed a trip back,
+        # in one go learned at the trainer as the skill reaches it (the fold takes the stretch's end too)
+        from yap_forever.trips import trips
+        p, gd = setup(ENCH, [(1, 240)], ranks=[(225, 300)], learns=[(1, 240)])
+        p.final_skill = {ENCH: 240}
+        start = {ENCH: 225}
+        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start)], [("rank", 225), ("recipe", 240)])
+        self.assertEqual([(t.kind, t.skill) for t in trips(p, gd, start, "one_go")], [("rank", 225)])
+        (v,) = visits(p, gd, start, "one_go")
+        self.assertEqual(v.as_reached, [(1, 240)])
+
 
 if __name__ == "__main__":
     unittest.main()
