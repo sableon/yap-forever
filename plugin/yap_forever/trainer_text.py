@@ -70,9 +70,10 @@ def _confirmed_first(found: list[Trainer]) -> list[tuple[Trainer, str]]:
     return sure or [(t, UNCONFIRMED) for t in found]
 
 
-def notes_text(note: trainer_notes.TrainerNote | None, level: int | None) -> str:
+def notes_text(note: trainer_notes.TrainerNote | None, level: int | None, faction: str = "") -> str:
     """What the owner learned from play about a trainer, as sentences ("" when there is nothing):
-    from what level the trip is easy, a flight path, a tip. `level` is the character's."""
+    from what level the trip is easy, a flight path, a tip, then the tip for `faction` alone
+    ("alliance" or "horde"). `level` is the character's."""
     if note is None:
         return ""
     out = []
@@ -90,13 +91,16 @@ def notes_text(note: trainer_notes.TrainerNote | None, level: int | None) -> str
         out.append(text + ".")
     if note.note:
         out.append(note.note)
+    for_faction = {"alliance": note.note_alliance, "horde": note.note_horde}.get(faction, "")
+    if for_faction:
+        out.append(for_faction)
     return " ".join(out)
 
 
 def _place(t: Trainer, flag: str, info: TrainerInfo, level: int | None = None) -> tuple[str, bool]:
     """The trainer's place (then what is known from play), and whether it says what services are there."""
     text, known = _where(t, flag, info)
-    said = notes_text(info.notes.trainers.get(t.npc_id) if info.notes else None, level)
+    said = notes_text(info.notes.trainers.get(t.npc_id) if info.notes else None, level, info.faction)
     return (f"{text} {said}" if said else text), known
 
 

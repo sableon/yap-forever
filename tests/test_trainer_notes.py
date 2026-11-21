@@ -143,6 +143,13 @@ groups = [["blacksmithing"]]
         # a shipped file is not fixed by deleting and downloading it again
         self.assertNotIn("download", message("[trainers.1]\nreach = 3\n"))
 
+    def test_faction_note_keys_validated(self):
+        for key in ("note_alliance", "note_horde"):
+            for bad in ('""', "3", '"   "'):
+                self.assertIn(f"trainers.1 {key}", message(f"[trainers.1]\n{key} = {bad}\n"), (key, bad))
+        got = load('[trainers.1]\nnote_alliance = "A."\nnote_horde = "H."\n')
+        self.assertEqual(got.trainers[1], TrainerNote(note_alliance="A.", note_horde="H."))
+
 
 class ShippedFileTests(unittest.TestCase):
     @classmethod
@@ -160,8 +167,8 @@ class ShippedFileTests(unittest.TestCase):
         self.assertEqual(t[7948], TrainerNote(reach_level=35, flight_path=True))
         self.assertEqual(t[1386], TrainerNote(reach_level=35, flight_path=True,
                                               note="The first trip crosses three zones."))
-        self.assertEqual(t[2836], TrainerNote(reach_level=20, flight_path=True,
-                                              note="A safe neutral town; a long first trip for Alliance."))
+        self.assertEqual(t[2836], TrainerNote(reach_level=20, flight_path=True, note="A safe neutral town.",
+                                              note_alliance="A long first trip for Alliance."))
         self.assertEqual(t[3355], TrainerNote(note="Far from the bank and the AH; the mailbox is closest."))
         self.assertEqual(t[11073], TrainerNote(
             group_level=37, solo_level=52,
@@ -173,7 +180,7 @@ class ShippedFileTests(unittest.TestCase):
         self.assertEqual(t[11098], TrainerNote(reach_level=37, flight_path=True,
                                                note="Some danger on the road the first time."))
         self.assertEqual(t[11052], TrainerNote(
-            reach_level=20, nearby=("mail",), note="A safe town; a long first trip for Alliance."))
+            reach_level=20, nearby=("mail",), note="A safe town; a long first trip."))
         self.assertEqual(t[2399], TrainerNote(reach_level=18, flight_path=True))
 
     def test_city_tips(self):
@@ -185,6 +192,12 @@ class ShippedFileTests(unittest.TestCase):
         # Blacksmithing and Engineering, in another part of the city; Leatherworking is on its own
         self.assertEqual(self.notes.city_groups, {1519: (
             frozenset({197, 171, 333}), frozenset({164, 202}), frozenset({165}))})
+
+    def test_shipped_notes_name_no_faction(self):
+        # a faction's sentence belongs in note_alliance / note_horde: `note` is shown to everyone
+        for npc, note in self.notes.trainers.items():
+            for word in ("Alliance", "Horde"):
+                self.assertNotIn(word, note.note, npc)
 
 
 if __name__ == "__main__":

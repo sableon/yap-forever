@@ -10,7 +10,8 @@ from pathlib import Path
 from yap_forever.config import PROFESSION_IDS, STATIC_DIR
 
 MAX_LEVEL = 60
-_TRAINER_KEYS = {"reach_level", "flight_path", "note", "group_level", "solo_level", "nearby"}
+_TRAINER_KEYS = {"reach_level", "flight_path", "note", "note_alliance", "note_horde", "group_level", "solo_level",
+                 "nearby"}
 _CITY_KEYS = {"tip", "groups"}
 SERVICES = ("bank", "auction", "mail")  # what `nearby` may name
 _FILE = "trainer_notes.toml"
@@ -21,6 +22,8 @@ class TrainerNote:
     reach_level: int | None = None  # the character level from which the first trip is comfortable
     flight_path: bool = False  # a flight path makes repeat visits easy
     note: str = ""
+    note_alliance: str = ""  # said after `note` to an Alliance character only
+    note_horde: str = ""  # ... to a Horde character only
     group_level: int | None = None  # an instance trainer: the level to go with a group ...
     solo_level: int | None = None  # ... and to go alone
     nearby: tuple[str, ...] = ()  # services known from play to be near, whatever the radius finds (SERVICES)
@@ -64,9 +67,12 @@ def _trainer(npc: int, table: object) -> TrainerNote:
     flight = table.get("flight_path", False)
     if not isinstance(flight, bool):
         raise _bad(f"{where} flight_path must be true or false, not {flight!r}")
-    note = table.get("note", "")
-    if not isinstance(note, str) or ("note" in table and not note.strip()):
-        raise _bad(f"{where} note must be a non-empty sentence, not {note!r}")
+    sentences = []
+    for key in ("note", "note_alliance", "note_horde"):
+        note = table.get(key, "")
+        if not isinstance(note, str) or (key in table and not note.strip()):
+            raise _bad(f"{where} {key} must be a non-empty sentence, not {note!r}")
+        sentences.append(note)
     nearby = table.get("nearby", [])
     if (not isinstance(nearby, list) or ("nearby" in table and not nearby)
             or not all(isinstance(n, str) and n in SERVICES for n in nearby) or len(set(nearby)) != len(nearby)):
@@ -77,7 +83,7 @@ def _trainer(npc: int, table: object) -> TrainerNote:
         raise _bad(f"{where} has reach_level as well as group_level and solo_level: use one kind")
     if group is not None and solo < group:
         raise _bad(f"{where} solo_level ({solo}) is below group_level ({group})")
-    return TrainerNote(reach, flight, note, group, solo, tuple(nearby))
+    return TrainerNote(reach, flight, *sentences, group, solo, tuple(nearby))
 
 
 def _groups(where: str, value: object) -> tuple[frozenset[int], ...]:
