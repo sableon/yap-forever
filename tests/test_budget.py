@@ -171,7 +171,8 @@ class CutTests(unittest.TestCase):
         new = Plan(events=["Enchanting already at 1"])
         got = budget.adopt(c, new, 400)
         self.assertIs(got.plan, new)
-        self.assertEqual((got.spent, got.caps, got.next_stop), (400, c.caps, c.next_stop))
+        self.assertEqual((got.spent, got.caps), (400, c.caps))
+        self.assertEqual(got.next_stop, {ENCH: (75, 1000)})  # the next stop's route costs what it did: 100c more on top
         self.assertEqual(reached_lines(got.plan), [])
         c.next_stop = {}  # Enchanting's target is 1: reached, and said
         self.assertEqual(reached_lines(budget.adopt(c, Plan(events=["Enchanting already at 1"]), 400).plan),
