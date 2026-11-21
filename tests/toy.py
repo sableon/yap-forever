@@ -1,7 +1,9 @@
 """Small hand-made game data for cost model and planner tests."""
 from yap_forever.config import Stock
+from yap_forever.costmodel import Valuer
 from yap_forever.favor import FavorData
 from yap_forever.gamedata import GameData, ItemInfo, Rank, Recipe
+from yap_forever.planner import plan
 from yap_forever.prices import Market
 
 COPPER_BAR, IRON_BAR, IRON_ORE, DUST, ESSENCE, SHARD = 2840, 3575, 2772, 10940, 10998, 10978
@@ -56,3 +58,14 @@ def market(listings=None):
 
 
 NO_FAVOR = FavorData({}, {}, [])
+
+
+def master_route_data(recipes=None, character=None, listings=None, cap=300):
+    """(plan, game data, market, stock) for Blacksmithing (164) from its start to cap, ranks trained at 75, 150 and
+    225 (the Master rank, from skill 225, is added to the toy's two). Default recipes: one cheap Copper Bar craft;
+    default listings: Copper Bar at 100c."""
+    gd = gamedata(recipes or [recipe(1, "BS basic", 164, {COPPER_BAR: 1}, (STONE, 1)),
+                              recipe(2, "Ench basic", 333, {ROD: 1})])
+    gd.trainer_ranks[164] = gd.trainer_ranks[164] + [Rank(300, 9000, 225, 20)]
+    st, m = character or stock(), market(listings or {COPPER_BAR: [(100, 100000)]})
+    return plan(gd, Valuer(m, gd, st), st, NO_FAVOR, caps={164: cap}), gd, m, st

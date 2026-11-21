@@ -616,21 +616,11 @@ class GreensForDisenchantingTests(unittest.TestCase):
         self.assertNotIn(toy.BELT, p.held_for_de)
 
 
-def master_route_data(recipes=None, stock=None, listings=BARS, cap=300):
-    """(plan, game data, market, stock) for one profession from its start to cap, ranks trained at 75, 150 and 225
-    (the Master rank, from skill 225, is added to the toy's two)."""
-    from yap_forever.gamedata import Rank
-    gd = toy.gamedata(recipes or base_recipes())
-    gd.trainer_ranks[BS] = gd.trainer_ranks[BS] + [Rank(300, 9000, 225, 20)]
-    st, m = stock or toy.stock(), toy.market(listings)
-    return plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={BS: cap}), gd, m, st
-
-
 class RankCutTests(unittest.TestCase):
     """A rank training ends the profession's Step: no Step spans the skill a rank was trained at."""
 
     def master_route(self, recipes=None):
-        return master_route_data(recipes)[0]
+        return toy.master_route_data(recipes)[0]
 
     def test_step_never_spans_a_rank_training(self):
         p = self.master_route()

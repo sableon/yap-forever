@@ -1112,10 +1112,9 @@ class BoughtToolTests(unittest.TestCase):
 class RunAtTrainingTests(unittest.TestCase):
     """A run of one recipe that crosses a rank training is two rows: the Master training is at 225."""
 
-    def route(self):
-        from tests.test_planner import master_route_data
+    def route(self, cap=244):
         rs = [toy.recipe(1, "BS yellow", BS, {S: 2}, (K, 1), t=(1, 200, 260, 320))]
-        return master_route_data(rs, toy.stock(skills={BS: 210}), cap=244)  # yellow: the buffer rounds up per part
+        return toy.master_route_data(rs, toy.stock(skills={BS: 210}), cap=cap)  # yellow: the buffer rounds up per part
 
     def trip(self):
         from yap_forever.trips import Trip
@@ -1129,11 +1128,13 @@ class RunAtTrainingTests(unittest.TestCase):
         self.assertEqual(bring_list(p, gd, self.trip(), None, start_skills={BS: 210}), (244, [(S, 62, "mail")]))
 
     def test_one_go_brings_the_craft_at_the_training_skill(self):
-        # the craft from 225 to 226 is in the part after the trip, not inside a run that began at 210
+        # the goal is 226: the stretch after the trip is the one craft from 225 to 226 (1.45 crafts with the buffer,
+        # 2 whole crafts of 2 Copper Bar); it sat inside the run from 210 and main (df91a1e) gives (225, [])
         from yap_forever.shopping import bring_list
-        p, gd, *_ = self.route()
+        p, gd, *_ = self.route(cap=226)
+        self.assertEqual([(x.skill_from, x.skill_to) for x in p.steps], [(210, 225), (225, 226)])
         got = bring_list(p, gd, self.trip(), None, start_skills={BS: 210}, trainer_trips="one_go")
-        self.assertEqual(got, (244, [(S, 62, "mail")]))  # main gives (225, []): the craft at 225 sat inside the run
+        self.assertEqual(got, (226, [(S, 4, "mail")]))
 
     def test_split_run_totals_are_the_sum_of_its_parts(self):
         # each part rounds up on its own: the shopping list asks the sum of the rows, and never less than the route

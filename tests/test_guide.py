@@ -989,9 +989,8 @@ class RunAcrossTrainingGuideTests(unittest.TestCase):
     def test_run_across_training_shows_in_both_stages(self):
         # #91: a run 210-244 with the Master training at 225 printed the whole run's count (51 on main) in both stages
         import math
-        from tests.test_planner import master_route_data
         rs = [toy.recipe(1, "BS yellow", BS, {toy.COPPER_BAR: 2}, (toy.STONE, 1), t=(1, 200, 260, 320))]
-        p, gd, m, st = master_route_data(rs, toy.stock(skills={BS: 210}), cap=244)
+        p, gd, m, st = toy.master_route_data(rs, toy.stock(skills={BS: 210}), cap=244)
         text = render_guide(p, gd, m, st, caps={BS: 244})
         stage3 = text[text.index("### Stage 3"):text.index("### Stage 4")]
         stage4 = text[text.index("### Stage 4"):]
@@ -1001,5 +1000,5 @@ class RunAcrossTrainingGuideTests(unittest.TestCase):
         self.assertNotIn("225–244", stage3)
         self.assertNotIn("210–225", stage4)
         self.assertGreaterEqual(n1 + n2, 51)  # each part rounds up on its own: never fewer than the whole run
-        self.assertNotIn("51×", text)  # no row with the whole run's count
+        self.assertNotIn("· 51× BS yellow", text)  # no row with the whole run's count
         self.assertEqual(text.count("× BS yellow"), 2)  # one row in each stage
