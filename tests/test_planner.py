@@ -917,7 +917,7 @@ class VendorCashbackTests(unittest.TestCase):
 
     def test_study_hint_unchanged(self):
         # the Dedicated Study hint stays on the row's own cost: 23000c over 19 points, not net of the vendor's 6712c.
-        # Text from main (4870ca5).
+        # Text from main (4870ca5), with 7b's vendor-back suffix (23 expected crafts at 3s) before the hint.
         from yap_forever.guide import render_guide
         gd, m, st = self.gear_data()
         for mode in ("gold", "value"):
@@ -925,7 +925,8 @@ class VendorCashbackTests(unittest.TestCase):
                 p = plan(gd, Valuer(m, gd, st, mode=mode), st, toy.NO_FAVOR, caps={BS: 20})
                 text = render_guide(p, gd, m, st, {BS: 20}, mode=mode, study_hint_gold_per_point=0.01)
                 (row,) = [line for line in text.splitlines() if "× BS gear" in line]
-                self.assertIn("— 25 Copper Bar → sell to a vendor — about 12s a point here: Dedicated Study", row)
+                self.assertIn("— 25 Copper Bar → sell to a vendor: about 69s back — about 12s a point here: Dedicated Study",
+                              row)
 
     def test_vendor_credit_never_pulls_in_a_lower_chance_craft(self):
         # alt 1's shape: a 1-in-5 craft on 20c of bought iron vendors 3 x 50c back, above its cost. It may not displace

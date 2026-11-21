@@ -1517,6 +1517,86 @@ class SellClauseGuideTests(unittest.TestCase):
         st, m = toy.stock(), toy.market({**BARS, self.GEAR: [(115790, 1)]})
         p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 20})
         text = render_guide(p, gd, m, st, {164: 20})
-        self.assertIn(f"- **Back from selling crafts:** about {gold(p.sale_proceeds)}.", text)
-        self.assertIn(f"- **Net:** about {gold(abs(p.economic_total))} profit (crafts sold at their vendor price), "
+        self.assertIn(f"- **Net:** about {gold(abs(p.economic_total))} profit (vendor sales only), "
                       "counting your bank and mined bars at what they would sell for.", text)
+
+    def rows(self, listing, caps=100, sell=10000, t=(1, 300, 300, 300), **stock):
+        """(the route rows of "BS gear", the plan) from Blacksmithing 1 to caps; sell: the gear's vendor price."""
+        from yap_forever.costmodel import Valuer
+        from yap_forever.planner import plan
+        gd = toy.gamedata([toy.recipe(1, "BS gear", 164, {toy.COPPER_BAR: 1}, (self.GEAR, 1), t=t)],
+                          quest_items=[self.GEAR] if "quest_item_sales" in stock else ())
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=sell)
+        st = dataclasses.replace(toy.stock(), **stock)
+        m = toy.market({**BARS, self.GEAR: [listing]})
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: caps})
+        text = render_guide(p, gd, m, st, {164: caps})
+        return [line for line in text.splitlines() if "× BS gear" in line], p
+
+    def test_route_row_cashback(self):
+        # #97: a row whose crafts go to a vendor says about what they bring back: the vendor price x the row's crafts
+        # (expected, in whole crafts) x the output, less the units sold on the AH, which go to the item's first rows.
+        # The AH-only quest form says nothing more (C34)
+        scarce, dead = (115790, 1), (13685, 50)  # net 11g and 1.3g at a 1g vendor price
+        self.assertTrue(self.line(dead).endswith(" → sell to a vendor: about 19.0g back"), self.line(dead))
+        self.assertTrue(self.line(scarce).endswith(" → sell up to 5 on the AH (about 11.0g each), the rest to a vendor: "
+                                                   "about 14.0g back"), self.line(scarce))
+        quest = self.line(scarce, quest=True, quest_item_sales=3)
+        self.assertTrue(quest.endswith("(quest item, about 11.0g each), the rest to a vendor: about 16.0g back"), quest)
+        self.assertTrue(self.line(scarce, quest=True).endswith(" → sell on the AH (quest item, about 11.0g each)"))
+        # two rows of one craft (1-75, 75-100): the AH's 5 go to the first one
+        (first, second), _p = self.rows(scarce)
+        self.assertTrue(first.startswith("- **1–75** · 74× BS gear"), first)
+        self.assertTrue(first.endswith("the rest to a vendor: about 69.0g back"), first)
+        self.assertTrue(second.endswith("the rest to a vendor: about 25.0g back"), second)
+        # the AH takes every one of the first row's crafts: that row says nothing more
+        (first, second), _p = self.rows(scarce, quest_item_sales=80)
+        self.assertTrue(first.endswith("(quest item, about 11.0g each), the rest to a vendor"), first)
+        self.assertTrue(second.endswith("the rest to a vendor: about 19.0g back"), second)
+        # a craft a vendor pays nothing for (RF3): no amount
+        (row,), _p = self.rows((50, 50), caps=20, sell=0)
+        self.assertTrue(row.endswith(" → sell to a vendor"), row)
+
+    def test_row_cashback_adds_up_to_vendor_back(self):
+        # C40: the rows count whole crafts and Money's "from vendors" (Plan.vendor_back) the expected units, every one at
+        # its vendor price: they differ by less than one craft's vendor value a row, once the AH's units are added back.
+        # Yellow and green points, so the buffer is in the rows' counts
+        import re
+        for listing, on_ah in (((150, 50), 0), ((1000, 50), 5)):  # a 1s vendor price: vendor only, then the AH's 5
+            for caps, t in ((20, (1, 10, 15, 30)), (90, (1, 60, 80, 100))):
+                with self.subTest(listing=listing, caps=caps):
+                    rows, p = self.rows(listing, caps=caps, sell=100, t=t)
+                    back = [int(m.group(1)) * 100 for r in rows if (m := re.search(r": about (\d+)s back$", r))]
+                    self.assertEqual(len(back), len(rows))
+                    self.assertGreater(sum(int(re.search(r"· (\d+)×", r).group(1)) for r in rows),
+                                       sum(back) / 100 + on_ah)  # the rows ask for more crafts: the buffer
+                    self.assertLessEqual(abs(sum(back) + on_ah * 100 - p.vendor_back), 100 * len(rows))
+
+    def test_money_and_totals_lines(self):
+        # #97: Money and the report's Totals say what vendors pay back (counted in choosing the route) and what AH sales
+        # add on top (not counted); without AH sales the Money line has no AH clause
+        from yap_forever.costmodel import Valuer, money
+        from yap_forever.planner import plan
+        from yap_forever.report import render, verdict
+        gd = toy.gamedata([toy.recipe(1, "BS gear", 164, {toy.COPPER_BAR: 1}, (self.GEAR, 1))])
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=10000)
+        st = toy.stock()
+        for listing in ((115790, 1), (13685, 50)):
+            with self.subTest(listing=listing):
+                m = toy.market({**BARS, self.GEAR: [listing]})
+                p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 20})
+                guide = render_guide(p, gd, m, st, {164: 20})
+                report = render(p, verdict(p, st), m, gd, st, toy.NO_FAVOR, {164: 20})
+                self.assertAlmostEqual(p.vendor_back, 19 * 10000)
+                if listing == (13685, 50):
+                    self.assertEqual(p.ah_extra, 0)
+                    self.assertIn("- **Back from selling crafts:** about 19.0g from vendors (counted in choosing the "
+                                  "route).\n", guide)
+                else:
+                    self.assertGreater(p.ah_extra, 0)
+                    self.assertIn(f"- **Back from selling crafts:** about {gold(p.sale_proceeds)}: 19.0g from vendors "
+                                  f"(counted in choosing the route) and about {gold(p.ah_extra)} more if the AH sales go "
+                                  "through.\n", guide)
+                self.assertIn(f"- Back from vendors: {money(p.vendor_back)} (counted in choosing the route).\n", report)
+                self.assertIn(f"- AH sales on top: {money(p.ah_extra)} (not counted).\n", report)
+                self.assertNotIn("Expected sales", report)

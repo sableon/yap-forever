@@ -163,6 +163,26 @@ class SettleRoutesTests(unittest.TestCase):
             self.assertIn("\n\n" + note, text[table_end:])
             self.assertEqual(text.count(note), 1)
 
+    def test_table_rows_and_note(self):
+        # #97: what vendors pay back and what AH sales add on top get their own rows (— when there are none); total
+        # value counts vendor sales only
+        from yap_forever.compare import compare
+        note = ("Least gold is the gold out of pocket less what vendors pay back for the crafts. AH sales of crafts are "
+                "not counted in choosing a route.")
+        a = Plan(cash_total=110000, vendor_back=30000, sale_proceeds=45000.2, economic_total=80000,
+                 final_skill={BS: 20})
+        b = Plan(cash_total=100000, vendor_back=12000, sale_proceeds=12000.3, economic_total=88000,
+                 final_skill={BS: 20})
+        text = compare({"gold": a, "value": b}, toy.gamedata([]), toy.market(), toy.stock())
+        lines = text.splitlines()
+        self.assertEqual(lines[2:6], ["| Gold out of pocket | 11.0g | 10.0g |",
+                                      "| Back from a vendor | 3.0g | 1.2g |",
+                                      "| Total value | 8.0g | 8.8g |",
+                                      "| AH sales on top | 1.5g | — |"])
+        self.assertEqual(lines[6], "| Reached | Blacksmithing 20 | Blacksmithing 20 |")
+        self.assertEqual(text.count(note), 1)
+        self.assertTrue(text.endswith("\n\n" + note), text[-200:])
+
 
 class OneTimeInFullTests(unittest.TestCase):
     def test_gold_variant_charges_patterns_in_full(self):

@@ -182,11 +182,11 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out.append(f"- **Cash needed:** {money(plan.cash_total)} ({_budget_text(plan.cash_total, stock, budget, goal)}), "
                "before any sales.")
     out.append(f"- Trainer fees included: {money(plan.fees)}.")
-    out.append(f"- **Expected sales of crafted leftovers:** {money(plan.sale_proceeds)}.")
+    out.append(f"- Back from vendors: {money(plan.vendor_back)} (counted in choosing the route).")
+    out.append(f"- AH sales on top: {money(plan.ah_extra)} (not counted).")
     out.append(f"- Leftover disenchant materials worth {money(plan.leftover_value)}.")
     out.append(f"- **Full economic cost:** {money(plan.economic_total)} "
-               "(cash + your stock and farmed bars at what they'd sell for − crafts sold, at their vendor price "
-               "− leftovers).")
+               "(cash + your stock and farmed bars at what they'd sell for − vendor sales of crafts − leftovers).")
 
     # Sell now
     section("Sell now")
