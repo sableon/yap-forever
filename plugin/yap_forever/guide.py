@@ -14,7 +14,8 @@ from yap_forever.profile import CAPITAL_NAMES
 from yap_forever.shared import SHARED_NOTE, mail_text
 from yap_forever.talents import lowest_profession, talent_lines
 from yap_forever.trainers import RANK_BY_CAP
-from yap_forever.trips import FREE_SKIP, at_home, before_start, recipe_rank_cap, route_capitals, trips, visits
+from yap_forever.trips import (FREE_SKIP, at_home, before_start, capital_trip, recipe_rank_cap, route_capitals,
+                               start_stage, trips, visits)
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
     SOURCES = {group: {int(k): v for k, v in items.items()} for group, items in tomllib.load(_f).items()}
@@ -109,7 +110,7 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
                  character=None, reading="relative", today=None, trainer_info=None, trainer_note="",
                  saving_line="", mode="gold", study_hint_gold_per_point=100, extra_notes=(),
                  budget_lines=(), order=None, nothing_in_budget=False, trainer_trips="as_needed",
-                 free_skips=(), could_make=(), capitals=None, home=None) -> str:
+                 free_skips=(), could_make=(), capitals=None, home=None, capital_stages=None) -> str:
     """caps: profession -> target skill (see planner.resolve_goals).
     alts: Trip.key (a recipe, or a recipe trip's recipes) -> what skipping the trip costs (None: no other way),
     from trips.trip_alternatives.
@@ -128,7 +129,9 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     free_skips: a line for each trip the route was planned without (free_skip_line), said after the saving line.
     could_make: the "You could also make" section (favor_suggest.lines), after the route, before the shopping list.
     capitals: (profession, rank cap) -> the capital its trainers stand in (trainer_text.stage_capitals); home: the
-    capital the guide starts in (plan.home_capital), whose stages it levels there (#98). None: as without them."""
+    capital the guide starts in (plan.home_capital), whose stages it levels there (#98). None: as without them.
+    capital_stages: trips.route_capitals of the route the home was chosen from (plan.write_reports), for the line
+    naming two capitals; None: found from `plan`."""
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
     if prices_line:
@@ -147,7 +150,7 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
         intro.append("Gather and keep the materials below instead of selling them.")
     if intro:
         out += [" ".join(intro), ""]
-    if line := _capitals_line(plan, stock, capitals, home, character, trainer_info):
+    if line := _capitals_line(plan, stock, capitals, home, character, trainer_info, capital_stages):
         out += [line, ""]
     if trainer_note:
         out += [trainer_note, ""]
@@ -170,12 +173,13 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     return "\n".join(out) + "\n"
 
 
-def _capitals_line(plan, stock, capitals, home, character, trainer_info) -> str:
+def _capitals_line(plan, stock, capitals, home, character, trainer_info, found=None) -> str:
     """With the route's stages in two capitals and no `capital` set: where they are, where the guide starts and how to
-    start in the other one (profile.toml); "" otherwise."""
+    start in the other one (profile.toml); "" otherwise. found: the route's stage capitals (trips.route_capitals) as
+    the home was chosen from them; None: found from `plan`."""
     if home is None or (character is not None and character.capital):
         return ""
-    found = route_capitals(capitals or {}, plan, stock.skills)
+    found = route_capitals(capitals or {}, plan, stock.skills) if found is None else found
     if len(found) < 2 or home not in found:
         return ""
     order = [home] + [z for z in found if z != home]
@@ -420,15 +424,14 @@ def _trip_line(t, alts, plan=None, gd=None, bag_slots=None, owned=None, reagent_
     known = t.visit is not None and gd is not None
     learn = " ".join(x for x in (_visit_text(t.visit, gd), _reached_text(t.visit, gd))
                      if x) if known else ""
-    capital = (trainer_text.capital_services(trainer_info, t.visit.city)
-               if home is not None and t.visit is not None and t.visit.city is not None else "")
+    capital = trainer_text.capital_services(trainer_info, t.visit.city) if capital_trip(t.visit, home) else ""
     if t.kind == "rank":
         from yap_forever.shopping import bring_text  # shopping imports this module
         stop = trainer_text.remote_stop(trainer_info, t.profession, t.cap, level)
         where = "the trainer is in a set town (the planner doesn't say where yet)." if stop is None else stop.text
         return (f"- **Trip:** {t.what}: {where}" + (f" {learn}" if learn else "")
                 + (bring_text(plan, gd, t, bag_slots, owned, reagent_slots, bool(stop and stop.services_known),
-                              start_skills, trainer_trips, market) if plan is not None else "") + capital)
+                              start_skills, trainer_trips, market, home) if plan is not None else "") + capital)
     if t.kind == "recipe":
         names = _names(t.visit.learn, gd, True) if known else t.what
         missing = _visit_text(t.visit, gd, learn=False) if known else ""
@@ -567,8 +570,8 @@ def _route(out, plan, gd, caps, stock, alts, trainer_info=None, hint=None, train
             lo = trained[p][n - 1] if n > 0 else first[p][0]
             hi = trained[p][n] if n < len(trained[p]) else plan.final_skill.get(p, lo)
             out += [f"**{PROFESSIONS.get(p, p)} {lo}–{hi}**", ""]
-            cap = rank_caps[p][n - 1] if n > 0 else STAGE_CAPS[first[p][1]]  # the rank this stage is levelled at
-            if home is not None and (capitals or {}).get((p, cap)) == home:
+            cap = rank_caps[p][n - 1] if n > 0 else start_stage(plan, p, stock.skills)  # the rank levelled at here
+            if home is not None and cap is not None and (capitals or {}).get((p, cap)) == home:
                 out += [trainer_text.stage_line(trainer_info, p, cap, home, lo, hi), ""]
             out += [t for _, _, t in part] + [""]
 

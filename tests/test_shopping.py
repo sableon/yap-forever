@@ -723,7 +723,8 @@ class BringListTests(unittest.TestCase):
         self.assertEqual(text.count("From disenchanting what"), 1)  # not for the rods
 
     def test_no_bring_list_for_a_trip_to_a_capital(self):
-        # #98: a trip to a capital's trainer (Visit.city) has the AH, mailbox and bank there: no bring list
+        # #98: with a home capital, a trip to a capital's trainer (Visit.city) has the AH, mailbox and bank there:
+        # no bring list
         import dataclasses
         from yap_forever.shopping import bring_text
         from yap_forever.trips import Visit
@@ -733,7 +734,10 @@ class BringListTests(unittest.TestCase):
         for trainer_trips in ("as_needed", "one_go"):
             self.assertIn(" Bring: ", bring_text(p, gd, trip, None, trainer_trips=trainer_trips))
             capital = dataclasses.replace(trip, visit=dataclasses.replace(visit, city=1657))
-            self.assertEqual(bring_text(p, gd, capital, None, trainer_trips=trainer_trips), "", trainer_trips)
+            self.assertEqual(bring_text(p, gd, capital, None, trainer_trips=trainer_trips, home=1537), "",
+                             trainer_trips)
+            # no home capital (trips.capital_trip, the guide's test too): the bring list stays
+            self.assertIn(" Bring: ", bring_text(p, gd, capital, None, trainer_trips=trainer_trips))
 
 
 if __name__ == "__main__":

@@ -1091,7 +1091,7 @@ class CapitalGuideTests(unittest.TestCase):
         return dataclasses.replace(info, notes=notes or Notes({}, {}))
 
     def render(self, home, trainer_trips="as_needed", info=None, alts=None, character=None, capitals=None,
-               free_skips=()):
+               free_skips=(), **kw):
         """Engineering and Alchemy from 100 to 225: Engineering learns an Expert recipe at 118 (a capital stop), trains
         Artisan at 125 and goes back at 160 and 170; Alchemy trains Artisan at 130 and goes back at 197."""
         from yap_forever import trainer_text
@@ -1116,11 +1116,14 @@ class CapitalGuideTests(unittest.TestCase):
                     for q, s, spell in learns],
                  final_skill={ENG: 225, ALCH: 225})
         caps = trainer_text.stage_capitals(info) if capitals is None else capitals
+        if home == "default":  # as plan.write_reports chooses it
+            from yap_forever.plan import home_capital
+            home = home_capital(caps, p, character, {ENG: 100, ALCH: 100})
         gd = toy.gamedata(rs)
         gd.trainer_ranks.update({ENG: gd.trainer_ranks[BS], ALCH: gd.trainer_ranks[BS]})
         return render_guide(p, gd, toy.market(BARS), toy.stock(skills={ENG: 100, ALCH: 100}),
                             caps={ENG: 225, ALCH: 225}, trainer_info=info, trainer_trips=trainer_trips, alts=alts,
-                            character=character, capitals=caps, home=home, free_skips=free_skips)
+                            character=character, capitals=caps, home=home, free_skips=free_skips, **kw)
 
     def rows(self, text, start, has=""):
         return [line for line in text.splitlines() if line.startswith(start) and has in line]
@@ -1194,6 +1197,10 @@ class CapitalGuideTests(unittest.TestCase):
         self.assertNotIn("This route's Artisan trainers", set_)  # the player chose: no line
         self.assertIn("This guide starts in Darnassus; to start in Ironforge, set capital = \"ironforge\"",
                       self.render(DARNASSUS))
+        # the stages plan.write_reports found with the home (capital_stages) are the ones said, not found again
+        self.assertNotIn("This route's", self.render(IRONFORGE, capital_stages={IRONFORGE: [(ENG, 225)]}))
+        self.assertEqual(self.render(IRONFORGE, capital_stages={IRONFORGE: [(ENG, 225)], DARNASSUS: [(ALCH, 225)]}),
+                         text)
 
     def test_skip_clause_on_capital_stop(self):
         text = self.render(IRONFORGE, alts={(31,): 30000, (32,): None, (41,): 4600})
@@ -1218,10 +1225,11 @@ class CapitalGuideTests(unittest.TestCase):
         self.assertIn("Planned without the trip back to Bolt Cogsworth at 170",
                       free_skip_line(trip, gd, self.info(), DARNASSUS))
 
-    def test_no_data_falls_back(self):  # RF2
+    def test_no_data_falls_back(self):  # RF2: no trainer data, or no faction: no stage capitals, so no home
+        self.assertIn("Level Engineering", self.render("default"))  # the same route with both: a home
         for info in (None, TrainerInfo("", self.info().data)):
             with self.subTest(info=info):
-                text = self.render(None, info=info or False, capitals={})
+                text = self.render("default", info=info or False)
                 self.assertIn("- **Trip:** back to ", text)
                 self.assertIn("- At 118, learn Eng tube (1s 0c) at any Expert Engineer in a capital.", text)
                 self.assertNotIn("in Ironforge", text)
@@ -1250,3 +1258,56 @@ class CapitalGuideTests(unittest.TestCase):
         text = self.render(UNDERCITY, info=self.info("horde", notes=notes))
         self.assertIn("Level Alchemy 130–225 in Undercity: the Artisan Alchemist Vex Sourbrew (48.0, 70.0) is there, "
                       "with the AH, mailbox and bank. " + UNDERCITY_TIP + "\n", text)
+
+    def started(self, profs, home=None):
+        """A guide for `profs` ((profession, start, ranks as (skill, cap)), each to its last cap) with the Artisan
+        Blacksmith in Ironforge and the Artisan Alchemist in Darnassus; home: None for plan.home_capital's own."""
+        from yap_forever import trainer_text, trainers
+        from yap_forever.gamedata import Rank
+        from yap_forever.plan import home_capital
+        from yap_forever.planner import Plan, Step
+        info = self.info()
+        info = dataclasses.replace(info, data=dataclasses.replace(info.data, trainers=info.data.trainers + [
+            trainers.Trainer(11, "Kord Anvilmane", BS, "Artisan", "A", IRONFORGE, (52, 41), True)]))
+        spell = {BS: 1, ALCH: 62}
+        rs = base_recipes() + [toy.recipe(62, "Alch basic", ALCH, {toy.COPPER_BAR: 1})]
+        steps, ranks, final = [], [], {}
+        for prof, start, trained in profs:
+            final[prof] = trained[-1][1]
+            cuts = [start] + [s for s, _c in trained if s > start] + [final[prof]]
+            steps += [Step(prof, a, b, spell[prof], gd_name, b - a, 0, 0, {toy.COPPER_BAR: b - a})
+                      for a, b in zip(cuts, cuts[1:]) if b > a
+                      for gd_name in ["BS basic" if prof == BS else "Alch basic"]]
+            ranks += [(prof, s, c, 500) for s, c in trained]
+        p = Plan(steps=steps, bought={toy.COPPER_BAR: sum(s.crafts for s in steps)}, ranks=ranks,
+                 events=[f"{PROFESSIONS[q]} {s}: train rank up to {c} (5s 0c)" for q, s, c, _f in ranks],
+                 final_skill=final)
+        gd = toy.gamedata(rs)
+        master = Rank(300, 50000, 225, 35)
+        gd.trainer_ranks.update({BS: gd.trainer_ranks[BS] + [master], ALCH: gd.trainer_ranks[BS] + [master]})
+        stock = toy.stock(skills={prof: start for prof, start, _t in profs})
+        caps = trainer_text.stage_capitals(info)
+        if home is None:
+            home = home_capital(caps, p, None, stock.skills)
+        return render_guide(p, gd, toy.market(BARS), stock, caps=final, trainer_info=info, capitals=caps, home=home)
+
+    def test_stage_trained_at_the_start_has_no_stage_line(self):
+        # Blacksmithing at 225 (or 210) trains Master at once: no Ironforge stage, so no home and no "225–225" line,
+        # even when another stage makes Ironforge the home
+        for start in (225, 210):
+            with self.subTest(start=start):
+                text = self.started([(BS, start, [(start, 300)])])
+                self.assertNotIn("Level Blacksmithing", text)
+                self.assertNotIn("in Ironforge", text)
+                forced = self.started([(BS, start, [(start, 300)])], home=IRONFORGE)
+                self.assertNotIn(f"Level Blacksmithing {start}–{start}", forced)
+        text = self.started([(BS, 225, [(225, 300)]), (ALCH, 225, [(225, 300)])])
+        self.assertNotIn("This route's", text)  # neither capital is visited
+
+    def test_levelled_stage_wins_over_a_stage_trained_at_the_start(self):
+        # Blacksmithing at 225 trains Master at once; Alchemy levels 1–225: home Darnassus, Alchemy's visits are stops
+        text = self.started([(BS, 225, [(225, 300)]), (ALCH, 1, [(50, 150), (130, 225)])])
+        self.assertIn("Level Alchemy 130–225 in Darnassus: the Artisan Alchemist Lira Moonleaf (55.0, 24.0)", text)
+        self.assertIn("- At 130, in Darnassus: train Alchemy to 225 at Lira Moonleaf.", text)
+        self.assertNotIn("**Trip:** Alchemy", text)
+        self.assertNotIn("This route's", text)

@@ -540,7 +540,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertNotIn("not applied", out)
 
-
     def test_plan_passes_the_characters_own_faction(self):
         # C20: the faction write_reports names trainers and capitals for is the character's own, else the profile's.
         # The group check refuses a character on another faction's prices today, so it is bypassed here.
@@ -706,9 +705,12 @@ class FreeSkipReportTests(unittest.TestCase):
 
         from yap_forever import plan as plan_mod, trainer_text
         with mock.patch.object(trainer_text, "stage_capitals", return_value={(164, 300): 1537}), \
-                mock.patch.object(plan_mod, "take_free_skips", wraps=plan_mod.take_free_skips) as take:
+                mock.patch.object(plan_mod, "take_free_skips", wraps=plan_mod.take_free_skips) as take, \
+                mock.patch.object(plan_mod, "render_guide", wraps=plan_mod.render_guide) as guide:
             table, texts = self.reports(faction="alliance")
         self.assertEqual((take.call_args.kwargs["capitals"], take.call_args.kwargs["home"]), ({(164, 300): 1537}, 1537))
+        self.assertEqual({c.kwargs["home"] for c in guide.call_args_list}, {1537})
+        self.assertEqual([c.kwargs["capital_stages"] for c in guide.call_args_list], [{1537: [(164, 300)]}] * 2)
         self.assertIn("| Trips away | 1 | 1 |", table)
         line = "Planned without the stop at 240 in Ironforge for BS late 1: the route without it costs the same."
         for m in ("gold", "value"):

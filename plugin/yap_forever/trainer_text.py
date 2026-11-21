@@ -269,8 +269,12 @@ def capital_services(info: TrainerInfo | None, zone: int) -> str:
 def home_row(info: TrainerInfo, profession: int, cap: int, zone: int, lead: str, planned: tuple[int, ...] = (),
              said: set[int] | None = None) -> str:
     """'<lead> at any <Rank> <Person> in <City>.': a stop below the capital stages in the capital the guide starts in,
-    when it has that trainer (has_trainer); with the city's "different parts" sentence once (see city_row)."""
-    text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}."
+    when it has that trainer (has_trainer); with the city's "different parts" sentence once (see city_row). When no
+    trainer there has a confirmed title, the row says so, as city_row does."""
+    here = [t for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap], info.faction)
+            if t.zone == zone]
+    flag = "" if any(t.title_confirmed for t in here) else UNCONFIRMED
+    text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}{flag}."
     said = set() if said is None else said
     apart = _apart(info, zone, planned) if zone not in said else ""
     if apart:

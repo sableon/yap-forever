@@ -444,9 +444,13 @@ class PublishableTests(unittest.TestCase):
                      "for Alliance, Alchemy and Leatherworking in Darnassus, Blacksmithing and Engineering in Ironforge, "
                      "Tailoring in Stormwind; for Horde, Alchemy and Tailoring in Undercity, Blacksmithing and "
                      "Engineering in Orgrimmar, Leatherworking in Thunder Bluff.",
-                     "Every capital has an AH, mailbox and bank",
+                     "Every capital has an AH, mailbox and bank, so the guide levels the stage of the capital it "
+                     "starts in (the home capital) there; a stage in the other capital follows `trainer_trips`",
                      "Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no Engineering one."):
             self.assertIn(line, rules)
+        coverage = read("coverage.md")
+        self.assertIn("an Artisan stage in the home capital is levelled there, its visits capital stops, not trips away",
+                      coverage)
 
 
 if __name__ == "__main__":

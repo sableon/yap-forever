@@ -1060,6 +1060,17 @@ class StageCapitalTests(unittest.TestCase):
         self.assertFalse(trainer_text.has_trainer(None, IRONFORGE, ALCH, 150))
         self.assertFalse(trainer_text.has_trainer(capital_info(faction=""), IRONFORGE, ALCH, 150))
 
+    def test_home_row_flags_an_unconfirmed_title(self):
+        # as city_row does: the only Engineer behind "in Ironforge" has no rank in its title
+        odd = (Trainer(7, "Odd Tinker", ENG, "", "A", IRONFORGE, (40, 40), False),)
+        info = capital_info(odd)
+        self.assertTrue(trainer_text.has_trainer(info, IRONFORGE, ENG, 150))
+        self.assertEqual(trainer_text.home_row(info, ENG, 150, IRONFORGE, "Train Engineering to 150"),
+                         "Train Engineering to 150 at any Expert Engineer in Ironforge (title unconfirmed in the data).")
+        sure = (Trainer(8, "Fenn Sprocket", ENG, "Expert", "A", IRONFORGE, (70, 50), True),)
+        self.assertEqual(trainer_text.home_row(capital_info(odd + sure), ENG, 150, IRONFORGE, "Train Engineering to 150"),
+                         "Train Engineering to 150 at any Expert Engineer in Ironforge.")
+
 
 if __name__ == "__main__":
     unittest.main()

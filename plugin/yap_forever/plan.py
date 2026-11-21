@@ -255,6 +255,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     # compares is counted with the same home; without trainer data or a faction, none (RF2)
     capitals = trainer_text.stage_capitals(trainer_info)
     homes = {m: home_capital(capitals, r, character, stock.skills) for m, r in routes.items()}
+    needed = {m: route_capitals(capitals, r, stock.skills) for m, r in routes.items()}  # what each home came from
     alt_cache: dict = {}
     left_out = _free_skips(routes, per_mode, alt_cache, trainer_trips,
                            None if target is None else budget_cut.copper(target), gold_of, capitals, homes)
@@ -316,7 +317,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                        study_hint_gold_per_point=study_hint_gold_per_point,
                                        budget_lines=said, order=inputs.order, nothing_in_budget=empty,
                                        trainer_trips=trainer_trips, free_skips=skips, could_make=could_guide,
-                                       capitals=capitals, home=homes[m],
+                                       capitals=capitals, home=homes[m], capital_stages=needed[m],
                                        extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else []),
                                                     *level_note]),
                          encoding="utf-8")

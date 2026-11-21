@@ -422,7 +422,6 @@ class FreeSkipTests(unittest.TestCase):
         self.assertEqual([t.spells for t in left], [(3,)])
 
 
-
 ALCH, ENG = 171, 202
 DARNASSUS, IRONFORGE = 1657, 1537
 STAGE_CAPS = {(ALCH, 225): DARNASSUS, (ENG, 225): IRONFORGE, (BS, 225): IRONFORGE}
@@ -468,6 +467,19 @@ class HomeCapitalTests(unittest.TestCase):
         self.assertIsNone(self.home([(ENG, 125, 225)], caps={}, capital="ironforge"))
         # a route with no stage in a capital has no home, whatever the key says: rows say "any capital" as before
         self.assertIsNone(self.home([(ENCH, 125, 225), (BS, 50, 150)], capital="ironforge"))
+
+    def test_start_stage_counts_only_when_levelled_in(self):
+        # a profession that trains the next rank at its start skill never levels in its start stage: Blacksmithing at
+        # 225 (or 210) training Master there has no Ironforge stage on the route
+        self.assertIsNone(self.home([(BS, 225, 300)], start={BS: 225}, final={BS: 300}))
+        self.assertIsNone(self.home([(BS, 210, 300)], start={BS: 210}, final={BS: 300}))
+        self.assertIsNone(self.home([(BS, 225, 300), (ALCH, 225, 300)], start={BS: 225, ALCH: 225},
+                                    final={BS: 300, ALCH: 300}))
+        # Blacksmithing at 225 to Master, Alchemy from 1 to 225: Alchemy's Darnassus is the only capital
+        self.assertEqual(self.home([(BS, 225, 300), (ALCH, 50, 150), (ALCH, 130, 225)], start={BS: 225, ALCH: 1},
+                                   final={BS: 300, ALCH: 225}), DARNASSUS)
+        # trained later than the start: the start stage is levelled in (the main's case, Blacksmithing from 184)
+        self.assertEqual(self.home([(BS, 225, 300)], start={BS: 184}, final={BS: 300}), IRONFORGE)
 
 
 def capital_route():

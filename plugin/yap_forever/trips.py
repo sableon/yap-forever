@@ -58,13 +58,29 @@ def at_home(v: Visit, home: int | None) -> bool:
     return home is not None and v.city == home
 
 
+def capital_trip(v: Visit | None, home: int | None) -> bool:
+    """Whether a trip's visit goes to a capital's trainer while the guide has a home capital: the AH, mailbox and bank
+    are there, so the trip has no bring list (shopping.bring_text) and says so instead (guide._trip_line)."""
+    return home is not None and v is not None and v.city is not None
+
+
+def start_stage(plan, profession: int, start_skills: dict[int, int]) -> int | None:
+    """The rank cap of the stage `profession` starts the route in, when the route levels in it; None when the route
+    doesn't raise it or trains its next rank at the start skill (Blacksmithing at 225 training Master at once)."""
+    start = max(1, start_skills.get(profession, 1))
+    trained = [s for p, s, _c, _f in plan.ranks if p == profession]
+    if plan.final_skill.get(profession, start) <= start or (trained and min(trained) <= start):
+        return None
+    return recipe_rank_cap(start)
+
+
 def route_capitals(stage_caps: dict[tuple[int, int], int], plan,
                    start_skills: dict[int, int]) -> dict[int, list[tuple[int, int]]]:
     """capital zone -> the (profession, rank cap) of the route's stages trained there (stage_caps:
     trainer_text.stage_capitals), in route order: a stage the route starts in (its rank already trained) comes first,
-    then each rank training in the order the route trains it (plan.ranks)."""
-    stages = [(p, recipe_rank_cap(max(1, start_skills.get(p, 1)))) for p, end in plan.final_skill.items()
-              if end > max(1, start_skills.get(p, 1))]
+    then each rank training in the order the route trains it (plan.ranks). A start stage counts only when the route
+    levels in it (start_stage)."""
+    stages = [(p, cap) for p in plan.final_skill if (cap := start_stage(plan, p, start_skills)) is not None]
     stages += [(p, cap) for p, _s, cap, _fee in plan.ranks]
     out: dict[int, list[tuple[int, int]]] = {}
     for stage in stages:

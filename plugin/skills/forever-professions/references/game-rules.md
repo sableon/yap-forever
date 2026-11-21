@@ -12,8 +12,9 @@ say so.
   Stonetalon Mountains). The other Artisans stand in one capital each: for Alliance, Alchemy and
   Leatherworking in Darnassus, Blacksmithing and Engineering in Ironforge, Tailoring in Stormwind; for
   Horde, Alchemy and Tailoring in Undercity, Blacksmithing and Engineering in Orgrimmar,
-  Leatherworking in Thunder Bluff. Every capital has an AH, mailbox and bank, so the guide levels such
-  a stage in its capital ([list-layout.md](list-layout.md), "The home capital"). Not every capital has
+  Leatherworking in Thunder Bluff. Every capital has an AH, mailbox and bank, so the guide levels the
+  stage of the capital it starts in (the home capital) there; a stage in the other capital follows
+  `trainer_trips` ([list-layout.md](list-layout.md), "The home capital"). Not every capital has
   every lower trainer: Darnassus has no Blacksmithing or Engineering trainer, Thunder Bluff no
   Engineering one.
 - **A trainer teaches every recipe from 1 up to its rank's cap**: Journeyman to 75, Expert to 150,
