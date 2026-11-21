@@ -35,6 +35,30 @@ review; no force-push or deletion. Tags `v*` can't be moved or deleted.
 - Merge with a plain `gh pr merge` after CI is green. Admins can bypass the rules only when
   merging a pull request (`--admin`); never use that without the owner's word.
 
+## GitHub Actions minutes
+
+The owner's Actions minutes are a paid budget shared with their other repositories, and this public repository
+is billed too. November 2026's ran out on 2026-11-21.
+
+- **Until 2026-12-01: no Actions.** Check locally instead, the same 8 checks: the unit tests on the Mac, the
+  unit tests on Linux in Docker with `python:3.11` and `python:3.13` (the full images: three tests need `git`;
+  clone the repo inside the container, copy `.private-denylist` in, run as a non-root user), `ruff check plugin
+  tests` with ruff 0.17.6, and `claude plugin validate . --strict` and `claude plugin validate plugin --strict`
+  with Claude Code 2.1.308. Windows isn't covered: say so in the pull request under "Checks (local; Actions
+  paused until December)". The `main` ruleset requires the CI test jobs, so merging needs `gh pr merge
+  --admin`, only with the owner's word for that pull request. On 2026-12-01, run the full CI once on `main`
+  and the newest tag.
+- **From December on:**
+  1. Pull requests run the Linux jobs, lint and plugin only; macOS and Windows (billed at a much higher rate)
+     run on `v*` tags and by hand (`workflow_dispatch`). The ruleset's required checks change with it (owner
+     only).
+  2. No run on `push` to `main` after a merge: the pull request tested that head.
+  3. Docs-only changes skip the test jobs (`paths-ignore`); `concurrency` cancels a branch's older run.
+  4. Push a branch once, when it is ready: commit fix rounds locally and push them together. Name the pull
+     request in `docs/progress.md` before opening it (the next number is the highest issue or pull request
+     number plus one), not in a push after it.
+  5. Run the full local checks before every push, so CI confirms rather than discovers.
+
 ## Pull requests from outside contributors
 
 - Never merge an outside contributor's pull request without the owner's OK in chat. The agent
