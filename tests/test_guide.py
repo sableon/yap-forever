@@ -5,6 +5,7 @@ import unittest
 from tests import toy
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import render_guide, source_group
+from yap_forever.trainer_text import TrainerInfo
 from tests.test_planner import BARS, base_recipes, run
 
 BS, ENCH = 164, 333
@@ -1058,3 +1059,194 @@ class CouldAlsoMakeGuideTests(unittest.TestCase):
     def test_no_section_without_suggestions(self):
         p, gd, m, st = toy.master_route_data()
         self.assertNotIn("You could also make", render_guide(p, gd, m, st, caps={BS: 300}))
+
+
+IRONFORGE, DARNASSUS, UNDERCITY, ORGRIMMAR, THUNDER_BLUFF = 1537, 1657, 1497, 1637, 1638
+DARNASSUS_TIP = "Most trainers are close together, but the bank and the AH are far apart."
+UNDERCITY_TIP = ("The bank and the AH are in different parts of the city; there is a mailbox at the inn, a few steps "
+                 "from the bank.")
+
+
+class CapitalGuideTests(unittest.TestCase):
+    """#98: the home capital's stage line and capital stops, the other capital's trips without bring lists, the line
+    for two capitals, and the capitals' tips."""
+
+    def info(self, faction="alliance", notes=None):
+        """Made-up trainers (tests/test_trainers.py capital_info) plus Expert Engineers in Ironforge and Stormwind; with Horde, the
+        Artisan Engineer in Orgrimmar, the Artisan Alchemist in Undercity and no Engineer in Thunder Bluff."""
+        from yap_forever import trainers
+        from yap_forever.trainer_notes import Notes
+        from tests.test_trainers import capital_info
+        T = trainers.Trainer
+        if faction == "horde":
+            ts = [T(1, "Vex Sourbrew", ALCH, "Artisan", "H", UNDERCITY, (48, 70), True),
+                  T(2, "Grizz Boltwrench", ENG, "Artisan", "H", ORGRIMMAR, (75, 25), True),
+                  T(3, "Rusk Gearjaw", ENG, "Expert", "H", ORGRIMMAR, (76, 24), True),
+                  T(4, "Hana Hideweaver", 165, "Artisan", "H", THUNDER_BLUFF, (44, 45), True)]
+            data = trainers.TrainerData(ts, {}, [], {UNDERCITY: "Undercity", ORGRIMMAR: "Orgrimmar",
+                                                     THUNDER_BLUFF: "Thunder Bluff"})
+            return TrainerInfo("horde", data, notes or Notes({}, {}))
+        info = capital_info((T(9, "Fenn Sprocket", ENG, "Expert", "A", IRONFORGE, (70, 50), True),
+                             T(10, "Gil Coilspring", ENG, "Expert", "A", 1519, (62, 30), True)))
+        return dataclasses.replace(info, notes=notes or Notes({}, {}))
+
+    def render(self, home, trainer_trips="as_needed", info=None, alts=None, character=None, capitals=None,
+               free_skips=()):
+        """Engineering and Alchemy from 100 to 225: Engineering learns an Expert recipe at 118 (a capital stop), trains
+        Artisan at 125 and goes back at 160 and 170; Alchemy trains Artisan at 130 and goes back at 197."""
+        from yap_forever import trainer_text
+        from yap_forever.planner import Plan, Step
+        info = self.info() if info is None else (info or None)  # False: no trainer data
+        rs = base_recipes() + [toy.recipe(61, "Eng basic", ENG, {toy.COPPER_BAR: 1}),
+                               toy.recipe(62, "Alch basic", ALCH, {toy.COPPER_BAR: 1}),
+                               toy.recipe(30, "Eng tube", ENG, {toy.COPPER_BAR: 1}, req=115, fee=100),
+                               toy.recipe(31, "Eng strut", ENG, {toy.COPPER_BAR: 1}, req=155, fee=720),
+                               toy.recipe(32, "Eng gizmo", ENG, {toy.COPPER_BAR: 1}, req=165, fee=810),
+                               toy.recipe(41, "Alch elixir", ALCH, {toy.COPPER_BAR: 1}, req=190, fee=2880)]
+        steps = [Step(ENG, 100, 125, 61, "Eng basic", 25, 0, 0, {toy.COPPER_BAR: 25}),
+                 Step(ALCH, 100, 130, 62, "Alch basic", 30, 0, 0, {toy.COPPER_BAR: 30}),
+                 Step(ENG, 125, 225, 61, "Eng basic", 100, 0, 0, {toy.COPPER_BAR: 100}),
+                 Step(ALCH, 130, 225, 62, "Alch basic", 95, 0, 0, {toy.COPPER_BAR: 95})]
+        ranks = [(ENG, 125, 225), (ALCH, 130, 225)]
+        learns = [(ENG, 118, 30), (ENG, 160, 31), (ENG, 170, 32), (ALCH, 197, 41)]
+        p = Plan(steps=steps, bought={toy.COPPER_BAR: 250}, ranks=[(q, s, c, 500) for q, s, c in ranks],
+                 learn_log=[(q, s, spell, "trainer") for q, s, spell in learns],
+                 events=[f"{PROFESSIONS[q]} {s}: train rank up to {c} (5s 0c)" for q, s, c in ranks]
+                 + [f"{PROFESSIONS[q]} {s}: Learn {next(r.name for r in rs if r.spell_id == spell)} (trainer 1s)"
+                    for q, s, spell in learns],
+                 final_skill={ENG: 225, ALCH: 225})
+        caps = trainer_text.stage_capitals(info) if capitals is None else capitals
+        gd = toy.gamedata(rs)
+        gd.trainer_ranks.update({ENG: gd.trainer_ranks[BS], ALCH: gd.trainer_ranks[BS]})
+        return render_guide(p, gd, toy.market(BARS), toy.stock(skills={ENG: 100, ALCH: 100}),
+                            caps={ENG: 225, ALCH: 225}, trainer_info=info, trainer_trips=trainer_trips, alts=alts,
+                            character=character, capitals=caps, home=home, free_skips=free_skips)
+
+    def rows(self, text, start, has=""):
+        return [line for line in text.splitlines() if line.startswith(start) and has in line]
+
+    def test_home_capital_visits_are_stops(self):
+        for mode in ("as_needed", "one_go"):
+            with self.subTest(mode=mode):
+                text = self.render(IRONFORGE, mode)
+                self.assertEqual(self.rows(text, "- **Trip:**", "Engineering"), [])
+                self.assertEqual(self.rows(text, "- **Trip:**", "Bolt Cogsworth"), [])
+                self.assertNotIn("Bring:", text)
+                self.assertEqual(self.rows(text, "- At ", "in Ironforge:"),
+                                 ["- At 125, in Ironforge: train Engineering to 225 at Bolt Cogsworth.",
+                                  "- At 160, in Ironforge: learn Eng strut (7s 20c) at Bolt Cogsworth.",
+                                  "- At 170, in Ironforge: learn Eng gizmo (8s 10c) at Bolt Cogsworth."])
+                self.assertIn("**Engineering 125–225**\n\nLevel Engineering 125–225 in Ironforge: the Artisan Engineer "
+                              "Bolt Cogsworth (68.5, 43.5) is there, with the AH, mailbox and bank.\n", text)
+                self.assertIn("- *At 160: start crafting Eng strut (learned at Bolt Cogsworth)*", text)
+
+    def test_other_capital_as_needed_and_one_go(self):
+        said = " Darnassus has an AH, mailbox and bank: buy as you go there."
+        text = self.render(IRONFORGE)
+        self.assertEqual(self.rows(text, "- **Trip:**"),
+                         ["- **Trip:** Alchemy rank to 225: Lira Moonleaf, Darnassus (55.0, 24.0)." + said,
+                          "- **Trip:** back to Lira Moonleaf, Darnassus (55.0, 24.0), at 197 for Alch elixir (28s 80c)."
+                          + said])
+        self.assertNotIn("Level Alchemy", text)  # the other capital gets no stage line
+        text = self.render(IRONFORGE, "one_go")
+        self.assertEqual(self.rows(text, "- **Trip:**"),
+                         ["- **Trip:** Alchemy rank to 225: Lira Moonleaf, Darnassus (55.0, 24.0). Learn at the trainer "
+                          "as you reach them: Alch elixir at 197." + said])
+        self.assertNotIn("Bring:", text)
+
+    def test_remote_trips_unchanged(self):
+        # a route with no capital stage (the Artisan Enchanter in Elwynn Forest): the same guide with or without them
+        from yap_forever.planner import Plan, Step
+        rs = base_recipes() + [toy.recipe(51, "Ench late", ENCH, {toy.ROD: 1}, req=180, fee=100)]
+        p = Plan(steps=[Step(ENCH, 140, 150, 2, "Ench basic", 10, 0, 0, {toy.ROD: 10}),
+                        Step(ENCH, 150, 225, 2, "Ench basic", 75, 0, 0, {toy.ROD: 75})],
+                 bought={toy.ROD: 85}, ranks=[(ENCH, 150, 225, 500)], learn_log=[(ENCH, 200, 51, "trainer")],
+                 events=["Enchanting 150: train rank up to 225 (5s 0c)", "Enchanting 200: Learn Ench late (trainer 1s)"],
+                 final_skill={ENCH: 225})
+
+        def guide(**kw):
+            return render_guide(p, toy.gamedata(rs), toy.market({toy.ROD: [(100, 1000)]}), toy.stock(skills={ENCH: 140}),
+                                caps={ENCH: 225}, trainer_info=self.info(), **kw)
+        plain = guide()
+        self.assertIn("- **Trip:** Enchanting rank to 225: Mara Runebright, Elwynn Forest (40.0, 50.0).", plain)
+        self.assertIn("Bring:", plain)
+        self.assertIn("- **Trip:** back to Mara Runebright", plain)
+        from yap_forever import trainer_text
+        self.assertEqual(guide(capitals=trainer_text.stage_capitals(self.info()), home=IRONFORGE), plain)
+
+    def test_lower_rank_stop_names_the_home_capital(self):
+        text = self.render(IRONFORGE)
+        self.assertIn("- At 118, learn Eng tube (1s 0c) at any Expert Engineer in Ironforge.", text)
+        # home Darnassus has no Engineer in the data: as before
+        text = self.render(DARNASSUS)
+        self.assertIn("- At 118, learn Eng tube (1s 0c) at any Expert Engineer in a capital (for example Fenn "
+                      "Sprocket, Ironforge or Gil Coilspring, Stormwind City).", text)
+
+    def test_two_capitals_line(self):
+        line = ("This route's Artisan trainers are in Ironforge (Engineering) and Darnassus (Alchemy). This guide starts "
+                "in Ironforge; to start in Darnassus, set capital = \"darnassus\" for this character in profile.toml.")
+        text = self.render(IRONFORGE)
+        head = text[:text.index("## Route")]
+        self.assertIn("Level both professions side by side: craft in whichever one is lower.\n\n" + line + "\n", head)
+        self.assertEqual(text.count(line), 1)
+        from yap_forever.profile import Character
+        set_ = self.render(IRONFORGE, character=Character("Ana Brightforge", capital="ironforge"))
+        self.assertNotIn("This route's Artisan trainers", set_)  # the player chose: no line
+        self.assertIn("This guide starts in Darnassus; to start in Ironforge, set capital = \"ironforge\"",
+                      self.render(DARNASSUS))
+
+    def test_skip_clause_on_capital_stop(self):
+        text = self.render(IRONFORGE, alts={(31,): 30000, (32,): None, (41,): 4600})
+        self.assertIn("- At 160, in Ironforge: learn Eng strut (7s 20c) at Bolt Cogsworth; or skip it: +3.0g for the "
+                      "route without it.", text)
+        self.assertIn("- At 170, in Ironforge: learn Eng gizmo (8s 10c) at Bolt Cogsworth; there is no other way to "
+                      "reach the target without it.", text)
+        self.assertIn("at 197 for Alch elixir (28s 80c); or skip it: +46s for the route without it. Darnassus has", text)
+
+    def test_free_skip_line_for_a_stop(self):
+        from yap_forever.guide import free_skip_line
+        from yap_forever.trips import Trip, Visit
+        gd = toy.gamedata([toy.recipe(32, "Eng gizmo", ENG, {toy.COPPER_BAR: 1}, req=165, fee=810)])
+        visit = Visit(ENG, 170, 225, True, "recipe", [32], city=IRONFORGE)
+        trip = Trip(170, ENG, "recipe", "Eng gizmo", cap=225, spells=(32,), visit=visit)
+        self.assertEqual(free_skip_line(trip, gd, self.info(), IRONFORGE),
+                         "Planned without the stop at 170 in Ironforge for Eng gizmo: the route without it costs the "
+                         "same.")
+        self.assertEqual(free_skip_line(trip, gd, self.info()),  # no home: the trip it is today
+                         "Planned without the trip back to Bolt Cogsworth at 170 for Eng gizmo: the route without it "
+                         "costs the same.")
+        self.assertIn("Planned without the trip back to Bolt Cogsworth at 170",
+                      free_skip_line(trip, gd, self.info(), DARNASSUS))
+
+    def test_no_data_falls_back(self):  # RF2
+        for info in (None, TrainerInfo("", self.info().data)):
+            with self.subTest(info=info):
+                text = self.render(None, info=info or False, capitals={})
+                self.assertIn("- **Trip:** back to ", text)
+                self.assertIn("- At 118, learn Eng tube (1s 0c) at any Expert Engineer in a capital.", text)
+                self.assertNotIn("in Ironforge", text)
+                self.assertNotIn("Level Engineering", text)
+                self.assertNotIn("This route's", text)
+                self.assertIn("Bring:", text)
+
+    def test_horde_thunder_bluff_no_engineering(self):  # RF1
+        text = self.render(THUNDER_BLUFF, info=self.info("horde"))
+        self.assertIn("- At 118, learn Eng tube (1s 0c) at any Expert Engineer in a capital (for example Rusk Gearjaw, "
+                      "Orgrimmar).", text)
+        self.assertNotIn("in Thunder Bluff", text)
+        self.assertIn("- **Trip:** Engineering rank to 225: Grizz Boltwrench, Orgrimmar (75.0, 25.0). Orgrimmar has an "
+                      "AH, mailbox and bank: buy as you go there.", text)
+
+    def test_city_tips(self):
+        from yap_forever.trainer_notes import load_notes
+        notes = load_notes()
+        self.assertEqual(notes.cities[DARNASSUS], DARNASSUS_TIP)  # unchanged: no claim about mail
+        self.assertEqual(notes.cities[UNDERCITY], UNDERCITY_TIP)
+        text = self.render(DARNASSUS, info=self.info(notes=notes))
+        self.assertIn("Level Alchemy 130–225 in Darnassus: the Artisan Alchemist Lira Moonleaf (55.0, 24.0) is there, "
+                      "with the AH, mailbox and bank. " + DARNASSUS_TIP + "\n", text)
+        text = self.render(IRONFORGE, info=self.info(notes=notes))  # a trip to Darnassus says it too
+        self.assertIn("Darnassus has an AH, mailbox and bank: buy as you go there. " + DARNASSUS_TIP, text)
+        text = self.render(UNDERCITY, info=self.info("horde", notes=notes))
+        self.assertIn("Level Alchemy 130–225 in Undercity: the Artisan Alchemist Vex Sourbrew (48.0, 70.0) is there, "
+                      "with the AH, mailbox and bank. " + UNDERCITY_TIP + "\n", text)

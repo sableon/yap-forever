@@ -52,8 +52,10 @@ def settle_routes(candidates: list, caps: dict) -> tuple[dict, bool]:
 
 
 def compare(routes: dict, gd, market, stock, mailbox_trips: dict | None = None, same: bool = False,
-            trainer_trips: str = "as_needed") -> str:
-    """The comparison table of the routes. trainer_trips: the character's, for the trips away (trips.visits)."""
+            trainer_trips: str = "as_needed", capitals: dict | None = None, homes: dict | None = None) -> str:
+    """The comparison table of the routes. trainer_trips: the character's, for the trips away (trips.visits).
+    capitals: trips.visits' stage capitals; homes: mode -> the capital its guide starts in (plan.home_capital), whose
+    stops are no trips away."""
     modes = [m for m in ROUTE_NAMES if m in routes]
 
     def row(label, f):
@@ -62,8 +64,8 @@ def compare(routes: dict, gd, market, stock, mailbox_trips: dict | None = None, 
     def reached(p, _m):
         return ", ".join(f"{PROFESSIONS.get(x, x)} {s}" for x, s in p.final_skill.items()) or "—"
 
-    def away(p, _m):
-        found = trips(p, gd, stock.skills, trainer_trips)
+    def away(p, m):
+        found = trips(p, gd, stock.skills, trainer_trips, capitals, (homes or {}).get(m))
         return str(len(found)) if found else "none"
 
     def mail(_p, m):

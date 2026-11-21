@@ -229,6 +229,55 @@ def has_trainer(info: TrainerInfo | None, zone: int, profession: int, cap: int) 
                                                              info.faction))
 
 
+def city_name(info: TrainerInfo | None, zone: int) -> str:
+    """A zone's name, from the trainer data when there is some."""
+    return info.data.zone_name(zone) if info and info.data else trainers.zone_name(zone)
+
+
+def city_tip(info: TrainerInfo | None, zone: int) -> str:
+    """' <tip>' for a capital the notes have a tip for (trainer_notes.toml [cities]), else ""."""
+    tip = info.notes.cities.get(zone) if info and info.notes else None
+    return f" {tip}" if tip else ""
+
+
+def capital_trainer(info: TrainerInfo | None, profession: int, cap: int, zone: int) -> tuple[Trainer, str] | None:
+    """The trainer of `cap`'s rank in a capital (confirmed titles first) with its flag, or None."""
+    found = [t for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap], info.faction)
+             if t.zone == zone] if _usable(info, cap) else []
+    return next(iter(_confirmed_first(found)), None)
+
+
+def stage_line(info: TrainerInfo | None, profession: int, cap: int, zone: int, lo: int, hi: int) -> str:
+    """'Level <Profession> <lo>–<hi> in <City>: the <Rank> <Person> <name> (x, y) is there, with the AH, mailbox and
+    bank.' and the city's tip: the line that opens a stage levelled in the capital the guide starts in (#98)."""
+    found = capital_trainer(info, profession, cap, zone)
+    who = ""
+    if found:
+        t, flag = found
+        who = f" {t.name}{flag}" + (f" ({t.coords[0]:.1f}, {t.coords[1]:.1f})" if t.coords else "")
+    return (f"Level {PROFESSIONS.get(profession, profession)} {lo}–{hi} in {city_name(info, zone)}: the "
+            f"{RANK_BY_CAP[cap]} {person(profession)}{who} is there, with the AH, mailbox and bank."
+            + city_tip(info, zone))
+
+
+def capital_services(info: TrainerInfo | None, zone: int) -> str:
+    """' <City> has an AH, mailbox and bank: buy as you go there.' and the city's tip: what a trip to a capital's
+    trainer says instead of a bring list."""
+    return f" {city_name(info, zone)} has an AH, mailbox and bank: buy as you go there." + city_tip(info, zone)
+
+
+def home_row(info: TrainerInfo, profession: int, cap: int, zone: int, lead: str, planned: tuple[int, ...] = (),
+             said: set[int] | None = None) -> str:
+    """'<lead> at any <Rank> <Person> in <City>.': a stop below the capital stages in the capital the guide starts in,
+    when it has that trainer (has_trainer); with the city's "different parts" sentence once (see city_row)."""
+    text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}."
+    said = set() if said is None else said
+    apart = _apart(info, zone, planned) if zone not in said else ""
+    if apart:
+        said.add(zone)
+    return f"{text} {apart}" if apart else text
+
+
 def person(profession: int) -> str:
     """How a trainer's title names the profession: "Blacksmith"."""
     return PERSON.get(profession, PROFESSIONS.get(profession, str(profession)))

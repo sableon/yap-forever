@@ -697,6 +697,31 @@ class FreeSkipReportTests(unittest.TestCase):
         self.assertNotIn(line, guide)
         self.assertIn("at 240 for BS late 1.", guide)  # the trip back stays
 
+    def test_home_capital_reaches_every_part(self):
+        # #98 (C21): with the trainer data, write_reports gives the stage capitals and each route's home to the free
+        # skips, the skip lines, the table and the guide. The Master rank is put in Ironforge here (made up: the real
+        # Masters stand outside the capitals), so its rank training and trip back become stops: one trip away is left
+        # (the Artisan rank), not two
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod, trainer_text
+        with mock.patch.object(trainer_text, "stage_capitals", return_value={(164, 300): 1537}), \
+                mock.patch.object(plan_mod, "take_free_skips", wraps=plan_mod.take_free_skips) as take:
+            table, texts = self.reports(faction="alliance")
+        self.assertEqual((take.call_args.kwargs["capitals"], take.call_args.kwargs["home"]), ({(164, 300): 1537}, 1537))
+        self.assertIn("| Trips away | 1 | 1 |", table)
+        line = "Planned without the stop at 240 in Ironforge for BS late 1: the route without it costs the same."
+        for m in ("gold", "value"):
+            self.assertIn(line, texts[f"guide-{m}"], m)
+            self.assertIn(f"- {line}", texts[f"plan-{m}"], m)
+            self.assertIn("in Ironforge: the Master Blacksmith is there, with the AH, mailbox and bank.",
+                          texts[f"guide-{m}"])
+            self.assertNotIn("**Trip:** Blacksmithing rank to 300", texts[f"guide-{m}"])
+            self.assertIn("**Trip:** Blacksmithing rank to 225", texts[f"guide-{m}"])
+        _table, plain = self.reports(faction="alliance")  # the fixture's own trainers: no stage capital, as before
+        self.assertIn("Planned without the trip back to Brakka Ironfold at 240", plain["guide-gold"])
+        self.assertIn("**Trip:** Blacksmithing rank to 300", plain["guide-gold"])
+
 
 class CouldAlsoMakeWiringTests(unittest.TestCase):
     """#95 through write_reports: a Merchant's Favor recipe the character could make is suggested in both guides and

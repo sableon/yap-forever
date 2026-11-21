@@ -156,10 +156,10 @@ class ShippedFileTests(unittest.TestCase):
     def setUpClass(cls):
         cls.notes = trainer_notes.load_notes()
 
-    def test_twelve_trainers_and_two_cities(self):
+    def test_twelve_trainers_and_three_cities(self):
         self.assertEqual(sorted(self.notes.trainers),
                          sorted([7948, 1386, 2836, 3355, 11073, 11072, 11074, 8736, 11097, 11098, 11052, 2399]))
-        self.assertEqual(sorted(self.notes.cities), [1657])  # Stormwind has groups, no tip
+        self.assertEqual(sorted(self.notes.cities), [1497, 1657])  # Stormwind has groups, no tip
         self.assertEqual(sorted(self.notes.city_groups), [1519])
 
     def test_values_from_play(self):
@@ -185,7 +185,9 @@ class ShippedFileTests(unittest.TestCase):
 
     def test_city_tips(self):
         self.assertEqual(self.notes.cities, {
-            1657: "Most trainers are close together, but the bank and the AH are far apart."})
+            1657: "Most trainers are close together, but the bank and the AH are far apart.",  # no claim about mail
+            1497: "The bank and the AH are in different parts of the city; there is a mailbox at the inn, a few steps "
+                  "from the bank."})  # #98
 
     def test_stormwind_groups(self):
         # from play (2026-11-19): Tailoring, Alchemy and Enchanting are close together; so are

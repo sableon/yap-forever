@@ -608,7 +608,10 @@ def bring_text(plan, gd, trip, bag_slots, owned=None, reagent_slots: int = 0,
     """services_known: the row already says what is near the trainer (or that it is a capital).
     start_skills, trainer_trips: see bring_list. With bag_slots, a list that doesn't fit in them (CRAFT_ROOM kept
     free, the reagent bag taking reagents first) says so, with the highest skill whose list fits. market: today's
-    prices, for what the items your other profession makes later would cost on the AH (one go)."""
+    prices, for what the items your other profession makes later would cost on the AH (one go). A trip to a trainer
+    in a capital (trips.Visit.city) gets none: the AH, mailbox and bank are there (the guide says so)."""
+    if trip.visit is not None and trip.visit.city is not None:
+        return ""
     reagents = reagent_items(gd) if reagent_slots else None
     rows, left, mail, ctx = _bring_rows(plan, gd, trip, bag_slots, owned, reagent_slots, reagents, start_skills,
                                         trainer_trips)

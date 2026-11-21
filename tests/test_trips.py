@@ -467,5 +467,126 @@ class HomeCapitalTests(unittest.TestCase):
         self.assertIsNone(self.home([(ENG, 125, 225)], caps={}))  # no trainer data (RF2)
         self.assertIsNone(self.home([(ENG, 125, 225)], caps={}, capital="ironforge"))
 
+
+def capital_route():
+    """(plan, game data, start skills): Engineering trains Artisan at 125 (Ironforge) and goes back for recipes at 160
+    and 170; Alchemy trains Artisan at 130 (Darnassus) and goes back at 197."""
+    gd = toy.gamedata([toy.recipe(31, "Eng strut", ENG, {toy.IRON_BAR: 1}, req=155, fee=720),
+                       toy.recipe(32, "Eng gizmo", ENG, {toy.IRON_BAR: 1}, req=165, fee=810),
+                       toy.recipe(41, "Alch elixir", ALCH, {toy.IRON_BAR: 1}, req=190, fee=2880)])
+    p = Plan(ranks=[(ENG, 125, 225, 500), (ALCH, 130, 225, 500)],
+             learn_log=[(ENG, 160, 31, "trainer"), (ENG, 170, 32, "trainer"), (ALCH, 197, 41, "trainer")],
+             final_skill={ENG: 225, ALCH: 225})
+    return p, gd, {ENG: 120, ALCH: 120}
+
+
+def trip_shape(ts):
+    return [(t.kind, t.skill, t.profession, t.spells) for t in ts]
+
+
+class CapitalStopTests(unittest.TestCase):
+    """#98: in the home capital every visit to a capital-stage trainer is a stop, not a trip, whatever trainer_trips;
+    the other capital follows trainer_trips; remote trainers stay trips."""
+
+    def test_home_capital_visits_are_stops(self):
+        from yap_forever.trips import trips
+        p, gd, start = capital_route()
+        kw = {"capitals": STAGE_CAPS, "home": IRONFORGE}
+        got = visits(p, gd, start, **kw)
+        self.assertEqual([(v.profession, v.skill, v.kind, v.city) for v in got],
+                         [(ENG, 125, "rank", IRONFORGE), (ALCH, 130, "rank", DARNASSUS), (ENG, 160, "recipe", IRONFORGE),
+                          (ENG, 170, "recipe", IRONFORGE), (ALCH, 197, "recipe", DARNASSUS)])
+        for mode in ("as_needed", "one_go"):
+            with self.subTest(mode=mode):
+                self.assertNotIn(ENG, [t.profession for t in trips(p, gd, start, mode, **kw)])
+                # C22: one go folds no home stop: the Engineering stops keep their rows
+                stops = [(v.skill, v.kind, v.learn, v.as_reached) for v in visits(p, gd, start, mode, **kw)
+                         if v.profession == ENG]
+                self.assertEqual(stops, [(125, "rank", [], []), (160, "recipe", [31], []), (170, "recipe", [32], [])])
+        # the same with an Expert stop before the rank training (the first visit is then no home stop)
+        gd.recipes[30] = toy.recipe(30, "Eng tube", ENG, {toy.IRON_BAR: 1}, req=115, fee=100)
+        p.learn_log.insert(0, (ENG, 118, 30, "trainer"))
+        stops = [(v.skill, v.kind) for v in visits(p, gd, {ENG: 100, ALCH: 100}, "one_go", **kw) if v.profession == ENG]
+        self.assertEqual(stops, [(118, "city"), (125, "rank"), (160, "recipe"), (170, "recipe")])
+
+    def test_other_capital_as_needed_and_one_go(self):
+        from yap_forever.trips import trips
+        p, gd, start = capital_route()
+        kw = {"capitals": STAGE_CAPS, "home": IRONFORGE}
+        got = trips(p, gd, start, **kw)
+        self.assertEqual(trip_shape(got), [("rank", 130, ALCH, ()), ("recipe", 197, ALCH, (41,))])
+        self.assertEqual([t.visit.city for t in got], [DARNASSUS, DARNASSUS])
+        (rank,) = trips(p, gd, start, "one_go", **kw)  # the 0.2.1 fold: levelled there, learned as reached
+        self.assertEqual((rank.kind, rank.skill, rank.visit.as_reached), ("rank", 130, [(41, 197)]))
+        # the other way round: home Darnassus, Ironforge's rank training and recipe visits are the trips
+        got = trips(p, gd, start, capitals=STAGE_CAPS, home=DARNASSUS)
+        self.assertEqual(trip_shape(got), [("rank", 125, ENG, ()), ("recipe", 160, ENG, (31,)),
+                                           ("recipe", 170, ENG, (32,))])
+
+    def test_remote_trips_unchanged(self):
+        # Enchanting's Artisan and Blacksmithing's Master stand in no capital: as today, in both modes
+        from yap_forever.trips import trips, visit_count
+        gd = toy.gamedata([toy.recipe(51, "Ench late", ENCH, {toy.IRON_BAR: 1}, req=180, fee=100),
+                           toy.recipe(52, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=100),
+                           toy.recipe(53, "BS pattern", BS, {toy.IRON_BAR: 1}, source="scroll", scroll=toy.SCROLL)])
+        p = Plan(ranks=[(ENCH, 150, 225, 500), (BS, 225, 300, 500)],
+                 learn_log=[(ENCH, 200, 51, "trainer"), (BS, 240, 52, "trainer"), (BS, 250, 53, "vendor")],
+                 final_skill={ENCH: 225, BS: 300})
+        start = {ENCH: 140, BS: 200}
+        for mode in ("as_needed", "one_go"):
+            with self.subTest(mode=mode):
+                plain = trips(p, gd, start, mode)
+                got = trips(p, gd, start, mode, capitals=STAGE_CAPS, home=IRONFORGE)
+                self.assertEqual(trip_shape(got), trip_shape(plain))
+                self.assertTrue(all(t.visit is None or t.visit.city is None for t in got))
+                self.assertEqual(visit_count(p, gd, start, mode, capitals=STAGE_CAPS, home=IRONFORGE),
+                                 visit_count(p, gd, start, mode))
+
+    def test_one_go_home_stretch_keeps_pattern_trips(self):
+        # a vendor pattern inside a home stage's stretch has no bring list to ride on: it stays a trip of its own
+        from yap_forever.trips import trips
+        p, gd, start = capital_route()
+        gd.recipes[33] = toy.recipe(33, "Eng schematic", ENG, {toy.IRON_BAR: 1}, source="scroll", scroll=toy.SCROLL)
+        p.learn_log.append((ENG, 150, 33, "vendor"))
+        got = trips(p, gd, start, "one_go", capitals=STAGE_CAPS, home=IRONFORGE)
+        self.assertIn(("vendor", 150, ENG, ()), trip_shape(got))
+
+    def test_visit_count_counts_home_stops(self):
+        # Part 3's free skip still sees the home stops: a route without one makes fewer visits
+        from yap_forever.trips import visit_count
+        p, gd, start = capital_route()
+        for mode in ("as_needed", "one_go"):
+            with self.subTest(mode=mode):
+                self.assertEqual(visit_count(p, gd, start, mode, capitals=STAGE_CAPS, home=IRONFORGE),
+                                 5 if mode == "as_needed" else 4)
+
+    def test_no_data_falls_back(self):  # RF2: no stage capitals, no home: the visits and trips of today
+        from yap_forever.trips import trips
+        p, gd, start = capital_route()
+        for kw in ({}, {"capitals": {}, "home": None}, {"capitals": None, "home": None}):
+            with self.subTest(kw=kw):
+                self.assertEqual(len(trips(p, gd, start, **kw)), 5)
+                self.assertTrue(all(v.city is None for v in visits(p, gd, start, **kw)))
+
+    def test_free_skip_still_applies_to_capital_visit(self):
+        # Part 3 (C13): a home-capital recipe stop is still a candidate, keyed by its recipes, and its route-without
+        # makes one visit fewer
+        from types import SimpleNamespace
+        from unittest import mock
+        from yap_forever.plan import take_free_skips
+        from yap_forever.trips import trip_alternatives
+        p, gd, start = capital_route()
+        p.cash_total = p.economic_total = 1000
+        alt = Plan(ranks=list(p.ranks), learn_log=[x for x in p.learn_log if x[2] != 32], final_skill=dict(p.final_skill),
+                   cash_total=1000, economic_total=1000)
+        inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills=start), craft_once={}, caps={ENG: 225, ALCH: 225})
+        kw = {"capitals": STAGE_CAPS, "home": IRONFORGE}
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: alt if exclude == {32}
+                        else p):
+            self.assertIn((32,), trip_alternatives(p, inputs, "gold", {}, **kw))
+            route, left = take_free_skips(p, inputs, "gold", {}, **kw)
+        self.assertIs(route, alt)
+        self.assertEqual([(t.kind, t.skill, t.spells, t.visit.city) for t in left], [("recipe", 170, (32,), IRONFORGE)])
+
 if __name__ == "__main__":
     unittest.main()

@@ -722,6 +722,19 @@ class BringListTests(unittest.TestCase):
         self.assertEqual(text.count("Made later by"), 1)  # not for the dust
         self.assertEqual(text.count("From disenchanting what"), 1)  # not for the rods
 
+    def test_no_bring_list_for_a_trip_to_a_capital(self):
+        # #98: a trip to a capital's trainer (Visit.city) has the AH, mailbox and bank there: no bring list
+        import dataclasses
+        from yap_forever.shopping import bring_text
+        from yap_forever.trips import Visit
+        p, gd = self.pattern_plan("ah")
+        visit = Visit(ENCH, 225, 300, True, "rank")
+        trip = dataclasses.replace(self.ench_trip(), visit=visit)
+        for trainer_trips in ("as_needed", "one_go"):
+            self.assertIn(" Bring: ", bring_text(p, gd, trip, None, trainer_trips=trainer_trips))
+            capital = dataclasses.replace(trip, visit=dataclasses.replace(visit, city=1657))
+            self.assertEqual(bring_text(p, gd, capital, None, trainer_trips=trainer_trips), "", trainer_trips)
+
 
 if __name__ == "__main__":
     unittest.main()
