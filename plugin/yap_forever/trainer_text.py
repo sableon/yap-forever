@@ -271,12 +271,18 @@ def home_row(info: TrainerInfo, profession: int, cap: int, zone: int, lead: str,
     """'<lead> at any <Rank> <Person> in <City>.': a stop below the capital stages in the capital the guide starts in,
     when it has that trainer (has_trainer); with the city's "different parts" sentence once (see city_row). When no
     trainer there has a confirmed title, the row says so, as city_row does."""
-    here = [t for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap], info.faction)
-            if t.zone == zone]
-    flag = "" if any(t.title_confirmed for t in here) else UNCONFIRMED
-    text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}{flag}."
+    text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}" \
+           f"{unconfirmed(info, profession, cap, zone)}."
     apart = apart_once(info, zone, planned, said)
     return f"{text} {apart}" if apart else text
+
+
+def unconfirmed(info: TrainerInfo | None, profession: int, cap: int, zone: int) -> str:
+    """UNCONFIRMED when `zone` has trainers of `cap`'s rank for `profession` and none has a confirmed title (a row that
+    names the rank there says so, as city_row does); "" otherwise."""
+    here = [t for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap], info.faction)
+            if t.zone == zone] if _usable(info, cap) else []
+    return UNCONFIRMED if here and not any(t.title_confirmed for t in here) else ""
 
 
 def apart_once(info: TrainerInfo | None, zone: int, planned: tuple[int, ...] = (), said: set[int] | None = None) -> str:

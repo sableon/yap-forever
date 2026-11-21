@@ -1067,6 +1067,17 @@ UNDERCITY_TIP = ("The bank and the AH are in different parts of the city; there 
                  "from the bank.")
 
 
+def alliance_info(notes=None, ironforge_engineer=None):
+    """Made-up Alliance trainers (tests/test_trainers.py capital_info) plus Expert Engineers in Ironforge
+    (`ironforge_engineer`, default Fenn Sprocket) and Stormwind (Gil Coilspring)."""
+    from yap_forever import trainers
+    from yap_forever.trainer_notes import Notes
+    from tests.test_trainers import capital_info
+    fenn = ironforge_engineer or trainers.Trainer(9, "Fenn Sprocket", ENG, "Expert", "A", IRONFORGE, (70, 50), True)
+    info = capital_info((fenn, trainers.Trainer(10, "Gil Coilspring", ENG, "Expert", "A", 1519, (62, 30), True)))
+    return dataclasses.replace(info, notes=notes or Notes({}, {}))
+
+
 class CapitalGuideTests(unittest.TestCase):
     """#98: the home capital's stage line and capital stops, the other capital's trips without bring lists, the line
     for two capitals, and the capitals' tips."""
@@ -1076,7 +1087,6 @@ class CapitalGuideTests(unittest.TestCase):
         Artisan Engineer in Orgrimmar, the Artisan Alchemist in Undercity and no Engineer in Thunder Bluff."""
         from yap_forever import trainers
         from yap_forever.trainer_notes import Notes
-        from tests.test_trainers import capital_info
         T = trainers.Trainer
         if faction == "horde":
             ts = [T(1, "Vex Sourbrew", ALCH, "Artisan", "H", UNDERCITY, (48, 70), True),
@@ -1086,9 +1096,7 @@ class CapitalGuideTests(unittest.TestCase):
             data = trainers.TrainerData(ts, {}, [], {UNDERCITY: "Undercity", ORGRIMMAR: "Orgrimmar",
                                                      THUNDER_BLUFF: "Thunder Bluff"})
             return TrainerInfo("horde", data, notes or Notes({}, {}))
-        info = capital_info((T(9, "Fenn Sprocket", ENG, "Expert", "A", IRONFORGE, (70, 50), True),
-                             T(10, "Gil Coilspring", ENG, "Expert", "A", 1519, (62, 30), True)))
-        return dataclasses.replace(info, notes=notes or Notes({}, {}))
+        return alliance_info(notes)
 
     def render(self, home, trainer_trips="as_needed", info=None, alts=None, character=None, capitals=None,
                free_skips=(), **kw):
@@ -1317,20 +1325,23 @@ class JoinedStopGuideTests(unittest.TestCase):
     """#98: capital stops of the two professions close together on the route are one row in the first one's block
     (trips.join_stops), and the joined recipes' rows point at it."""
 
-    def render(self, home=IRONFORGE, notes=None, reagent=None, items=None, bag_slots=None, later=(), eng=91, alts=None):
+    def render(self, home=IRONFORGE, notes=None, reagent=None, items=None, bag_slots=None, later=(), eng=91, alts=None,
+               reqs=None, ironforge_engineer=None):
         """Alchemy and Engineering 80–110 side by side, one point a step (Alchemy first at each skill), no buffer:
         a basic recipe to 91 (Engineering: to `eng`), then Alchemy crafts Alch draught (learned at 91 with Alch wisdom)
         and Engineering Eng contact (learned at `eng`, needs 85) to 110, one `reagent` each (default: Iron Bar, bought on
         the AH; Copper Rod is sold by a vendor, 20 to a stack). items: the bank. later: (profession, skill, spell) of
-        further trainer recipes, learned and crafted from that skill on."""
+        further trainer recipes, learned and crafted from that skill on. reqs: spell -> required skill, over the
+        defaults. ironforge_engineer: see alliance_info."""
         from yap_forever.planner import Plan, Step
         reagent = reagent or toy.IRON_BAR
+        req = {71: 91, 72: 91, 73: 100, 81: 85, 82: 105, **(reqs or {})}
         rs = [toy.recipe(61, "Alch basic", ALCH, {reagent: 1}), toy.recipe(62, "Eng basic", ENG, {reagent: 1}),
-              toy.recipe(71, "Alch draught", ALCH, {reagent: 1}, req=91, fee=405),
-              toy.recipe(72, "Alch wisdom", ALCH, {reagent: 1}, req=91, fee=450),
-              toy.recipe(73, "Alch later", ALCH, {reagent: 1}, req=100, fee=500),
-              toy.recipe(81, "Eng contact", ENG, {reagent: 1}, req=85, fee=270),
-              toy.recipe(82, "Eng late", ENG, {reagent: 1}, req=105, fee=300)]
+              toy.recipe(71, "Alch draught", ALCH, {reagent: 1}, req=req[71], fee=405),
+              toy.recipe(72, "Alch wisdom", ALCH, {reagent: 1}, req=req[72], fee=450),
+              toy.recipe(73, "Alch later", ALCH, {reagent: 1}, req=req[73], fee=500),
+              toy.recipe(81, "Eng contact", ENG, {reagent: 1}, req=req[81], fee=270),
+              toy.recipe(82, "Eng late", ENG, {reagent: 1}, req=req[82], fee=300)]
         names = {r.spell_id: r.name for r in rs}
         learns = [(ALCH, 91, 71), (ALCH, 91, 72), (ENG, eng, 81), *later]
 
@@ -1345,7 +1356,7 @@ class JoinedStopGuideTests(unittest.TestCase):
         gd = toy.gamedata(rs)
         gd.items[toy.ROD] = dataclasses.replace(gd.items[toy.ROD], stack=20)
         gd.trainer_ranks.update({ENG: gd.trainer_ranks[BS], ALCH: gd.trainer_ranks[BS]})
-        info = CapitalGuideTests().info(notes=notes)
+        info = alliance_info(notes, ironforge_engineer)
         stock = toy.stock(items=items, skills={ALCH: 80, ENG: 80})
         stock.bag_slots = bag_slots
         return render_guide(p, gd, toy.market(BARS), stock, caps={ALCH: 110, ENG: 110}, trainer_info=info,
@@ -1408,3 +1419,52 @@ class JoinedStopGuideTests(unittest.TestCase):
         self.assertIn("at an Expert Alchemist; or skip it: +3.0g for the route without it, and Eng contact (2s 70c) at an "
                       "Expert Engineer (you use it from Engineering 91).\n", text)
         self.assertNotIn("+46s", text)
+
+    def test_supply_sentences_add_up_across_two_joins(self):
+        # Engineering's next stop after 91 is the one joined at Alchemy 100 (Engineering at 100 there, Eng late needs
+        # 95): each row is in one sentence, so the two add up to what the mailbox trips buy from a vendor
+        import re
+        text = self.render(reagent=toy.ROD, items={toy.ROD: 22}, bag_slots=12, later=[(ALCH, 100, 73), (ENG, 105, 82)],
+                           reqs={82: 95})
+        self.assertIn("- **Capital stop** at Alchemy 100 (in Ironforge): learn Alch later (5s 0c) at an Expert Alchemist, "
+                      "and Eng late (3s 0c) at an Expert Engineer (you use it from Engineering 105).", text)
+        said = [int(n) for n in re.findall(r"supplies vendor near the trainers sells the (\d+) Copper Rod", text)]
+        self.assertEqual(said, [9, 29])  # Alch draught 91–100; Alch later, Eng contact 91–105 and Eng late
+        bought = [int(n) for n in re.findall(r"From a vendor: (\d+) Copper Rod", text)]
+        self.assertEqual(sum(said), sum(bought))
+
+    def test_joined_row_flags_an_unconfirmed_title(self):
+        from yap_forever import trainers
+        odd = trainers.Trainer(9, "Odd Tinker", ENG, "", "A", IRONFORGE, (70, 50), False)  # no rank in its title
+        text = self.render(ironforge_engineer=odd)
+        self.assertIn("at an Expert Alchemist, and Eng contact (2s 70c) at an Expert Engineer (title unconfirmed in the "
+                      "data; you use it from Engineering 91).", text)
+
+    def test_rank_training_takes_a_stop(self):
+        # Engineering trains Artisan at 140 in Ironforge, its home stage (A); Alchemy's Expert stop at 145 for Alch
+        # tonic (needs 135) joins it: Alchemy is at 141 there
+        from yap_forever.planner import Plan, Step
+
+        def text(eng_learns):
+            rs = [toy.recipe(61, "Alch basic", ALCH, {toy.IRON_BAR: 1}), toy.recipe(62, "Eng basic", ENG, {toy.IRON_BAR: 1}),
+                  toy.recipe(74, "Alch tonic", ALCH, {toy.IRON_BAR: 1}, req=135, fee=900),
+                  toy.recipe(83, "Eng frame", ENG, {toy.IRON_BAR: 1}, req=140, fee=540)]
+            steps = [Step(prof, s, s + 1, 61 if prof == ALCH else 62, "basic", 1, 0, 0, {toy.IRON_BAR: 1}, buffered=1)
+                     for s in range(130, 160) for prof in (ALCH, ENG)]
+            learns = [(ALCH, 145, 74)] + ([(ENG, 140, 83)] if eng_learns else [])
+            p = Plan(steps=steps, bought={toy.IRON_BAR: 60}, ranks=[(ENG, 140, 225, 500)],
+                     learn_log=[(q, s, sp, "trainer") for q, s, sp in learns],
+                     events=["Engineering 140: train rank up to 225 (5s 0c)"],
+                     final_skill={ALCH: 160, ENG: 160})
+            gd = toy.gamedata(rs)
+            gd.trainer_ranks.update({ENG: gd.trainer_ranks[BS], ALCH: gd.trainer_ranks[BS]})
+            return render_guide(p, gd, toy.market(BARS), toy.stock(skills={ALCH: 130, ENG: 130}),
+                                caps={ALCH: 160, ENG: 160}, trainer_info=alliance_info(),
+                                capitals={(ENG, 225): IRONFORGE}, home=IRONFORGE)
+        self.assertIn("- **Capital stop** at Engineering 140 (in Ironforge): train Engineering to 225 at an Artisan "
+                      "Engineer, and learn Alch tonic (9s 0c) at an Expert Alchemist (you use it from Alchemy 145).\n",
+                      text(False))
+        # the rank training learns a recipe there too: one trainer per profession
+        self.assertIn("- **Capital stop** at Engineering 140 (in Ironforge): train Engineering to 225 and learn Eng frame "
+                      "(5s 40c) at an Artisan Engineer, and Alch tonic (9s 0c) at an Expert Alchemist (you use it from "
+                      "Alchemy 145).\n", text(True))
