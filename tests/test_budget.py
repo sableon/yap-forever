@@ -174,6 +174,8 @@ class CutTests(unittest.TestCase):
         self.assertEqual(got.plan.cash_total, new.cash_total)
         self.assertEqual((got.spent, got.caps), (400, c.caps))
         self.assertEqual(got.next_stop, {ENCH: (75, 1000)})  # the next stop's route costs what it did: 100c more on top
+        c.goal_extra = {ENCH: 900}  # #96: so does a recipe goal the cut stops below
+        self.assertEqual(budget.adopt(c, new, 400).goal_extra, {ENCH: 1000})
         self.assertEqual(reached_lines(got.plan), [])
         c.next_stop = {}  # Enchanting's target is 1: reached, and said
         kept = Plan(events=["Enchanting already at 1"])
@@ -618,6 +620,10 @@ class RecipeGoalTests(unittest.TestCase):
         c = cut(i, 1)
         self.assertEqual((c.spent, c.covered), (100, {BS}))
         self.assertEqual(budget.lines(c, Budget(1)), ["1g covers Blacksmithing to 100 and one BS goal (1s)."])
+        self.assertNotIn("Blacksmithing already at 120", c.plan.events)  # the craft is planned: not "nothing to plan"
+        from yap_forever.planner import Plan
+        replanned = budget.adopt(c, Plan(events=["Blacksmithing already at 120"]), 100)  # a free skip's route too
+        self.assertEqual(replanned.plan.events, [])
 
     def test_other_profession_craft_used_past_margin(self):
         # a shard at 50c makes the dye for less than the AH's 90c by more than the margin: Enchanting's trainer recipe crafts it, with no fee, no

@@ -82,23 +82,27 @@ def copper(budget: Budget) -> int:
     return round(budget.gold * COPPER_PER_GOLD)  # 1.13g is 11299.999... copper in floating point
 
 
-def _held(caps: dict[int, int], start: dict[int, int], below) -> set[str]:
+def _held(caps: dict[int, int], start: dict[int, int], below, crafts=()) -> set[str]:
     """The planner's "<Prof> already at N" events of the professions the budget holds at their start skill (caps:
     the caps planned to; below: the professions whose target is above their start): their target isn't reached,
-    so the guide mustn't say there is nothing to plan."""
-    return {f"{PROFESSIONS[x]} already at {start[x]}" for x in below if caps.get(x) == start.get(x)}
+    so the guide mustn't say there is nothing to plan. crafts: the professions whose goal recipe the route crafts
+    once (#96): one already at its skill has that craft to plan."""
+    return ({f"{PROFESSIONS[x]} already at {start[x]}" for x in below if caps.get(x) == start.get(x)}
+            | {f"{PROFESSIONS[x]} already at {start[x]}" for x in crafts if x in start})
 
 
 def adopt(c: BudgetCut, plan: Plan, spent: float) -> BudgetCut:
     """The cut with `plan`, the route planned to the same caps without some trips (plan.take_free_skips), as its
-    route, and spent its gold to bring: each next stop costs what it did, so its extra is counted from the new
-    gold; the professions the budget holds at their start keep no "already at" event (in a copy of `plan` when it
+    route, and spent its gold to bring: each next stop, and each recipe goal it stops below, costs what it did, so its
+    extra is counted from the new gold; the professions the budget holds at their start keep no "already at" event (in a copy of `plan` when it
     has one, else `plan` itself)."""
-    held = _held(c.planned_caps, c.start, c.next_stop)  # held at the start: a next stop and its start as the cap
+    held = _held(c.planned_caps, c.start, c.next_stop, c.planned_once)  # held at the start (a next stop and its start
+    # as the cap), or crafting its goal recipe
     if held & set(plan.events):  # a copy: the plan given may be a cached one
         plan = dataclasses.replace(plan, events=[e for e in plan.events if e not in held])
     return dataclasses.replace(c, plan=plan, spent=spent,
-                               next_stop={p: (s, extra + c.spent - spent) for p, (s, extra) in c.next_stop.items()})
+                               next_stop={p: (s, extra + c.spent - spent) for p, (s, extra) in c.next_stop.items()},
+                               goal_extra={p: extra + c.spent - spent for p, extra in c.goal_extra.items()})
 
 
 def gold_measure(budget: Budget | None, gd, market, stock) -> Callable[[Plan], float]:
@@ -195,7 +199,7 @@ def cut(inputs, mode: str, budget: Budget, gold_of: Callable[[Plan], float] | No
         credited = (gold_at(caps, crafts, True) <= limit or gold_at(caps, crafts, False) >= gold_at(caps, crafts, True)
                     or not _as_far(routes(caps, crafts, False)[mode], routes(caps, crafts)[mode], caps, crafts))
         p = routes(caps, crafts, credited)[mode]
-        held = _held(caps, start, [x for x in caps if start[x] < target[x] or x in once])
+        held = _held(caps, start, [x for x in caps if start[x] < target[x] or x in once], crafts)
         p.events = [e for e in p.events if e not in held]  # held at the start by the budget: not a target reached
         return p, gold_at(caps, crafts, credited)
 

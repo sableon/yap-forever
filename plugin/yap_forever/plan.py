@@ -340,8 +340,8 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                                     *level_note]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide
-    if once and cuts:  # #96: the plan command prints what the budget covers, after the guides have the table
-        table += "\n\n" + _said_once(said_of)
+    if once and cuts and (told := _said_once(said_of)):  # #96: the plan command prints what the budget covers, after
+        table += "\n\n" + told  # the guides have the table
     return table, files
 
 
