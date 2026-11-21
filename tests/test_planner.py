@@ -485,8 +485,9 @@ class FavorScrollTests(unittest.TestCase):
 class NoOvercraftTests(unittest.TestCase):
     def test_resale_does_not_pick_lower_chance_recipe(self):
         # orange: 1 Copper Bar per point. "Vest" goes yellow at once, so it needs more crafts per
-        # point, but each Vest resells for far more than its bar. Levelling should not chase resale.
-        rs = base_recipes() + [toy.recipe(3, "Vest", BS, {toy.COPPER_BAR: 1}, (toy.VEST, 1), t=(1, 1, 50, 99))]
+        # point, but each Vest resells on the AH for far more than its 2 bars. Levelling should not chase
+        # resale (its vendor price, 20c, counts and still leaves it dearer: 180c a craft against 98c).
+        rs = base_recipes() + [toy.recipe(3, "Vest", BS, {toy.COPPER_BAR: 2}, (toy.VEST, 1), t=(1, 1, 50, 99))]
         p = run(rs, {**BARS, toy.VEST: [(1000, 50)]}, cap=40)
         self.assertNotIn(3, {s.spell_id for s in p.steps})
 
@@ -756,3 +757,96 @@ class AhPremiumPlanTests(unittest.TestCase):
         self.assertNotIn(toy.BELT, p.leftovers)
         self.assertIn(toy.DUST, p.de_materials)
         self.assertIsNone(Valuer(m, gd, st).ah_price(toy.BELT))
+
+
+class VendorCashbackTests(unittest.TestCase):
+    """#97: a craft's vendor price counts in choosing the route. Each output unit is credited once: reused, else kept
+    (held for this route's disenchanting, or a keep_greens green), else sold at its vendor price; the vendor credit
+    never takes a craft below zero cost, and ties go to the higher skill-up chance."""
+    PLATE, SCRAP, BOLT, PIN, MISSING = 7701, 7702, 7703, 7704, 7799  # made-up crafts (MISSING: no item row)
+
+    def gamedata(self, recipes):
+        gd = toy.gamedata(recipes)
+        for i, name, sell in ((self.PLATE, "Test Plate", 2000), (self.SCRAP, "Test Scrap", 0),
+                              (self.BOLT, "Test Bolt", 10), (self.PIN, "Test Pin", 30)):
+            gd.items[i] = toy.item(i, name, sell=sell)
+        return gd
+
+    def plan(self, recipes, listings, mode, caps=None, stock=None, gd=None, reuse=None):
+        gd = gd or self.gamedata(recipes)
+        st = stock or toy.stock()
+        return plan(gd, Valuer(toy.market(listings), gd, st, mode=mode), st, toy.NO_FAVOR, caps=caps or {BS: 10},
+                    reuse=reuse)
+
+    def spells(self, p, prof=BS):
+        return {s.spell_id for s in p.steps if s.profession == prof}
+
+    def test_vendor_cashback_wins(self):
+        # same chance; A's reagents cost 10s less but its craft vendors for nothing, B's vendors for 20s
+        rs = [toy.recipe(41, "A cheap", BS, {toy.COPPER_BAR: 1}, (self.SCRAP, 1)),
+              toy.recipe(42, "B cashback", BS, {toy.IRON_BAR: 1}, (self.PLATE, 1))]
+        listings = {toy.COPPER_BAR: [(1000, 100000)], toy.IRON_BAR: [(2000, 100000)]}
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.spells(self.plan(rs, listings, mode)), {42})
+
+    def test_cashback_floor(self):
+        # A: orange, 10c of reagents, vendors 10c back (net 0). B: a 1-in-5 chance, 20c of reagents a point, vendors
+        # 150c back: without the floor it would earn 1.3s a point by crafting more. Floored, both cost 0 and A has the
+        # higher chance (B has the lower spell id, so the chance decides the tie).
+        rs = [toy.recipe(51, "B many", BS, {toy.IRON_BAR: 1}, (self.PIN, 1), t=(1, 6, 8, 11)),
+              toy.recipe(52, "A once", BS, {toy.COPPER_BAR: 1}, (self.BOLT, 1))]
+        listings = {toy.COPPER_BAR: [(10, 100000)], toy.IRON_BAR: [(4, 100000)]}
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                p = self.plan(rs, listings, mode, caps={BS: 11}, stock=toy.stock(skills={BS: 10}))
+                self.assertEqual(self.spells(p), {52})
+
+    def test_held_green_no_gold_credit(self):
+        # the belt is held for this route's disenchanting: its 1s vendor price earns no gold
+        rs = [toy.recipe(1, "BS belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),
+              toy.recipe(3, "BS iron", BS, {toy.IRON_BAR: 1}),
+              toy.recipe(2, "Ench basic", ENCH, {toy.ROD: 1})]
+        listings = {toy.COPPER_BAR: [(100, 100000)], toy.IRON_BAR: [(50, 100000)]}
+        caps = {BS: 10, ENCH: 10}
+        held = self.plan(rs, {**listings, toy.IRON_BAR: [(150, 100000)]}, "gold", caps=caps)
+        self.assertTrue(any("disenchant" in e and "Runed Copper Belt" in e for e in held.events))  # the fixture holds it
+        self.assertEqual(self.spells(self.plan(rs, listings, "gold", caps=caps)), {3})
+
+    def test_keep_greens_held_in_both_modes(self):
+        # keep_greens, no Enchanting planned: the belt (1s at a vendor) is kept, worth its dust in value mode only
+        import dataclasses
+        rs = [toy.recipe(1, "BS belt", BS, {toy.COPPER_BAR: 1}, (toy.BELT, 1)),
+              toy.recipe(3, "BS iron", BS, {toy.IRON_BAR: 1})]
+        listings = {toy.COPPER_BAR: [(100, 100000)], toy.IRON_BAR: [(95, 100000)], toy.DUST: [(5000, 100000)]}
+        st = dataclasses.replace(toy.stock(), keep_greens=True)
+        self.assertEqual(self.spells(self.plan(rs, listings, "gold", stock=st)), {3})
+        value = self.plan(rs, listings, "value", stock=st)
+        self.assertEqual(self.spells(value), {1})
+        self.assertIn(toy.BELT, value.kept_greens)
+
+    def test_reuse_not_credited_twice(self):
+        # A's bolt is reused (worth 50c) by later steps for 10 bolts; a reused bolt isn't also sold (40c)
+        rs = [toy.recipe(61, "A bolt", BS, {toy.COPPER_BAR: 1}, (self.BOLT, 1)),
+              toy.recipe(62, "B plain", BS, {toy.IRON_BAR: 1})]
+        gd = self.gamedata(rs)
+        gd.items[self.BOLT] = toy.item(self.BOLT, "Test Bolt", sell=40)
+        listings = {toy.COPPER_BAR: [(100, 100000)], toy.IRON_BAR: [(30, 100000)]}
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                p = self.plan(rs, listings, mode, caps={BS: 20}, gd=gd, reuse={self.BOLT: (10, 50)})
+                self.assertEqual(self.spells(p), {62})
+
+    def test_vendor_zero_or_unknown_item(self):
+        # RF3: a craft vendoring for 0 and one whose item the game data lacks get no credit and don't crash; a craft
+        # with a vendor price does get it
+        rs = [toy.recipe(71, "A unknown", BS, {toy.COPPER_BAR: 1}, (self.MISSING, 1)),
+              toy.recipe(72, "B nothing", BS, {toy.DUST: 1}, (self.SCRAP, 1)),
+              toy.recipe(73, "C vendors", BS, {toy.IRON_BAR: 1}, (self.PLATE, 1))]
+        listings = {toy.COPPER_BAR: [(1000, 100000)], toy.DUST: [(1001, 100000)], toy.IRON_BAR: [(2500, 100000)]}
+        for mode in ("gold", "value"):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.spells(self.plan(rs, listings, mode)), {73})
+                p = self.plan(rs[:2], listings, mode)  # neither is credited: the cheaper reagents win
+                self.assertEqual(self.spells(p), {71})
+                self.assertIn(self.MISSING, p.leftovers)

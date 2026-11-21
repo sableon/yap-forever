@@ -416,6 +416,20 @@ class _Route:
         # Disenchanting is the only source of an Enchanting reagent missing from the AH.
         return any(m in self.ench_reagents and self.valuer.market.depth(m) == 0 for m in de_yield(info))
 
+    def _output_fate(self, item, n, opts, hold=None, reuse_left=0.0):
+        """How n units of a craft's output count, each once: (reused by later steps, up to reuse_left; kept: held for
+        this route's disenchanting, a keep_greens green with no Enchanting planned, or a disenchant material, which
+        counts at its worth; sold, to a vendor or on the AH). hold: whether the route holds the item for
+        disenchanting, decided by _should_hold when not given (_finish knows it from what was held)."""
+        reused = min(n, max(0.0, reuse_left))
+        rest = n - reused
+        if hold is None:
+            hold = self._should_hold(item, opts)
+        keep_green = getattr(self.stock, "keep_greens", False) and not self.has_ench and opts.get("de")
+        if hold or keep_green or item in self.p.de_materials:
+            return reused, rest, 0.0
+        return reused, 0.0, rest
+
     def _learn_now(self, r, lo, s, name):
         learn_cost, favor_cost, scroll_kind, _reqs = lo
         self.learned.add(r.spell_id)
@@ -575,27 +589,30 @@ class _Route:
                 self.skipped[r.spell_id] = (f"unpriceable: {self.gd.name(bad)}" if bad is not None
                                             else "not enough materials for tool and reagents")
                 continue
-            # Only outputs the route reuses (disenchanted for Enchanting) lower the score. Resale is
-            # counted in the totals but must not pull in extra, lower-chance crafts.
-            out_val = reuse_val = 0
+            # Each output unit is credited once (_output_fate): reused at what it would cost, kept at its disenchant
+            # value (no gold), sold at its vendor price. AH resale never counts. The vendor credit never takes the
+            # craft below zero cost: the route levels, it doesn't farm vendor gold.
+            reuse_val = held_val = sold_val = 0
             if r.output:
-                de = (self.valuer.output_options(r.output[0], self.produced.get(r.output[0], 0)).get("de", 0)
-                      if self._de_within_target(r.output[0]) else 0)
-                out_val = de * r.output[1] * crafts
-                # A reagent later steps consume is worth what it would cost, up to the count they need.
-                if r.output[0] in self.reuse:
-                    need, unit = self.reuse[r.output[0]]
-                    left = max(0.0, need - self.produced.get(r.output[0], 0))
-                    reuse_val = unit * min(r.output[1] * crafts, left)
-                    out_val += reuse_val
+                item, n = r.output[0], r.output[1] * crafts
+                opts = self.valuer.output_options(item, self.produced.get(item, 0))
+                # a reagent later steps consume is worth what it would cost, up to the count they need
+                need, unit = self.reuse.get(item, (0.0, 0.0))
+                reused, held, sold = self._output_fate(item, n, opts,
+                                                       reuse_left=need - self.produced.get(item, 0))
+                reuse_val = unit * reused
+                held_val = held * opts.get("de", 0)
+                sold_val = sold * self.valuer.vendor_price(item)
             one_time = lo[0].economic + sum(t["cost"].economic for t in tools)
-            score = c.score - out_val + one_time / usable
+            base = c.score + one_time / usable
+            score = base - reuse_val - held_val - min(sold_val, max(0.0, base))
             if self.valuer.mode == "gold":  # gold spent first; among equal gold, the lower total value
                 one_cash = lo[0].cash + sum(t["cost"].cash for t in tools)
                 spread = 1 if self.one_time_in_full else usable
-                key = (round(c.cash + one_cash / spread - reuse_val, 2), score, r.spell_id)
+                cash = c.cash + one_cash / spread
+                key = (round(cash - reuse_val - min(sold_val, max(0.0, cash)), 2), score, crafts, r.spell_id)
             else:
-                key = (score, r.spell_id)
+                key = (score, crafts, r.spell_id)
             if best is None or key < best[0]:
                 best = (key, r, crafts, lo, tools, requests)
         return best
