@@ -466,10 +466,14 @@ class BringListTests(unittest.TestCase):
     def test_one_go_folds_pattern_trips_inside_the_stretch(self):
         # the vendor (or Favor) pattern learned at 235 is on the trip's bring list: no trip of its own while you are away
         from yap_forever.guide import render_guide
-        from yap_forever.trips import trips
+        from yap_forever.shopping import bring_list
+        from yap_forever.trips import stretch_end, trips
         start = {ENCH: 225}
         for how in ("vendor", "favor"):
             p, gd = self.pattern_plan(how)
+            # the fold reads the stretch to stretch_end, the bring list to its reach: the same skill in one go
+            self.assertEqual(bring_list(p, gd, self.ench_trip(), None, trainer_trips="one_go")[0],
+                             stretch_end(p, ENCH, 225))
             self.assertEqual([t.kind for t in trips(p, gd, start)], ["rank", how], how)  # as needed: as before
             self.assertEqual([t.kind for t in trips(p, gd, start, "one_go")], ["rank"], how)
             text = render_guide(p, gd, toy.market({T: [(10, 1000)]}), toy.stock(skills=start), {ENCH: 245},
