@@ -4,7 +4,7 @@ import unittest
 
 from tests import toy
 from yap_forever.gamedata import PROFESSIONS
-from yap_forever.guide import render_guide, source_group
+from yap_forever.guide import gold, render_guide, source_group
 from yap_forever.trainer_text import TrainerInfo
 from tests.test_planner import BARS, base_recipes, run
 
@@ -99,6 +99,14 @@ class GoldTests(unittest.TestCase):
         from yap_forever.guide import gold
         self.assertEqual(gold(250), "2s")
         self.assertEqual(gold(42), "42c")
+
+    def test_negative_amounts(self):
+        # #97: a route whose crafts sell back to vendors for more than it spends has a total value below zero
+        from yap_forever.guide import gold
+        self.assertEqual(gold(-4321), "-43s")
+        self.assertEqual(gold(-54321), "-5.4g")
+        self.assertEqual(gold(-1234567), "-123g")
+        self.assertEqual(gold(-42), "-42c")
 
 
 class SourceGroupTests(unittest.TestCase):
@@ -1498,3 +1506,17 @@ class SellClauseGuideTests(unittest.TestCase):
         self.assertIn(" → sell to a vendor", self.line(dead, quest=True))
         self.assertIn(" → sell up to 5 on the AH (about 1.3g each), the rest to a vendor",
                       self.line(dead, ah_premium=1.25))  # the setting moves the line
+
+    def test_net_counts_vendor_sales_only(self):
+        # #97 (C39): the Money section's Net counts crafts sold at their vendor price; "Back from selling crafts" is
+        # every sale, AH included
+        from yap_forever.costmodel import Valuer
+        from yap_forever.planner import plan
+        gd = toy.gamedata([toy.recipe(1, "BS gear", 164, {toy.COPPER_BAR: 1}, (self.GEAR, 1))])
+        gd.items[self.GEAR] = toy.item(self.GEAR, "Test Gear", sell=10000)
+        st, m = toy.stock(), toy.market({**BARS, self.GEAR: [(115790, 1)]})
+        p = plan(gd, Valuer(m, gd, st), st, toy.NO_FAVOR, caps={164: 20})
+        text = render_guide(p, gd, m, st, {164: 20})
+        self.assertIn(f"- **Back from selling crafts:** about {gold(p.sale_proceeds)}.", text)
+        self.assertIn(f"- **Net:** about {gold(abs(p.economic_total))} profit (crafts sold at their vendor price), "
+                      "counting your bank and mined bars at what they would sell for.", text)

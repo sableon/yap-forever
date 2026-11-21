@@ -75,8 +75,19 @@ class Plan:
     crafted: dict[int, float] = field(default_factory=dict)  # intermediates crafted for reagents
     cash_total: float = 0
     economic_total: float = 0
-    sale_proceeds: float = 0
+    sale_proceeds: float = 0  # what the leftovers sold bring: on the AH up to the sale limit, the rest to a vendor
     leftover_value: float = 0
+    vendor_back: float = 0  # the leftovers sold, every one at its vendor price, whatever the AH pays (#97)
+
+    @property
+    def ah_extra(self) -> float:
+        """What AH sales of the crafts bring on top of their vendor price: never counted in choosing the route."""
+        return self.sale_proceeds - self.vendor_back
+
+    @property
+    def net_gold(self) -> float:
+        """Gold out of pocket less what vendors pay back for the crafts: the least-gold measure."""
+        return self.cash_total - self.vendor_back
 
     def sold(self, item: int) -> bool:
         """A leftover the route sells: not held for disenchanting, not a green kept for another character's
@@ -92,10 +103,11 @@ def reached_lines(plan) -> list[str]:
 
 
 def measure(mode: str):
-    """The measure a route of `mode` is chosen and compared by, as a function of a Plan: gold out of pocket for
-    "gold", total value for "value". Settling the routes, the skip alternatives, free skips and the listed saving
-    all use it."""
-    return (lambda p: p.cash_total) if mode == "gold" else (lambda p: p.economic_total)
+    """The measure a route of `mode` is chosen and compared by, as a function of a Plan: for "gold" the gold out of
+    pocket less what vendors pay back for the crafts (Plan.net_gold), for "value" the total value (crafts sold at
+    their vendor price; AH resale never counts). Settling the routes, the skip alternatives, free skips and the
+    listed saving all use it."""
+    return (lambda p: p.net_gold) if mode == "gold" else (lambda p: p.economic_total)
 
 
 def resolve_goals(goals: dict, gd, favor=None, quests: dict | None = None) -> tuple[dict[int, int], dict[int, int]]:
@@ -416,6 +428,20 @@ class _Route:
         # Disenchanting is the only source of an Enchanting reagent missing from the AH.
         return any(m in self.ench_reagents and self.valuer.market.depth(m) == 0 for m in de_yield(info))
 
+    def _output_fate(self, item, n, opts, hold=None, reuse_left=0.0):
+        """How n units of a craft's output count, each once: (reused by later steps, up to reuse_left; kept: held for
+        this route's disenchanting, a keep_greens green with no Enchanting planned, or a disenchant material, which
+        counts at its worth; sold, to a vendor or on the AH). hold: whether the route holds the item for
+        disenchanting, decided by _should_hold when not given (_finish knows it from what was held)."""
+        reused = min(n, max(0.0, reuse_left))
+        rest = n - reused
+        if hold is None:
+            hold = self._should_hold(item, opts)
+        keep_green = getattr(self.stock, "keep_greens", False) and not self.has_ench and opts.get("de")
+        if hold or keep_green or item in self.p.de_materials:
+            return reused, rest, 0.0
+        return reused, 0.0, rest
+
     def _learn_now(self, r, lo, s, name):
         learn_cost, favor_cost, scroll_kind, _reqs = lo
         self.learned.add(r.spell_id)
@@ -543,7 +569,7 @@ class _Route:
     def _best_recipe(self, prof, s):
         """The recipe to craft at skill s: (sort key, recipe, crafts per point, learn option, tools to get,
         material requests), or None. Recipes that can't be used are noted in skipped."""
-        best = None
+        found = []  # (key, key without the vendor credit, the pick)
         for r in self.recipes.values():
             if r.skill_line != prof or r.required_skill > s or not self._may_use(r):
                 continue
@@ -575,30 +601,37 @@ class _Route:
                 self.skipped[r.spell_id] = (f"unpriceable: {self.gd.name(bad)}" if bad is not None
                                             else "not enough materials for tool and reagents")
                 continue
-            # Only outputs the route reuses (disenchanted for Enchanting) lower the score. Resale is
-            # counted in the totals but must not pull in extra, lower-chance crafts.
-            out_val = reuse_val = 0
+            # Each output unit is credited once (_output_fate): reused at what it would cost, kept at its disenchant
+            # value (no gold), sold at its vendor price. AH resale never counts. The vendor credit never takes the
+            # craft below zero cost by itself (reuse and disenchant credits are as before) and never pulls in a
+            # lower-chance craft (_pick): the route levels, it doesn't farm vendor gold.
+            reuse_val = held_val = sold_val = 0
             if r.output:
-                de = (self.valuer.output_options(r.output[0], self.produced.get(r.output[0], 0)).get("de", 0)
-                      if self._de_within_target(r.output[0]) else 0)
-                out_val = de * r.output[1] * crafts
-                # A reagent later steps consume is worth what it would cost, up to the count they need.
-                if r.output[0] in self.reuse:
-                    need, unit = self.reuse[r.output[0]]
-                    left = max(0.0, need - self.produced.get(r.output[0], 0))
-                    reuse_val = unit * min(r.output[1] * crafts, left)
-                    out_val += reuse_val
+                item, n = r.output[0], r.output[1] * crafts
+                opts = self.valuer.output_options(item, self.produced.get(item, 0))
+                # a reagent later steps consume is worth what it would cost, up to the count they need
+                need, unit = self.reuse.get(item, (0.0, 0.0))
+                reused, held, sold = self._output_fate(item, n, opts,
+                                                       reuse_left=need - self.produced.get(item, 0))
+                reuse_val = unit * reused
+                held_val = held * opts.get("de", 0)
+                sold_val = sold * self.valuer.vendor_price(item)
             one_time = lo[0].economic + sum(t["cost"].economic for t in tools)
-            score = c.score - out_val + one_time / usable
-            if self.valuer.mode == "gold":  # gold spent first; among equal gold, the lower total value
+            base = c.score + one_time / usable
+            plain = base - reuse_val - held_val  # the score without the vendor credit
+            # the vendor credit is at most what is left of the craft's cost after the reuse and disenchant credits
+            score = plain - min(sold_val, max(0.0, plain))
+            if self.valuer.mode == "gold":  # gold spent first; at equal gold the higher chance, then the lower value
                 one_cash = lo[0].cash + sum(t["cost"].cash for t in tools)
                 spread = 1 if self.one_time_in_full else usable
-                key = (round(c.cash + one_cash / spread - reuse_val, 2), score, r.spell_id)
+                cash = c.cash + one_cash / spread
+                plain_gold = cash - reuse_val
+                key = (round(plain_gold - min(sold_val, max(0.0, plain_gold)), 2), crafts, score, r.spell_id)
+                plain_key = (round(plain_gold, 2), crafts, plain, r.spell_id)
             else:
-                key = (score, r.spell_id)
-            if best is None or key < best[0]:
-                best = (key, r, crafts, lo, tools, requests)
-        return best
+                key, plain_key = (score, crafts, r.spell_id), (plain, crafts, r.spell_id)
+            found.append((key, plain_key, (key, r, crafts, lo, tools, requests)))
+        return _pick(found)
 
     def _commit(self, prof, s, name, best):
         """Learn, get the tools and take the materials for the best recipe's crafts at skill s.
@@ -686,7 +719,6 @@ class _Route:
         p.shared = {name: dict(items) for name, items in self.stock.shared.items()}
         p.used_mail = mail_used(p.shared, self.pools.mail)
         de_mats = set(p.de_materials)
-        keep_greens = getattr(self.stock, "keep_greens", False) and not self.has_ench
         for item, n in list(self.pools.made.items()) + list(self.held.items()):
             if n < 1e-9:
                 continue
@@ -695,14 +727,29 @@ class _Route:
                 continue  # kept for disenchanting, not sold
             if item in de_mats:
                 p.leftover_value += n * self.valuer.owned_value(item)
-            elif keep_greens and (de := self.valuer.output_options(item, 0).get("de")):
-                p.kept_greens[item] = n  # for another character's Enchanting: worth its materials
-                p.leftover_value += n * de
-            else:
-                p.sale_proceeds += sale_value(self.valuer, self.gd, item, n)
+                continue
+            opts = self.valuer.output_options(item, 0)
+            _reused, kept, sold = self._output_fate(item, n, opts, hold=False)  # as the score counts them
+            if kept:
+                p.kept_greens[item] = kept  # for another character's Enchanting: worth its materials
+                p.leftover_value += kept * opts["de"]
+            if sold:
+                p.sale_proceeds += sale_value(self.valuer, self.gd, item, sold)
+                p.vendor_back += sold * self.valuer.vendor_price(item)
         p.cash_total = self.spent.cash
-        p.economic_total = self.spent.economic - p.sale_proceeds - p.leftover_value
+        # crafts sold count at their vendor price only: what the AH pays on top never chooses the route
+        p.economic_total = self.spent.economic - p.vendor_back - p.leftover_value
         return p
+
+
+def _pick(found):
+    """The best of _best_recipe's candidates, (key, key without the vendor credit, pick), or None: the lowest key among
+    those whose skill-up chance is not lower than that of the best pick without the vendor credit. Vendor money may
+    change which craft levels a point, but never pulls in one that needs more crafts for it (#97)."""
+    if not found:
+        return None
+    crafts = min(found, key=lambda f: f[1])[2][2]
+    return min((f for f in found if f[2][2] <= crafts + 1e-9), key=lambda f: f[0])[2]
 
 
 def _snapshot(pools) -> dict:

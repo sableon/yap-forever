@@ -421,6 +421,21 @@ class FreeSkipTests(unittest.TestCase):
         self.assertIs(got, without[frozenset({3})])
         self.assertEqual([t.spells for t in left], [(3,)])
 
+    def test_skip_measured_in_net_gold(self):
+        # #97: the route without the trip spends 3c more but a vendor pays 3c more back for its crafts: the same net
+        # gold, so the skip is free; and its alternative is priced in net gold
+        from unittest import mock
+        from yap_forever.trips import trip_alternatives
+        base, inputs, alt = self.mocked(1003)
+        alt.vendor_back = 3
+        self.assertEqual(alt.net_gold, base.net_gold)
+        route, left = self.take(base, inputs, alt)
+        self.assertIs(route, alt)
+        self.assertEqual([t.spells for t in left], [(3,)])
+        alt.vendor_back = 1
+        with mock.patch("yap_forever.plan.plan_route", return_value=alt):
+            self.assertEqual(set(trip_alternatives(base, inputs, "gold").values()), {2})
+
 
 ALCH, ENG = 171, 202
 DARNASSUS, IRONFORGE = 1657, 1537

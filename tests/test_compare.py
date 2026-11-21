@@ -141,6 +141,28 @@ class SettleRoutesTests(unittest.TestCase):
         routes, _ = settle_routes([a, b], {BS: 20})
         self.assertEqual(routes["gold"], b)
 
+    def test_settle_by_net_gold(self):
+        # #97: least gold is the gold out of pocket less what vendors pay back for the crafts
+        from yap_forever.compare import settle_routes
+        a = Plan(cash_total=100000, economic_total=90000, final_skill={BS: 20})
+        b = Plan(cash_total=110000, vendor_back=30000, economic_total=95000, final_skill={BS: 20})
+        routes, same = settle_routes([a, b], {BS: 20})
+        self.assertEqual((routes["gold"], routes["value"], same), (b, a, False))
+        self.assertEqual(b.net_gold, 80000)
+
+    def test_table_says_what_least_gold_counts(self):
+        # #97 (C39): the least-gold column can show more gold out of pocket than the other one; the note says why
+        from yap_forever.compare import compare
+        note = ("Least gold is the gold out of pocket less what vendors pay back for the crafts. AH sales of crafts are "
+                "not counted in choosing a route.")
+        a = Plan(cash_total=110000, vendor_back=30000, economic_total=95000, final_skill={BS: 20})
+        b = Plan(cash_total=100000, economic_total=90000, final_skill={BS: 20})
+        for routes, same in (({"gold": a, "value": b}, False), ({"gold": b, "value": b}, True)):
+            text = compare(routes, toy.gamedata([]), toy.market(), toy.stock(), same=same)
+            table_end = text.index("| Thin markets")
+            self.assertIn("\n\n" + note, text[table_end:])
+            self.assertEqual(text.count(note), 1)
+
 
 class OneTimeInFullTests(unittest.TestCase):
     def test_gold_variant_charges_patterns_in_full(self):
