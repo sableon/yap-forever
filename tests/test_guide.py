@@ -1311,3 +1311,67 @@ class CapitalGuideTests(unittest.TestCase):
         self.assertIn("- At 130, in Darnassus: train Alchemy to 225 at Lira Moonleaf.", text)
         self.assertNotIn("**Trip:** Alchemy", text)
         self.assertNotIn("This route's", text)
+
+
+class JoinedStopGuideTests(unittest.TestCase):
+    """#98: capital stops of the two professions close together on the route are one row in the first one's block
+    (trips.join_stops), and the joined recipes' rows point at it."""
+
+    def render(self, home=IRONFORGE, notes=None, reagent=None, items=None, bag_slots=None, later=()):
+        """Alchemy and Engineering 80–110 side by side, one point a step (Alchemy first at each skill), no buffer:
+        a basic recipe to 91, then Alchemy crafts Alch draught (learned at 91 with Alch wisdom) and Engineering Eng
+        contact (learned at 91, needs 85) to 110, one `reagent` each (default: Iron Bar, bought on the AH).
+        later: (profession, skill, spell) of further trainer recipes, learned and crafted from that skill on."""
+        from yap_forever.planner import Plan, Step
+        reagent = reagent or toy.IRON_BAR
+        rs = [toy.recipe(61, "Alch basic", ALCH, {reagent: 1}), toy.recipe(62, "Eng basic", ENG, {reagent: 1}),
+              toy.recipe(71, "Alch draught", ALCH, {reagent: 1}, req=91, fee=405),
+              toy.recipe(72, "Alch wisdom", ALCH, {reagent: 1}, req=91, fee=450),
+              toy.recipe(73, "Alch later", ALCH, {reagent: 1}, req=100, fee=500),
+              toy.recipe(81, "Eng contact", ENG, {reagent: 1}, req=85, fee=270),
+              toy.recipe(82, "Eng late", ENG, {reagent: 1}, req=105, fee=300)]
+        names = {r.spell_id: r.name for r in rs}
+        learns = [(ALCH, 91, 71), (ALCH, 91, 72), (ENG, 91, 81), *later]
+
+        def spell(prof, s):
+            return max(((at, sp) for q, at, sp in learns if q == prof and at <= s and sp != 72),
+                       default=(0, 61 if prof == ALCH else 62))[1]
+        steps = [Step(prof, s, s + 1, spell(prof, s), names[spell(prof, s)], 1, 0, 0, {reagent: 1}, buffered=1)
+                 for s in range(80, 110) for prof in (ALCH, ENG)]
+        p = Plan(steps=steps, bought={toy.IRON_BAR: 60}, learn_log=[(q, s, sp, "trainer") for q, s, sp in learns],
+                 events=[f"{PROFESSIONS[q]} {s}: Learn {names[sp]} (trainer 1s)" for q, s, sp in learns],
+                 final_skill={ALCH: 110, ENG: 110})
+        gd = toy.gamedata(rs)
+        gd.items[toy.ROD] = dataclasses.replace(gd.items[toy.ROD], stack=20)
+        gd.trainer_ranks.update({ENG: gd.trainer_ranks[BS], ALCH: gd.trainer_ranks[BS]})
+        info = CapitalGuideTests().info(notes=notes)
+        stock = toy.stock(items=items, skills={ALCH: 80, ENG: 80})
+        stock.bag_slots = bag_slots
+        return render_guide(p, gd, toy.market(BARS), stock, caps={ALCH: 110, ENG: 110}, trainer_info=info,
+                            capitals={}, home=home)
+
+    def test_joined_row(self):
+        text = self.render()
+        self.assertEqual([line for line in text.splitlines()
+                          if "learn" in line and line.startswith("- ") and not line.startswith("- *At")],
+                         ["- **Capital stop** at Alchemy 91 (in Ironforge): learn Alch draught (4s 5c), Alch wisdom "
+                          "(4s 50c) at an Expert Alchemist, and Eng contact (2s 70c) at an Expert Engineer (you use it "
+                          "from Engineering 91)."])
+        self.assertIn("**Alchemy 80–110**\n\n- **80–91** · 11× Alch basic — 11 Iron Bar\n- **Capital stop** at Alchemy 91",
+                      text)  # in A's block, at A's skill
+        self.assertIn("- *At 91: start crafting Eng contact (learned at the capital stop at Alchemy 91)*", text)
+        self.assertIn("- *At 91: start crafting Alch draught (learned at the Expert Alchemist)*", text)
+
+    def test_join_in_any_capital_without_a_home(self):  # C27: say which city
+        text = self.render(home=None)  # Ironforge is the first capital with an Expert Alchemist and Engineer
+        self.assertIn("- **Capital stop** at Alchemy 91 (any capital, for example Ironforge): learn Alch draught", text)
+        self.assertNotIn("Eng contact (2s 70c) at any", text)
+
+    def test_different_parts_said_once(self):
+        from yap_forever.trainer_notes import Notes
+        apart = "In Ironforge, the Alchemy and Engineering trainers are in different parts of the city."
+        text = self.render(notes=Notes({}, {}, {IRONFORGE: (frozenset({ALCH}), frozenset({ENG}))}),
+                           later=[(ENG, 105, 82)])
+        self.assertEqual(text.count(apart), 1)
+        self.assertIn("(you use it from Engineering 91). " + apart, text)
+        self.assertIn("- At 105, learn Eng late (3s 0c) at any Expert Engineer in Ironforge.\n", text)  # alone: as before

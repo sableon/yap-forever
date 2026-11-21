@@ -221,9 +221,9 @@ def stage_capitals(info: TrainerInfo | None) -> dict[tuple[int, int], int]:
 
 
 def has_trainer(info: TrainerInfo | None, zone: int, profession: int, cap: int) -> bool:
-    """Whether a trainer of `cap`'s rank for `profession` stands in `zone`, for the faction (the trainers city_row
-    counts as a capital's); False without trainer data or a faction."""
-    if not _usable(info, cap):
+    """Whether a trainer of `cap`'s rank for `profession` stands in `zone`, one of the faction's capitals (the trainers
+    city_row counts as a capital's); False without trainer data or a faction, and for any other zone."""
+    if not _usable(info, cap) or zone not in CAPITALS[info.faction]:
         return False
     return any(t.zone == zone for t in trainers.trainers_for(info.data.trainers, profession, RANK_BY_CAP[cap],
                                                              info.faction))
@@ -275,11 +275,18 @@ def home_row(info: TrainerInfo, profession: int, cap: int, zone: int, lead: str,
             if t.zone == zone]
     flag = "" if any(t.title_confirmed for t in here) else UNCONFIRMED
     text = f"{lead} at any {RANK_BY_CAP[cap]} {person(profession)} in {city_name(info, zone)}{flag}."
+    apart = apart_once(info, zone, planned, said)
+    return f"{text} {apart}" if apart else text
+
+
+def apart_once(info: TrainerInfo | None, zone: int, planned: tuple[int, ...] = (), said: set[int] | None = None) -> str:
+    """The city's "different parts" sentence (see city_row) when no earlier row said it (`said`, a set the caller keeps;
+    the zone is added when this one says it); "" otherwise, and without the trainer data's notes."""
     said = set() if said is None else said
-    apart = _apart(info, zone, planned) if zone not in said else ""
+    apart = _apart(info, zone, planned) if info and info.data and zone not in said else ""
     if apart:
         said.add(zone)
-    return f"{text} {apart}" if apart else text
+    return apart
 
 
 def person(profession: int) -> str:
