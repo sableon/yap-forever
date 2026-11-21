@@ -10,15 +10,15 @@ from yap_forever.compare import ROUTE_NAMES, compare, reaches, settle_routes
 from yap_forever.config import Stock, load_stock
 from yap_forever.costmodel import Valuer
 from yap_forever.favor import FavorData, load_favor, no_favor
-from yap_forever.guide import gold, render_guide
-from yap_forever.planner import DISENCHANT, plan, resolve_goals
+from yap_forever.guide import free_skip_line, gold, render_guide
+from yap_forever.planner import DISENCHANT, measure, plan, resolve_goals
 from yap_forever.prices import Market
 from yap_forever.profile import report_name
 from yap_forever.quests import QuestPlan, load_quest_plans
 from yap_forever.report import render, verdict
 from yap_forever.settings import Paths
 from yap_forever.shopping import gold_to_bring, render_shopping
-from yap_forever.trips import trip_alternatives
+from yap_forever.trips import AS_NEEDED, FREE_SKIP, MAX_TRIP_ALTS, Trip, alternatives, trip_alternatives, visit_count
 
 REUSE_ROUNDS = 4
 MIN_SAVING = 100  # copper: below 1 silver the gap is noise from the greedy planner, not a saving to name
@@ -108,10 +108,64 @@ def listed_savings(inputs: PlanInputs, routes) -> dict[str, float]:
     listed, _ = settle_routes(candidates(dataclasses.replace(inputs, gd=gamedata.listed_requirements(gd))), caps)
     out = {}
     for mode, safe in routes.items():
-        better, measure = listed[mode], ("cash_total" if mode == "gold" else "economic_total")
-        saving = getattr(safe, measure) - getattr(better, measure)
-        if saving >= MIN_SAVING and (reaches(better, caps) or not reaches(safe, caps)):
+        cost = measure(mode)
+        saving = cost(safe) - cost(listed[mode])
+        if saving >= MIN_SAVING and (reaches(listed[mode], caps) or not reaches(safe, caps)):
             out[mode] = saving
+    return out
+
+
+def take_free_skips(route, inputs: PlanInputs, mode, cache: dict, trainer_trips: str = AS_NEEDED, fits=None,
+                    excluded: frozenset[int] = frozenset(), also: tuple[str, ...] = ()) -> tuple:
+    """(the route planned without the trips that cost nothing to skip, those trips in the order left out).
+
+    Round by round, at most MAX_TRIP_ALTS rounds, among the trips trip_alternatives measures, a trip is left out
+    when the route without it:
+    - costs at most FREE_SKIP more (or less) than the round's route and than `route` as given (the route as first
+      settled, so the rounds together stay within FREE_SKIP), in the route's measure and in that of each mode in
+      `also` (the other mode of a route the gold and value guides share);
+    - reaches every profession's final skill;
+    - makes fewer trainer visits and pattern trips than the round's route (trips.visit_count);
+    - and, when fits is given (a budget: its gold to bring within the budget), fits.
+    The cheapest such route is taken (on a tie the first in trip_alternatives' order: pattern trips, then recipe
+    trips, each costliest first), and the next round plans without its recipes too. The goal recipe is never left
+    out. cache, trainer_trips: as for trip_alternatives; excluded: recipes `route` was planned without."""
+    left: list[Trip] = []
+    excluded = frozenset(excluded)
+    gd, start = inputs.gd, inputs.stock.skills
+    original = route
+    costs = [measure(m) for m in (mode, *also)]
+
+    def free(alt, now):  # within FREE_SKIP of the original and of the round's route, in every measure
+        return all(c(alt) - c(base) <= FREE_SKIP for c in costs for base in (original, now))
+    for _ in range(MAX_TRIP_ALTS):
+        visits_now = visit_count(route, gd, start, trainer_trips)
+        found = [(costs[0](alt), t, alt) for t, alt, diff in alternatives(route, inputs, mode, cache, trainer_trips,
+                                                                         excluded)
+                 if diff is not None and free(alt, route) and visit_count(alt, gd, start, trainer_trips) < visits_now
+                 and (fits is None or fits(alt))]
+        if not found:
+            break
+        _cost, t, route = min(found, key=lambda x: x[0])
+        excluded |= t.recipes
+        left.append(t)
+    return route, left
+
+
+def _free_skips(routes: dict, per_mode: dict, cache: dict, trainer_trips: str, limit: int | None,
+                gold_of) -> dict[str, tuple]:
+    """mode -> take_free_skips of its route (with a budget, a route-without must bring at most `limit` copper,
+    by gold_of). Gold and value on one route to the same caps are adopted once, free in both measures, so they stay
+    one route."""
+    shared = routes["gold"] is routes["value"] and per_mode["gold"].caps == per_mode["value"].caps
+    out: dict[str, tuple] = {}
+    for m, route in routes.items():
+        if m == "value" and shared:
+            out[m] = out["gold"]
+            continue
+        fits = None if limit is None else (lambda p: gold_of(p) <= limit)
+        out[m] = take_free_skips(route, per_mode[m], m, cache, trainer_trips=trainer_trips, fits=fits,
+                                 also=("value",) if shared else ())
     return out
 
 
@@ -168,13 +222,26 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
     routes, same = settle_routes(candidates(inputs), caps)
     per_mode = {m: inputs for m in routes}  # each route's own targets: a budget cuts each at its own stops
     cuts: dict[str, budget_cut.BudgetCut] = {}
+
+    def gold_of(p):
+        return gold_to_bring(p, gd, market, stock)
     if target is not None:
         cache = {budget_cut.key(caps): (routes, same)}
-        cuts = {m: budget_cut.cut(inputs, m, target, lambda p: gold_to_bring(p, gd, market, stock), cache)
-                for m in routes}
+        cuts = {m: budget_cut.cut(inputs, m, target, gold_of, cache) for m in routes}
         routes = {m: c.plan for m, c in cuts.items()}
-        same = routes["gold"] is routes["value"]
         per_mode = {m: dataclasses.replace(inputs, caps=c.planned_caps) for m, c in cuts.items()}
+    trainer_trips = character.trainer_trips if character else "as_needed"
+    alt_cache: dict = {}
+    left_out = _free_skips(routes, per_mode, alt_cache, trainer_trips,
+                           None if target is None else budget_cut.copper(target), gold_of)
+    adopted: dict[int, object] = {}  # id of a route taken -> the plan its cut holds (one for a route both share)
+    for m, (route, _left) in left_out.items():
+        if m in cuts and route is not cuts[m].plan:
+            cuts[m] = budget_cut.adopt(cuts[m], adopted.get(id(route), route), gold_of(route))
+            adopted[id(route)] = cuts[m].plan
+            route = cuts[m].plan
+        routes[m] = route
+    same = routes["gold"] is routes["value"]
     trips = {m: render_shopping(r, gd, market, stock)[1] for m, r in routes.items()} if stock.bag_slots else None
     if cuts:  # once per set of caps the cuts landed on
         savings = {}
@@ -183,21 +250,22 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
             savings.update(listed_savings(per_mode[modes[0]], {m: routes[m] for m in modes}))
     else:
         savings = listed_savings(inputs, routes)
-    trainer_trips = character.trainer_trips if character else "as_needed"
     table = compare(routes, gd, market, stock, mailbox_trips=trips, same=same, trainer_trips=trainer_trips)
     today = date.today().isoformat()
     paths.reports.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
     who = f"{report_name(character.name, profile_names)}-" if character else ""
-    alt_cache: dict = {}
     alts_of: dict[str, dict] = {}
     for m, route in routes.items():
         caps = per_mode[m].caps
+        left = left_out[m][1]
         if m == "value" and route is routes.get("gold") and caps == per_mode["gold"].caps:
             alts = alts_of["gold"]  # the same route: its trips are skipped at the same cost
         else:
-            alts = trip_alternatives(route, per_mode[m], m, alt_cache, trainer_trips=trainer_trips)
+            alts = trip_alternatives(route, per_mode[m], m, alt_cache, trainer_trips=trainer_trips,
+                                     excluded=frozenset().union(*(t.recipes for t in left)))
         alts_of[m] = alts
+        skips = [free_skip_line(t, gd, trainer_info) for t in left]
         full = paths.reports / f"{today}-{who}plan-{m}.md"
         line = saving_line(savings[m]) if m in savings else ""
         said = budget_cut.lines(cuts[m], target) if m in cuts else dropped
@@ -205,7 +273,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
         full.write_text(render(route, verdict(route, stock), market, gd, stock, favor, caps,
                                character, reading, saving_line=line, budget=budget,
                                notes=group.notes() if group else (), budget_lines=said, goal=target,
-                               nothing_in_budget=empty),
+                               nothing_in_budget=empty, free_skips=skips),
                         encoding="utf-8")
         guide = paths.reports / f"{today}-{who}guide-{m}.md"
         guide.write_text(render_guide(route, gd, market, stock, caps, ROUTE_NAMES[m].lower(), table, alts,
@@ -214,7 +282,7 @@ def write_reports(paths: Paths, stock_path: Path, standing: str, goals: dict, ch
                                        saving_line=line, mode=m,
                                        study_hint_gold_per_point=study_hint_gold_per_point,
                                        budget_lines=said, order=inputs.order, nothing_in_budget=empty,
-                                       trainer_trips=trainer_trips,
+                                       trainer_trips=trainer_trips, free_skips=skips,
                                        extra_notes=[*(group.notes() if group else ()), *([favor.note] if favor.note else [])]),
                          encoding="utf-8")
         files[f"plan-{m}"], files[f"guide-{m}"] = full, guide

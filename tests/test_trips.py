@@ -230,5 +230,197 @@ class OneGoTests(unittest.TestCase):
         self.assertEqual(v.as_reached, [(1, 240)])
 
 
+def free_toy(late=((1, 240, (240, 300, 300, 300)),), fee=0):
+    """(PlanInputs, Blacksmithing 1-300) where the late recipes (spell, required skill, thresholds; iron) cost what
+    the copper recipe (spell 9) does: the planner takes the late ones on a tie (lower spell id), so each is a trip
+    back to the Master trainer whose route-without costs the same."""
+    from tests.test_budget import inputs
+    from yap_forever.gamedata import Rank
+    recipes = [toy.recipe(s, f"BS late {s}", BS, {toy.IRON_BAR: 1}, t=t, req=req, fee=fee) for s, req, t in late]
+    return inputs(recipes + [toy.recipe(9, "BS bar", BS, {toy.COPPER_BAR: 1})], {BS: 300},
+                  listings={toy.COPPER_BAR: [(100, 100000)], toy.IRON_BAR: [(100, 100000)]},
+                  ranks={BS: [Rank(300, 50000, 200, 35)]})
+
+
+def recipe_trips(route, i):
+    from yap_forever.trips import trips
+    return [(t.skill, t.spells) for t in trips(route, i.gd, i.stock.skills) if t.kind == "recipe"]
+
+
+class FreeSkipTests(unittest.TestCase):
+    """#90: a trip whose route-without costs at most FREE_SKIP more and makes fewer trainer visits and pattern trips
+    is left out of the route (plan.take_free_skips); its skip clause goes."""
+
+    def mocked(self, alt_cash, alt_learns=()):
+        """(base, inputs, the route without recipe 3) with plan_route to mock: the base learns recipe 3 (fee 1s) on a
+        trip back at 240; the route without it costs alt_cash (the base 1000) and learns alt_learns."""
+        from types import SimpleNamespace
+        gd = toy.gamedata([toy.recipe(3, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=100),
+                           toy.recipe(4, "BS pattern", BS, {toy.IRON_BAR: 1}, source="scroll", scroll=toy.SCROLL)])
+        gd.vendor_prices[toy.SCROLL] = 1000
+        base = Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300}, learn_log=[(BS, 240, 3, "trainer")],
+                    cash_total=1000, economic_total=1000)
+        alt = Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300}, learn_log=list(alt_learns),
+                   cash_total=alt_cash, economic_total=alt_cash)
+        return base, SimpleNamespace(gd=gd, stock=toy.stock(skills={BS: 225}), craft_once={}, caps={BS: 300}), alt
+
+    def take(self, base, inputs, alt=None, **kw):
+        from unittest import mock
+        from yap_forever.plan import take_free_skips
+        if alt is None:
+            return take_free_skips(base, inputs, "gold", {}, **kw)
+        with mock.patch("yap_forever.plan.plan_route", return_value=alt):
+            return take_free_skips(base, inputs, "gold", {}, **kw)
+
+    def test_visit_count(self):
+        from yap_forever.trips import visit_count
+        base, inputs = AlternativeCapTests().setup()
+        # the rank training, five trips back for recipes, the vendor and the Favor trip
+        self.assertEqual(visit_count(base, inputs.gd, inputs.stock.skills), 8)
+        # in one go the trips back are folded into the rank visit and the vendor pattern is on its bring list
+        self.assertEqual(visit_count(base, inputs.gd, inputs.stock.skills, "one_go"), 2)
+
+    def test_free_skip_adopted(self):
+        from yap_forever.plan import plan_route
+        i = free_toy()
+        base = plan_route(i, "gold")
+        self.assertEqual(recipe_trips(base, i), [(240, (1,))])
+        route, left = self.take(base, i)
+        self.assertEqual(recipe_trips(route, i), [])
+        self.assertEqual([(t.kind, t.skill, t.spells) for t in left], [("recipe", 240, (1,))])
+        self.assertEqual(route.cash_total, base.cash_total)
+        self.assertEqual(route.final_skill, base.final_skill)
+
+    def test_free_skip_at_the_limit(self):
+        from yap_forever.trips import FREE_SKIP
+        self.assertEqual(FREE_SKIP, 0.5)
+        base, inputs, alt = self.mocked(1000.5)
+        route, left = self.take(base, inputs, alt)
+        self.assertIs(route, alt)
+        self.assertEqual([t.spells for t in left], [(3,)])
+        base, inputs, alt = self.mocked(990)  # cheaper without it: taken too
+        self.assertIs(self.take(base, inputs, alt)[0], alt)
+
+    def test_dearer_skip_kept(self):
+        base, inputs, alt = self.mocked(1001)
+        route, left = self.take(base, inputs, alt)
+        self.assertIs(route, base)
+        self.assertEqual(left, [])
+
+    def test_alternative_with_as_many_visits_not_adopted(self):
+        # the route without the trip back buys a vendor pattern instead: one trip for another
+        base, inputs, alt = self.mocked(1000, alt_learns=[(BS, 240, 4, "vendor")])
+        route, left = self.take(base, inputs, alt)
+        self.assertIs(route, base)
+        self.assertEqual(left, [])
+
+    def test_two_free_skips_in_two_rounds(self):
+        from unittest import mock
+        from yap_forever import plan as plan_mod
+        from yap_forever.plan import plan_route
+        i = free_toy(late=((1, 240, (240, 260, 260, 260)), (3, 260, (260, 300, 300, 300))))
+        base = plan_route(i, "gold")
+        self.assertEqual(recipe_trips(base, i), [(240, (1,)), (260, (3,))])
+        with mock.patch.object(plan_mod, "plan_route", wraps=plan_mod.plan_route) as replan:
+            route, left = self.take(base, i)
+        self.assertEqual(recipe_trips(route, i), [])
+        self.assertEqual([t.spells for t in left], [(1,), (3,)])  # equal fees: the first in skill order, then the next
+        self.assertEqual(route.cash_total, base.cash_total)
+        # round one plans without each trip, round two without the one left; the exclusions add up
+        self.assertEqual([c.kwargs["exclude"] for c in replan.call_args_list],
+                         [frozenset({1}), frozenset({3}), frozenset({1, 3})])
+
+    def test_free_skip_respects_budget(self):
+        from yap_forever.plan import plan_route
+        i = free_toy()
+        base = plan_route(i, "gold")
+        seen = []
+
+        def fits(p):
+            seen.append(p)
+            return False
+        route, left = self.take(base, i, fits=fits)
+        self.assertIs(route, base)
+        self.assertEqual(left, [])
+        self.assertEqual(len(seen), 1)
+        self.assertIsNot(seen[0], base)  # the route without the trip is what has to fit
+        self.assertEqual(recipe_trips(seen[0], i), [])
+
+    def test_goal_recipe_never_left_out(self):
+        import dataclasses
+        from yap_forever.plan import plan_route
+        i = dataclasses.replace(free_toy(), craft_once={BS: 1})
+        base = plan_route(i, "gold")
+        self.assertEqual(recipe_trips(base, i), [(240, (1,))])
+        route, left = self.take(base, i)
+        self.assertIs(route, base)
+        self.assertEqual(left, [])
+
+    def test_shown_alternatives_keep_the_recipes_left_out(self):
+        # after a free skip the skip clauses measure against the adopted route: the recipe left out stays out
+        from unittest import mock
+        from yap_forever.trips import trip_alternatives
+        base, inputs, alt = self.mocked(1001)
+        cache: dict = {}
+        with mock.patch("yap_forever.plan.plan_route", return_value=alt) as replan:
+            alts = trip_alternatives(base, inputs, "gold", cache, excluded=frozenset({7}))
+        self.assertEqual(alts, {(3,): 1})
+        self.assertEqual(replan.call_args.kwargs["exclude"], frozenset({3, 7}))
+        self.assertEqual(list(cache), [("gold", ((BS, 300),), frozenset({3, 7}))])
+
+    def test_shared_route_needs_both_measures(self):
+        # gold and value on one route: the route without the trip is taken only when it is free in both measures
+        base, inputs, alt = self.mocked(1000)
+        alt.economic_total = 1001  # free in gold, 1c more in total value
+        self.assertIs(self.take(base, inputs, alt)[0], alt)
+        route, left = self.take(base, inputs, alt, also=("value",))
+        self.assertIs(route, base)
+        self.assertEqual(left, [])
+        alt.economic_total = 1000.5
+        self.assertIs(self.take(base, inputs, alt, also=("value",))[0], alt)
+
+    def test_rounds_add_up_to_at_most_free_skip(self):
+        # each round is measured against the route as first settled: two skips of 0.3c each would cost 0.6c in all,
+        # so only the first is taken
+        from types import SimpleNamespace
+        from unittest import mock
+        from yap_forever.plan import take_free_skips
+        gd = toy.gamedata([toy.recipe(3, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=200),
+                           toy.recipe(5, "BS later", BS, {toy.IRON_BAR: 1}, req=260, fee=100)])
+        inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills={BS: 225}), craft_once={}, caps={BS: 300})
+
+        def route(learns, cost):
+            return Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300}, cash_total=cost, economic_total=cost,
+                        learn_log=[(BS, s, spell, "trainer") for spell, s in learns])
+        base = route([(3, 240), (5, 260)], 1000)
+        without = {frozenset({3}): route([(5, 260)], 1000.3), frozenset({5}): route([(3, 240)], 1000.4),
+                   frozenset({3, 5}): route([], 1000.6)}
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: without[exclude]):
+            got, left = take_free_skips(base, inputs, "gold", {})
+        self.assertIs(got, without[frozenset({3})])
+        self.assertEqual([t.spells for t in left], [(3,)])
+
+    def test_a_later_round_never_costs_more_than_its_route(self):
+        # without trip 3 the route is 10c cheaper; without both it is 5c dearer than that, though still under the
+        # original: only trip 3 is left out, so each "costs the same" line is true
+        from types import SimpleNamespace
+        from unittest import mock
+        from yap_forever.plan import take_free_skips
+        gd = toy.gamedata([toy.recipe(3, "BS late", BS, {toy.IRON_BAR: 1}, req=240, fee=200),
+                           toy.recipe(5, "BS later", BS, {toy.IRON_BAR: 1}, req=260, fee=100)])
+        inputs = SimpleNamespace(gd=gd, stock=toy.stock(skills={BS: 225}), craft_once={}, caps={BS: 300})
+
+        def route(learns, cost):
+            return Plan(ranks=[(BS, 225, 300, 500)], final_skill={BS: 300}, cash_total=cost, economic_total=cost,
+                        learn_log=[(BS, s, spell, "trainer") for spell, s in learns])
+        base = route([(3, 240), (5, 260)], 1000)
+        without = {frozenset({3}): route([(5, 260)], 990), frozenset({5}): route([(3, 240)], 1000.4),
+                   frozenset({3, 5}): route([], 995)}
+        with mock.patch("yap_forever.plan.plan_route", side_effect=lambda _i, _m, exclude: without[exclude]):
+            got, left = take_free_skips(base, inputs, "gold", {})
+        self.assertIs(got, without[frozenset({3})])
+        self.assertEqual([t.spells for t in left], [(3,)])
+
+
 if __name__ == "__main__":
     unittest.main()

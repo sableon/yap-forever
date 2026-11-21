@@ -32,7 +32,8 @@ Fill in `profile.toml` with the player:
 - Optional per character: `trainer_trips`: `"as_needed"` (default) or `"one_go"`, how the character
   levels when a rank is trained at a remote trainer (Artisan and Master trainers sit in set towns).
   `as_needed`: train the rank, level anywhere, and go back to the trainer for each later recipe only
-  that trainer teaches (each such trip says what skipping it costs). `one_go`: level at the trainer up
+  that trainer teaches (each such trip says what skipping it costs; one that costs nothing to skip is
+  left out of the route). `one_go`: level at the trainer up
   to the next rank or the target, learning those recipes there as the skill reaches them; the bring
   list covers the whole stretch ([list-layout.md](list-layout.md), "Trainer stages and trips"). The
   skill asks once per character (SKILL.md, step 5).

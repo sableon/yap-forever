@@ -984,6 +984,44 @@ class VisitRowTests(unittest.TestCase):
         text = self.render(60, [], [(21, 140, 500)], [(21, 142)], faction="")
         self.assertIn("- At 142, learn Recipe 21 (5s 0c) at any Expert Blacksmith in a capital.", text)
 
+    def test_free_skip_left_on_the_route_says_nothing(self):
+        # #90: a skip that costs nothing more is taken when it saves a visit (plan.take_free_skips); one left on the
+        # route saves none, so its row offers nothing
+        text = self.render(225, [(225, 300)], [(18, 240, 3000), (19, 245, 3000)], [(18, 240), (19, 251)],
+                           alts={(18,): 0.5, (19,): -20})
+        self.assertIn("(30s 0c).", self.row(text, "- **Trip:**", "at 240 for"))
+        self.assertIn("(30s 0c).", self.row(text, "- **Trip:**", "at 251 for"))
+        self.assertNotIn("skip it", text)
+        text = self.render(225, [(225, 300)], [(18, 240, 3000)], [(18, 240)], alts={(18,): 0.51})
+        self.assertIn("(30s 0c); or skip it: +1c for the route without it.", self.row(text, "- **Trip:**", "at 240"))
+
+    def test_free_skip_line(self):
+        from yap_forever.guide import free_skip_line
+        from yap_forever.trainer_text import TrainerInfo
+        from yap_forever.trips import Trip
+        gd = toy.gamedata(base_recipes() + [toy.recipe(18, "Recipe 18", BS, {toy.COPPER_BAR: 1}, req=240, fee=3000),
+                                            toy.recipe(19, "Recipe 19", BS, {toy.COPPER_BAR: 1}, req=240, fee=3000)])
+        trip = Trip(240, BS, "recipe", "Recipe 18, Recipe 19", cap=300, spells=(18, 19))
+        self.assertEqual(free_skip_line(trip, gd, TrainerInfo("alliance", self.data)),
+                         "Planned without the trip back to Brakka Ironfold at 240 for Recipe 18, Recipe 19: the route "
+                         "without it costs the same.")
+        self.assertEqual(free_skip_line(trip, gd), "Planned without the trip back to the Master Blacksmith at 240 for "
+                                                   "Recipe 18, Recipe 19: the route without it costs the same.")
+        for kind in ("vendor", "favor"):
+            self.assertEqual(free_skip_line(Trip(230, BS, kind, "BS scroll", 30, 500), gd),
+                             "Planned without the trip to buy the pattern for BS scroll: the route without it costs "
+                             "the same.")
+
+    def test_free_skip_lines_follow_the_saving_line(self):
+        from yap_forever.planner import Plan
+        line = "Planned without the trip back to the Master Blacksmith at 240 for Recipe 18: the route without it " \
+               "costs the same."
+        text = render_guide(Plan(final_skill={BS: 300}), toy.gamedata(base_recipes()), toy.market(BARS),
+                            toy.stock(skills={BS: 225}), {BS: 300}, saving_line="A saving line.", free_skips=[line])
+        head = text[:text.index("## ")]
+        self.assertEqual(text.count(line), 1)
+        self.assertLess(head.index("A saving line."), head.index(line))
+
 
 class RunAcrossTrainingGuideTests(unittest.TestCase):
     def test_run_across_training_shows_in_both_stages(self):

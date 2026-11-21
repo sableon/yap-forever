@@ -160,9 +160,11 @@ class GoalTripTests(unittest.TestCase):
 
 
 class TripLineTests(unittest.TestCase):
-    def test_skip_that_costs_nothing_says_so(self):
+    def test_skip_that_costs_nothing_says_nothing(self):
+        # #90: a free skip that saves a visit is taken (plan.take_free_skips); one left on the route offers nothing
         from yap_forever.guide import _trip_line
         from yap_forever.trips import Trip
         t = Trip(30, BS, "vendor", "BS scroll", 30, 500)
-        self.assertIn("or skip it at no extra cost", _trip_line(t, {30: -2003}))
+        self.assertTrue(_trip_line(t, {30: -2003}).endswith("you can learn them."))
+        self.assertNotIn("skip it", _trip_line(t, {30: 0.5}))
         self.assertIn("or skip it: +30s", _trip_line(t, {30: 3000}))

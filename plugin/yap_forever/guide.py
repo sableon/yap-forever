@@ -13,7 +13,7 @@ from yap_forever.prices import source_line
 from yap_forever.shared import SHARED_NOTE, mail_text
 from yap_forever.talents import lowest_profession, talent_lines
 from yap_forever.trainers import RANK_BY_CAP
-from yap_forever.trips import before_start, recipe_rank_cap, trips, visits
+from yap_forever.trips import FREE_SKIP, before_start, recipe_rank_cap, trips, visits
 
 with open(STATIC_DIR / "sources.toml", "rb") as _f:
     SOURCES = {group: {int(k): v for k, v in items.items()} for group, items in tomllib.load(_f).items()}
@@ -107,7 +107,8 @@ def _title(caps, route) -> str:
 def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=None,
                  character=None, reading="relative", today=None, trainer_info=None, trainer_note="",
                  saving_line="", mode="gold", study_hint_gold_per_point=100, extra_notes=(),
-                 budget_lines=(), order=None, nothing_in_budget=False, trainer_trips="as_needed") -> str:
+                 budget_lines=(), order=None, nothing_in_budget=False, trainer_trips="as_needed",
+                 free_skips=()) -> str:
     """caps: profession -> target skill (see planner.resolve_goals).
     alts: Trip.key (a recipe, or a recipe trip's recipes) -> what skipping the trip costs (None: no other way),
     from trips.trip_alternatives.
@@ -122,7 +123,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
     budget_lines: what a budget goal reaches (budget.lines), said under the comparison.
     order: the professions raised one at a time, in this order (None: side by side).
     nothing_in_budget: the budget reaches no stop (budget.BudgetCut.below_first_stop): the route says so.
-    trainer_trips: the character's "as_needed" or "one_go" (profile.Character.trainer_trips; see trips.visits)."""
+    trainer_trips: the character's "as_needed" or "one_go" (profile.Character.trainer_trips; see trips.visits).
+    free_skips: a line for each trip the route was planned without (free_skip_line), said after the saving line."""
     out = [f"# {_title(caps, route)}", ""]
     prices_line = source_line(market, today)
     if prices_line:
@@ -143,7 +145,8 @@ def render_guide(plan, gd, market, stock, caps, route="", comparison="", alts=No
         out += [" ".join(intro), ""]
     if trainer_note:
         out += [trainer_note, ""]
-    for line in talent_lines(character, reading, plan, caps, stock) + ([saving_line] if saving_line else []):
+    for line in talent_lines(character, reading, plan, caps, stock) + ([saving_line] if saving_line else []) \
+            + list(free_skips):
         out += [line, ""]
     from yap_forever.shopping import mailed  # shopping imports this module
     by_mail = mailed(plan, gd, stock) if plan.used_mail else {}  # the shopping list's counts
@@ -265,13 +268,28 @@ def _group_notes(group, items, gd, mines=True) -> list[str]:
 
 # --- route ---------------------------------------------------------------------
 def _skip(key, alts) -> str:
-    """'; or skip it: +X for the route without it' for a trip in alts (trips.trip_alternatives), else ""."""
+    """'; or skip it: +X for the route without it' for a trip in alts (trips.trip_alternatives), else "". A skip
+    that costs at most FREE_SKIP more is taken when it saves a visit (plan.take_free_skips); one still on the route
+    saves none, so it offers nothing."""
     if key not in alts:
         return ""
     diff = alts[key]
     return ("; there is no other way to reach the target without it" if diff is None
-            else "; or skip it at no extra cost" if diff <= 0.5
+            else "" if diff <= FREE_SKIP
             else f"; or skip it: +{gold(diff)} for the route without it")
+
+
+def free_skip_line(t, gd, trainer_info=None) -> str:
+    """The line the guide header and the report's data notes give a trip the route was planned without
+    (plan.take_free_skips): a recipe trip names its trainer (trainer_text.visit_trainer) and recipes, a vendor or
+    Favor trip its pattern."""
+    if t.kind == "recipe":
+        names = ", ".join(recipe_name(s, gd.recipes[s].name, gd) for s in t.spells)
+        what = (f"the trip back to {trainer_text.visit_trainer(trainer_info, t.profession, t.cap, True)} at {t.skill} "
+                f"for {names}")
+    else:
+        what = f"the trip to buy the pattern for {recipe_name(t.spell, t.what, gd)}"
+    return f"Planned without {what}: the route without it costs the same."
 
 
 def _names(spells, gd, fees) -> str:

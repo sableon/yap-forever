@@ -44,10 +44,11 @@ def _q(item, gd):
 
 def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
            reading="relative", today=None, saving_line="", budget: Budget | None = None, notes=(),
-           budget_lines=(), goal=None, nothing_in_budget=False) -> str:
+           budget_lines=(), goal=None, nothing_in_budget=False, free_skips=()) -> str:
     """budget: the shared gold the Totals line compares with; goal: the config.Budget the route was cut to,
     and budget_lines what it reaches (budget.lines), said in the verdict; nothing_in_budget: it reaches no
-    stop (budget.BudgetCut.below_first_stop), so there is no verdict and the route says so."""
+    stop (budget.BudgetCut.below_first_stop), so there is no verdict and the route says so; free_skips: a line
+    for each trip the route was planned without (guide.free_skip_line), in the data notes after the saving line."""
     v = Valuer(market, gd, stock)
     names = " + ".join(PROFESSIONS.get(x, str(x)) for x in (caps or (BS, ENCH)))
     out: list[str] = [f"# {names} plan", ""]
@@ -94,12 +95,12 @@ def render(plan, verdict_text, market, gd, stock, favor, caps, character=None,
         out += ["", f"Smelts into: {bars}."]
 
     _rest(out, section, plan, v, market, gd, stock, favor, talent_lines(character, reading, plan, caps, stock),
-          saving_line, budget, notes, goal, nothing_in_budget)
+          saving_line, budget, notes, goal, nothing_in_budget, free_skips)
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
 
 
 def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_line="", budget=None, notes=(),
-          goal=None, nothing_in_budget=False) -> None:
+          goal=None, nothing_in_budget=False, free_skips=()) -> None:
     # Route
     section("Route")
     if nothing_in_budget:
@@ -249,3 +250,4 @@ def _rest(out, section, plan, v, market, gd, stock, favor, talents=(), saving_li
     out += [f"- {line}" for line in talents]
     if saving_line:
         out.append(f"- {saving_line}")
+    out += [f"- {line}" for line in free_skips]

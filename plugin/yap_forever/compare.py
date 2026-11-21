@@ -3,6 +3,7 @@ import math
 
 from yap_forever.gamedata import PROFESSIONS
 from yap_forever.guide import gold
+from yap_forever.planner import measure
 from yap_forever.trips import trips
 
 ROUTE_NAMES = {"gold": "Least gold", "value": "Least total value"}
@@ -44,8 +45,9 @@ def settle_routes(candidates: list, caps: dict) -> tuple[dict, bool]:
     if not pool:
         best = max(sum(p.final_skill.values()) for p in candidates)
         pool = [p for p in candidates if sum(p.final_skill.values()) == best]
-    g = min(pool, key=lambda p: (p.cash_total, p.economic_total))
-    v = min(pool, key=lambda p: (p.economic_total, p.cash_total))
+    cash, value = measure("gold"), measure("value")
+    g = min(pool, key=lambda p: (cash(p), value(p)))
+    v = min(pool, key=lambda p: (value(p), cash(p)))
     return {"gold": g, "value": v}, g is v
 
 

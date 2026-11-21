@@ -541,5 +541,143 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("not applied", out)
 
 
+class FreeSkipReportTests(unittest.TestCase):
+    """#90 through write_reports: a trip whose route-without costs the same is planned without and said, before the
+    mailbox trips, the listed saving, the table and the skip clauses shown."""
+    LINE = ("Planned without the trip back to the Master Blacksmith at 240 for BS late 1: the route without it costs "
+            "the same.")
+
+    def setUp(self):
+        import json
+        import shutil
+
+        from tests.test_trips import free_toy
+        self._tmp = tempfile.TemporaryDirectory()
+        self.paths = settings.paths(Path(self._tmp.name) / "home")
+        with contextlib.redirect_stdout(io.StringIO()):
+            cli.main(["init"], self.paths)
+        shutil.copytree(Path(__file__).parent / "fixtures" / "gamedata", self.paths.gamedata)
+        self.inputs = free_toy()
+        listings = {str(i): [[100, 100000]] for i in (2840, 3575)}  # Copper Bar and Iron Bar at 1s
+        self.paths.prices.write_text(json.dumps({"snapshot_time": "t", "listings": listings}), encoding="utf-8")
+        self.stock = self.paths.character("Alt") / "stock.toml"
+        self.stock.parent.mkdir(parents=True)
+        self.stock.write_text("level = 60\n[items]\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def reports(self, **kw):
+        from unittest import mock
+
+        from yap_forever import gamedata, plan as plan_mod
+        from yap_forever.config import Goal
+        with mock.patch.object(gamedata, "load_gamedata", return_value=self.inputs.gd):
+            table, files = plan_mod.write_reports(self.paths, self.stock, "Neutral", {164: Goal(skill=300)}, **kw)
+        return table, {k: v.read_text(encoding="utf-8") for k, v in files.items()}
+
+    def test_free_skip_adopted_and_said(self):
+        _table, texts = self.reports()
+        for m in ("gold", "value"):
+            guide, report = texts[f"guide-{m}"], texts[f"plan-{m}"]
+            self.assertNotIn("**Trip:** back to", guide)  # no trip back at 240
+            self.assertNotIn("start crafting BS late 1", guide)
+            self.assertIn("Blacksmithing rank to 300", guide)
+            self.assertEqual(guide.count(self.LINE), 1, m)
+            self.assertIn(self.LINE, guide[:guide.index("## ")])
+            self.assertNotIn("no extra cost", guide)
+            notes = report[report.index("## Data notes"):]
+            self.assertIn(f"- {self.LINE}", notes)
+
+    def test_table_uses_adopted_route(self):
+        table, _texts = self.reports()
+        self.assertIn("| Trips away | 2 | 2 |", table)  # the two rank trips, not the trip back at 240
+        self.assertIn("both guides are the same route", table)  # adopted once for both: still one route
+
+    def test_shown_skips_measure_against_the_adopted_route(self):
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        with mock.patch.object(plan_mod, "take_free_skips", wraps=plan_mod.take_free_skips) as take, \
+                mock.patch.object(plan_mod, "trip_alternatives", wraps=plan_mod.trip_alternatives) as alts:
+            self.reports()
+        self.assertEqual(take.call_count, 1)  # gold and value are one route: adopted once
+        self.assertIsNone(take.call_args.kwargs["fits"])  # no budget
+        self.assertEqual(take.call_args.kwargs["also"], ("value",))  # free in both measures
+        self.assertEqual([c.kwargs["excluded"] for c in alts.call_args_list], [frozenset({1})])
+
+    def test_free_skip_under_a_budget(self):
+        import re
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Budget
+        from yap_forever.planner import Plan
+        with mock.patch.object(plan_mod, "take_free_skips", wraps=plan_mod.take_free_skips) as take:
+            _table, texts = self.reports(target=Budget(1000))
+        guide = texts["guide-gold"]
+        self.assertIn(self.LINE, guide)
+        spent = re.search(r"1000g takes Blacksmithing to 300 \((.+?)\)\.", guide).group(1)
+        self.assertIn(f"**Gold to bring: {spent}**", guide)  # the budget line is the adopted route's gold to bring
+        fits = take.call_args.kwargs["fits"]
+        self.assertTrue(fits(Plan()))
+        self.assertFalse(fits(Plan(fees=10_000_001)))  # a fee over 1000g doesn't fit
+
+    def test_distinct_routes_are_skipped_on_their_own(self):
+        # gold and value on two routes to the same caps: each gets its own free skips, not the gold route's
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from yap_forever import plan as plan_mod
+        from yap_forever.planner import Plan
+        gold, value = Plan(cash_total=1), Plan(cash_total=2)
+        same_caps = SimpleNamespace(caps={164: 300})
+        with mock.patch.object(plan_mod, "take_free_skips", side_effect=lambda r, *_a, **_k: (r, [])) as take:
+            out = plan_mod._free_skips({"gold": gold, "value": value}, {"gold": same_caps, "value": same_caps}, {},
+                                       "as_needed", None, None)
+        self.assertIs(out["gold"][0], gold)
+        self.assertIs(out["value"][0], value)
+        self.assertEqual([c.kwargs["also"] for c in take.call_args_list], [(), ()])  # not one route: one measure each
+        with mock.patch.object(plan_mod, "take_free_skips", side_effect=lambda r, *_a, **_k: (r, [])) as take:
+            out = plan_mod._free_skips({"gold": gold, "value": gold}, {"gold": same_caps, "value": same_caps}, {},
+                                       "as_needed", None, None)
+        self.assertIs(out["value"], out["gold"])
+        self.assertEqual([c.kwargs["also"] for c in take.call_args_list], [("value",)])
+
+    def test_free_skip_over_the_budget_is_kept(self):
+        # a real route-without that costs the same gold out of pocket but more gold to bring: at 225 the bank's 300
+        # Copper Bars cover the yellow copper crafts to 300 but not their buffer, which the shopping list buys, while
+        # the trip back's orange iron recipe uses the bank's 60 Iron Bars. Kept under a budget the route fits exactly.
+        import dataclasses
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from tests import toy
+        from yap_forever import plan as plan_mod
+        from yap_forever.config import Budget
+        from yap_forever.gamedata import Rank
+        gd = toy.gamedata([toy.recipe(1, "BS late 1", 164, {3575: 1}, t=(240, 300, 300, 300), req=240),
+                           toy.recipe(9, "BS bar", 164, {2840: 1}, t=(1, 240, 300, 300))])
+        gd.trainer_ranks[164] = gd.trainer_ranks[164] + [Rank(300, 50000, 200, 35)]
+        self.inputs = SimpleNamespace(gd=gd)
+        self.stock.write_text("level = 60\n[items]\n2840 = 300\n3575 = 60\n\n[skills]\nblacksmithing = 225\n",
+                              encoding="utf-8")
+        real = plan_mod.settle_routes
+
+        def apart(candidates, caps):  # the value route its own plan, so only the gold measure decides
+            routes, _same = real(candidates, caps)
+            return {"gold": routes["gold"], "value": dataclasses.replace(routes["value"])}, False
+        with mock.patch.object(plan_mod, "settle_routes", side_effect=apart):
+            _table, free = self.reports()
+            _table, cut = self.reports(target=Budget(5))
+        line = "Planned without the trip back to the Master Blacksmith at 240 for BS late 1"
+        self.assertIn(line, free["guide-gold"])  # no budget: the same gold out of pocket, one trip less
+        self.assertIn("**Gold to bring: 5.4g**", free["guide-gold"])
+        guide = cut["guide-gold"]
+        self.assertIn("5g takes Blacksmithing to 300 (5.0g).", guide)
+        self.assertNotIn(line, guide)
+        self.assertIn("at 240 for BS late 1.", guide)  # the trip back stays
+
+
 if __name__ == "__main__":
     unittest.main()
