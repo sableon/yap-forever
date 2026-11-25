@@ -1,5 +1,10 @@
 # Handoff
 
+**Active development is paused since 2026-11-25** (the owner's decision). Players are pointed to the
+[SkillUp Forever](https://github.com/cjber/skillup-forever) addon, which gives levelling routes and
+shopping lists in the game. The code stays as tagged in `v0.2.2-tidy`; the open issues are not
+scheduled. The notes below describe the project as it was left.
+
 State on 2026-11-21. Phase 1 is done and tagged (`v0.1.0-planner`). The phase 2 planner work is
 in (`docs/progress.md`, 2.1 to 2.23), and so are the fixes from the engineering review of
 2026-11-19 (parts A to E, 2.24 to 2.28); phase 2 is tagged `v0.2.0-general-planner` (to 2.30). The
