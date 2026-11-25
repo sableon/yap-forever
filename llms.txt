@@ -3,6 +3,9 @@
 > Claude Code plugin for WoW: Forever players: the cheapest profession levelling routes and
 > shopping lists from the player's own auction house prices. Python 3.11+ standard library.
 
+Active development is paused since 2026-11-25; for profession levelling, use the SkillUp Forever addon
+(https://github.com/cjber/skillup-forever).
+
 ## Start here
 
 - [README.md](README.md): what it does, install, privacy, command line

@@ -1,8 +1,13 @@
 # yap-forever
 
-> **Work in progress.** Phase 2 of 5: the planner works for any one or two crafting professions,
-> with trainer stops, legacy talents, bag space and price fallbacks. Setup covers every region
-> and both factions, but only EU has been tried.
+> **Active development is paused (25 November 2026).** For profession levelling, use the
+> [SkillUp Forever](https://github.com/cjber/skillup-forever) addon instead
+> ([CurseForge](https://www.curseforge.com/wow/addons/skillup-forever)): its levelling routes and
+> shopping lists are in the game itself, and it can use Auctionator's prices. This planner's recipe,
+> trainer and vendor data come from SkillUp Forever too.
+>
+> The planner stays here as it is, at version 0.2.2 (phase 2 of 5). Nobody is keeping its game data
+> up to date, so a game patch can make its routes wrong. Only EU has been tried.
 
 **Yet another planner** for WoW: Forever. A Claude Code plugin that finds the cheapest way to
 level your professions from **your own auction house prices**, and writes the route the way you
@@ -66,8 +71,8 @@ python3 -m yap_forever plan --character NAME
 
 ## Contributing
 
-Bug reports, game-data corrections from play, and pull requests are welcome: see
-[CONTRIBUTING.md](CONTRIBUTING.md). Never post your API client ID or secret; see
+Active development is paused, so issues and pull requests may wait a long time for an answer. How to
+contribute is in [CONTRIBUTING.md](CONTRIBUTING.md). Never post your API client ID or secret; see
 [SECURITY.md](SECURITY.md).
 
 ## Licence and credits

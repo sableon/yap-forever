@@ -1,5 +1,9 @@
 # Contributing to yap-forever
 
+**Active development is paused since 2026-11-25:** issues and pull requests may wait a long time for an
+answer. For profession levelling, use the [SkillUp Forever](https://github.com/cjber/skillup-forever)
+addon instead.
+
 Thanks for helping. yap-forever is a Claude Code skill plus a small local Python planner for
 WoW: Forever professions. This page says what a good contribution looks like. The rules agents
 follow are in [AGENTS.md](AGENTS.md); they apply to people too.
